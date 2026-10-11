@@ -1,8 +1,7 @@
 # Architecture and build contract
 
-This document fixes the layout of the repository and the interfaces between its parts,
-so that the parts can be written independently and still fit together. It is also the
-specialist's map of the code. Every path below is relative to the repository root.
+This document is the specialist's map of the code: the layout of the repository and the
+interfaces between its parts. Every path below is relative to the repository root.
 
 ## What the system does
 
@@ -73,7 +72,7 @@ a timeout. No module reads the network except `model.py`.
   and `load() -> list[RunRecord]`, one JSON object per line. Fields of `RunRecord`:
   `when` (ISO 8601), `problem`, `backend`, `model`, `agent`, `agent_version`
   (short hash of the agent source), `masked` (bool), `result` ("PASS" or "FAIL"),
-  `failure_stage` (one of `none`, `no-files`, `build`, `test-one-worker`,
+  `failure_stage` (one of `none`, `no-files`, `tampered`, `build`, `test-one-worker`,
   `test-many-workers`, `benchmark`, `timeout`, `agent-error`), `speedup_best`
   (float or null), `wall_time_s`, `requests`, `prompt_tokens`, `completion_tokens`,
   `latency_mean_s`, `tokens_per_second`, `serving` (provider identifier or
@@ -82,19 +81,23 @@ a timeout. No module reads the network except `model.py`.
   code cells in a fresh namespace with a timeout and reads `ORACLE`; validates that
   every expected value is finite and that, where `terms` are given, their sum
   reproduces the expected value within tolerance; `write_reference(oracle, dest)`
-  writes `reference.json` and `reference.h`. Port of the July `make_oracle.py`,
-  keeping its validation rules.
+  writes `reference.json` and `reference.h`. It rejects an oracle whose values are not finite or whose terms do not sum to the
+  expected value.
 - `assemble.py` — `assemble_work_dir(problem_dir, backend, dest, include_reference=False)`
   builds a flat work folder: package data files, the notebook, `reference.*`,
   `problem.h` if present, the backend's header, `bench.c` and `Makefile`; with
   `include_reference=True` it also copies the known-good solution, which is how the
   machinery is tested without a model.
 - `gate.py` — `run_gate(work_dir, backend, timeout_s=300, speedup_floor=None) ->
-  GateResult(passed, failure_stage, speedup_best, log)`. Builds with the backend's
+  GateResult(passed, failure_stage, speedup_best, log)`. Before anything else it checks the
+  trusted files (the benchmark, headers and Makefile) against the digests written when the
+  work folder was assembled, and fails at the stage `tampered` if any has changed. It then
+  builds with the backend's
   compiler, runs the unit test at one worker and at several, runs the benchmark and
-  calls `bench_check`. The floor defaults come from the problem's Makefile, as in July.
+  calls `bench_check`. The floor comes from the problem's Makefile (`SPEEDUP_FLOOR`), and falls back to 1.5 for
+  OpenMP and MPI or 3 for CUDA.
 - `bench_check.py` — `check_bench_csv(path, floor) -> BenchVerdict(ok, reasons,
-  speedup_best)` with the July rules: rejects a reported speed-up that disagrees with
+  speedup_best)` applies these rules: rejects a reported speed-up that disagrees with
   the measured times, duplicated widths, every parallel time exactly the serial time
   divided by the width, constant throughput, efficiency not equal to one at one worker,
   and best speed-up under the floor. `check_bench_cuda` keeps the CUDA variant.
@@ -110,9 +113,13 @@ a timeout. No module reads the network except `model.py`.
   steps, notes)`. `agents/__init__.py` exposes `get_agent(name)` for `basic`,
   `pydantic` and `langgraph`; the two framework agents import their frameworks lazily
   and raise `AgentUnavailable` with an installation hint if the extra is missing.
-  All three share the July tool surface: read the notebook, read a file, write a file,
+  All three share one tool surface: read the notebook, read a file, write a file,
   run an allow-listed build command. All three re-run the checks when the model says it
-  has finished and feed failures back until the step budget is spent.
+  has finished and feed failures back, but they stop differently. `basic` stops when the
+  checks pass or after `step_budget` model calls (default 80). `langgraph` makes up to
+  `MAX_PASSES` (8) passes, each limited to `step_budget` steps. `pydantic` stops when the
+  checks pass or when the framework's request limit, set to `step_budget`, is reached.
+  `docs/DESIGN.md` explains the differences.
 - `report.py` — `build_tables(records) -> str` (Markdown: pass counts by model and
   backend, by agent design, by problem) and `build_chart(records, dest_svg)` (one
   grouped bar chart of pass rate by model and backend, drawn with matplotlib).
@@ -144,10 +151,12 @@ the recurrence, the signature, and that the result must not depend on the worker
 ```
 results/runs.jsonl                 one RunRecord per line, every graded run
 results/manifest-july-2026.tsv     the original run manifest, kept verbatim except for paths
+results/manifest-phase2-july-2026.tsv   an identical copy; cite either
+results/tokens-new-problems-july-2026.json   request and token counts per model
 results/runs/<problem>/<backend>/<model>/<agent>/   SUMMARY.txt, bench.csv, the kernel and test the agent wrote
 ```
 
-Serving facts for the July models, to be recorded in `serving` and `quantisation`:
+Serving facts for the July models, as recorded in `serving` and `quantisation`:
 claude-sonnet-4.6, kimi-k2.5 and llama-3.3-70b were served by Amazon Bedrock through a
 LiteLLM gateway, precision not disclosed by the provider; gemma-31b was served by vLLM
 on one NVIDIA L40S with 48 GB, checkpoint and quantisation not recorded at the time.

@@ -8,10 +8,13 @@ are compared: Claude Sonnet 4.6 (`claude-sonnet-4.6`), Kimi K2.5 (`kimi-k2.5`), 
 70B (`llama-3.3-70b`) and Gemma 31B (`gemma-31b`). Three ways of building the agent, and
 three kinds of parallel hardware, are compared as well.
 
-This repository is a public version containing the author's own work only, scrubbed of
-proprietary material kept in private repositories, with a fresh history.
+This repository contains my own work.
 
 ## What it does and why
+
+Terms used below: the *kernel* is the C function that does the computation; a *cell* is one
+problem on one backend for one model; the *oracle* is the correct answer recorded by the
+notebook; and a *work folder* is the directory the agent writes into.
 
 Researchers often have an algorithm that works in a Jupyter notebook (an interactive
 document that mixes text and Python) but runs slowly because it is serial. Rewriting it in
@@ -23,7 +26,7 @@ checking around it.
 A problem is a notebook whose last cell records its own answer, called the oracle, with a
 tolerance. The agent receives a work folder containing the notebook, the oracle in C form,
 a header with the exact function signature to implement, and a benchmark that it cannot
-change. It writes the kernel and a unit test, and it must make `make check` pass. The gate
+change. It writes the kernel (the C function that does the computation) and a unit test, and it must make `make check` pass. The gate
 then judges the work on its own, in three parts:
 
 1. The code must compile with every warning treated as an error.
@@ -48,10 +51,13 @@ to resist recall, and why a masking tool renames the familiar problems.
 
 All numbers below are single runs, not averages. Full tables, with the file each came from,
 are in [docs/RESULTS.md](docs/RESULTS.md). The sources are the run manifests in `results/`.
+In this document a cell means one problem on one backend for one model, scored by how
+many of the three agent designs passed it. Single runs carry no error bars, so a
+difference of one run between two cells is within the noise.
 
-### The seven recallable problems
+### The seven well-known problems
 
-There are seven well-known problems: numerical integration, matrix multiply, a heat stencil
+There are seven problems, all well known: numerical integration, matrix multiply, a heat stencil
 (the Jacobi method), N-body forces, conjugate gradient, prefix sum and histogram. Each was
 attempted by each model with each of three agent designs, on every backend that suits it
 (CUDA was not built for prefix sum or histogram). The table counts passing runs.
@@ -68,7 +74,7 @@ A chart of the same data is in [docs/figures/pass-rates.svg](docs/figures/pass-r
 Two things stand out. The two strongest models pass almost everything, so these problems
 cannot tell them apart. And the difficulty lies almost entirely in MPI, where processes
 must exchange boundary data correctly; every model except the weakest does well with
-OpenMP threads. The author's project log reports that a later uniform re-grade did not
+OpenMP threads. My project log reports that a later uniform re-grade did not
 confirm the one pass of Llama on prefix sum with MPI. That re-grade is not in the run
 records, so the table counts the pass (see [docs/RESULTS.md](docs/RESULTS.md)).
 
@@ -89,10 +95,10 @@ passing runs out of six: three agent designs on each of the two backends.
 | kimi-k2.5 | 4 | 4 | 8 |
 | llama-3.3-70b | 0 | 0 | 0 |
 
-The run records for these two problems were lost with the host that ran them. The numbers
-are quoted from the author's project log, written at the time, and cannot be re-checked
-against records. The problems spread the models across the whole range, which the textbook
-problems could not. Gemma scoring above Kimi should not be read as Gemma being the better
+**Unverified: these numbers are from my project log, not from run records.** The run files
+for these two problems were not kept, so the table cannot be checked against records. If
+the log is right, the problems spread the models across the whole range, which the
+textbook problems could not; I regard that conclusion as tentative. Gemma scoring above Kimi should not be read as Gemma being the better
 model: Kimi's four failures were near-misses, correct with one worker and slightly wrong at
 the boundaries between the blocks given to different workers.
 
@@ -110,11 +116,13 @@ validator that refuses to accept the model's final answer until the checks pass.
 | langgraph | 38 | 25 |
 | pydantic | 38 | 24 |
 
-Model quality matters about ten times more than agent design. Among designs, strictness
-helps a capable model that makes careless first attempts, and hurts a model that cannot
-solve the problem, because it then retries until its request budget is spent. On the
+In these single runs, the differences between models are far larger than the differences
+between agent designs. The designs suggest a pattern: strictness probably helps a capable
+model that makes careless first attempts, and probably hurts a model that cannot solve the
+problem, because it then retries until its request budget is spent. On the
 recall-resistant problems the strict agent passed all four of Kimi's runs where the other
-two passed two of four each. The mechanism is explained in [docs/DESIGN.md](docs/DESIGN.md).
+two passed two of four each. This is a lean seen in single runs, not an established
+effect. The reasoning is in [docs/DESIGN.md](docs/DESIGN.md).
 
 ### Measured token costs
 
@@ -129,9 +137,10 @@ attempted by three agent designs (source: `results/tokens-new-problems-july-2026
 | gemma-31b | 763 | 8.93 million | about $5 to $6 of rented instance time |
 | llama-3.3-70b | 1,944 | 39.9 million | about $28.75 |
 
-The weakest model was the most expensive. When it cannot solve a problem it keeps
-retrying, and each retry sends the whole growing conversation again. A weak model is not
-a cheap model.
+The weakest model was the most expensive. It probably kept retrying problems it could not
+solve, and each retry sends the whole growing conversation again. A weak model is not
+necessarily a cheap model. Costs per agent design were not recorded, so this explanation
+rests on the failure records and not on billing data.
 
 ## How to run it
 
@@ -238,13 +247,16 @@ The four models were reached through one LiteLLM gateway.
 
 Run records hold "not recorded" or "not disclosed" in these fields where the information
 does not exist. Results should not be compared with other work on the assumption of full
-precision. The July runs also did not record wall-clock time per run or latency;
-measuring latency is under way (see below).
+precision. The July runs did not record wall-clock time per run or latency. The record format has
+fields for them (`wall_time_s`, `latency_mean_s`, `tokens_per_second`), and they are empty
+in all 237 July records. No latency campaign has been run yet.
 
 ## Security
 
 Code written by a model is untrusted. Four layers limit the harm it can do. The agent can
-run only build commands from a short allow-list, as argument lists with no shell. Every
+run only build commands from a short allow-list, as argument lists with no shell. The gate checks the trusted files (the benchmark, headers and Makefile)
+against digests (fingerprints) taken when the work folder was made, and fails the run if the
+agent changed any of them. Every
 subprocess, whether a build, a test, a benchmark or a notebook run, has a timeout, and so
 does every model request. The container runs as an ordinary user, and under Kubernetes it
 drops all capabilities, has a read-only file system, and has processor and memory limits
@@ -255,14 +267,23 @@ network policy; see [docs/OPERATIONS.md](docs/OPERATIONS.md).
 ## Status and next steps
 
 The comparison of four models, three agent designs and three backends on seven problems is
-complete, as is the first run on the two recall-resistant problems. In progress are the
-masked campaign, which re-runs masked copies of familiar problems to measure how much of
-the success is recall, and latency measurements of the gateway. Planned after those are
+complete, as is the first run on the two recall-resistant problems. The masking tool
+is built, but the masked campaign, which re-runs masked copies of familiar problems to
+measure how much of the success is recall, has produced no records: none of the 237 records
+in `results/runs.jsonl` is masked. Latency measurement is also still to be done. Planned after those are
 repeated runs, to put error bars on single-run differences, and a sweep of the sampling
 temperature. [docs/DESIGN.md](docs/DESIGN.md) lists the limitations that motivate them.
+
+## Use of AI tools
+
+This project is about language models writing code, and language models also helped to
+build it. I designed the experiment, chose the problems, wrote the gate and the rules
+against invented speed-ups, and checked the results. I used AI coding assistants to draft
+and revise parts of the code, the tests and the documents, and I reviewed what they
+produced. The models being compared wrote the programs that were graded, and the gate, not
+the assistants, decided whether those programs passed. I did not keep a line-by-line record
+of which text was drafted by an assistant, so I cannot give a precise split.
 
 ## Licence and author
 
 MIT licence; see [LICENSE](LICENSE). Written by Angus Gray-Weale.
-
-<!-- statement on the use of AI tools: to be added by the author -->

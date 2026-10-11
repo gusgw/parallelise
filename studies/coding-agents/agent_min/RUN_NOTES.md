@@ -1,5 +1,11 @@
 # agent_min — run notes
 
+> **About this file.** This is a set of run notes, kept as a working record and not edited into
+> finished prose. It uses abbreviations and a terse note style. The readable account of the
+> study is [../README.md](../README.md). Abbreviations: N is the number of attempts per cell; CI is a 95% confidence interval; QAT is
+> quantisation-aware training; W4A16 means 4-bit weights with 16-bit activations; T is the
+> sampling temperature; B means billion parameters.
+
 ## Status
 Minimal hand-rolled agent loop (httpx-only, no framework). Unit tests green
 (`bash check.sh`, 9 tests). Validated **live end-to-end** against the Mistral
@@ -20,7 +26,7 @@ note.txt and report the secret code"* → correctly returns "The secret code is
 
 ## Not yet done
 - Phase 0.3 against `best_weather` (the failing-test fix) needs the target's deps
-  installed (faststream, iris, …), absent on the development machine. Run it
+  installed (faststream and others), absent on the development machine. Run it
   after `uv sync` in the target.
 
 ## How to run

@@ -74,8 +74,8 @@ log of the work is `FINDINGS.md`.
 2. **Frameworks helped only on the stronger model.** On the 12B all agents sat in a
    15% to 30% band with overlapping intervals. On the 31B the framework agents
    reached 90% to 100% against 50% for the hand-written loop.
-3. **Higher temperature was better, not worse.** Greedy decoding was disastrous for
-   weakly scaffolded agents. Strong scaffolding made the setting irrelevant.
+3. **Higher temperature was better, not worse, on this task.** Greedy decoding gave very poor
+   results for weakly scaffolded agents. Strong scaffolding made the setting irrelevant.
 4. **Forcing the final answer into a structured object broke the agent.** Verification
    helps, but it must be delivered with a plain-text finish.
 5. **The model was bimodal.** It solved mechanical, pattern-like tasks easily and
@@ -125,15 +125,30 @@ The chart is drawn by `figures/make_temperature_chart.py` from the result files.
 two structured-finish agents are scored zero at every temperature, so they share one
 dashed line.
 
-Why does temperature behave like this? Greedy decoding is the limit of sampling as the
+One plausible explanation for the temperature effect, which I did not test, is this. Greedy decoding is the limit of sampling as the
 temperature goes to zero: the model always picks its single most likely next word, so
 it is completely deterministic. A weakly scaffolded agent that makes a wrong move, such
-as an edit that does not match the file or a repeated tool call, will make exactly the
-same move again from the same state, and so it is trapped repeating the same failing
-action. A higher temperature adds variety, and variety is the only way such an agent
-can escape. Strong scaffolding, such as LangGraph's planning and retry structure, gets
-out of stuck states by its own design, which is why those agents scored almost 100% at
-every temperature and the setting made no difference to them.
+as an edit that does not match the file or a repeated tool call, would probably make exactly the
+same move again from the same state, and so be trapped repeating the same failing
+action. A higher temperature adds variety, which may be the only way such an agent
+can escape. Strong scaffolding, such as LangGraph's planning and retry structure, may get
+out of stuck states by its own design, which would fit those agents scoring almost 100% at
+every temperature.
+
+### How this relates to the main project
+
+The study and the main project (`../../README.md`) differ in task, model and finishing
+rule, so their results are not directly comparable. The study used one debugging task
+(making a failing test suite pass) on 12B and 31B Gemma models. The main project converts
+notebooks to parallel C with four models, and its three agents were all given the same
+finishing rule (do not stop until the checks pass), so that only the strictness of
+enforcement differed. In the study, the framework agents beat the hand-written loop on the
+31B model; in the main project the plain agent led on the weak models. I have not tested
+why the two differ; the different task, models and finishing rules are the obvious
+candidates. The main Pydantic agent finishes in plain text and checks it with an output
+validator, which is the form that worked in the study, not the structured-object finish that
+scored zero. The temperature effect was seen only in the study. The main project used one
+sampling setting and ran no temperature sweep, so it says nothing about temperature.
 
 ### The structured finish
 

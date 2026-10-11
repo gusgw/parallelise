@@ -35,7 +35,9 @@ is not done until the checks pass. They differ only in how that rule is enforced
 - `pydantic` uses the output validator of the Pydantic AI framework. A validator ordinarily
   checks that a model's answer has the right type and, if not, raises a retry so that the
   model tries again. Here the validator checks that the build and tests pass, and raises the
-  same retry until they do or until the request limit (200 requests) is reached.
+  same retry until they do or until the request limit is reached. The shipped default for this limit
+  is the step budget of 80 (`--step-budget`); the July runs used a limit of 200, as the log
+  line quoted below shows.
 
 **Backend.** The same algorithm is converted for OpenMP (threads in one computer), MPI
 (cooperating processes) and CUDA (a graphics processor). The prompts give the model a menu
@@ -46,7 +48,8 @@ a shared-memory reduction within each block, and a host wrapper with error check
 sum, histogram, `decay` and `reservoir` have no CUDA version: each makes one light pass
 over data held on the host, so copying the data to and from the graphics card costs more
 than the computation. Speed-ups of 0.65 and 0.99 times were measured for prefix sum and
-histogram on the graphics card, so the omission is a measured fact, not a convenience.
+histogram on the graphics card (from my project log, not from the stored records), so the
+omission is a measurement and not a convenience.
 
 ## The problems and their oracles
 
@@ -54,7 +57,7 @@ Nine problems, each a notebook in serial Python.
 
 | problem | what it computes | why it is interesting |
 |---|---|---|
-| integrate | midpoint-rule integral that evaluates to pi | a plain reduction |
+| integrate | midpoint-rule integral that evaluates to pi | a plain reduction (one number formed by combining many terms) |
 | matmul | dense matrix product, checked by an exact integer sum | data reuse; transposition errors are caught |
 | jacobi | two-dimensional heat stencil, 200 sweeps | boundary exchange between processes; limited by memory bandwidth |
 | nbody | every particle attracts every other | heavy arithmetic; processes must share positions; a good graphics-card case |
@@ -64,15 +67,16 @@ Nine problems, each a notebook in serial Python.
 | decay | out[i] = max(out[i-1] - 2, out[i-2] - 1, w[i]) | a two-step recurrence in maximum-and-addition arithmetic |
 | reservoir | out[i] = min(20000, max(0, out[i-1] + a[i])) | a running level clamped to a range |
 
-The first seven are classic and are called the recallable problems. The last two are
+The first seven are classic and are called the well-known problems. The last two are
 described below. The notebook's final cell defines a plain dictionary `ORACLE` holding the
-parameters, the notebook's own computed answer and a tolerance, so that test data come from
-running the notebook, so a changed notebook changes the expected answer with it.
+parameters, the notebook's own computed answer and a tolerance. The test data therefore
+come from running the notebook, and a changed notebook changes the expected answer.
 
 Where the oracle is a sum, the notebook also hands over the raw terms. The oracle extractor
 then sums them in the orders that correct parallel ports actually use (forward, backward,
-tree, per-process blocks), measures how far the answers spread, and refuses any tolerance
-smaller than ten times that spread. A trap was found while building this: from Python 3.12
+tree, per-process blocks), measures how far the answers spread (the largest difference between
+the sums computed in the different orders), and refuses any tolerance smaller than ten
+times that spread. A trap was found while building this: from Python 3.12
 the built-in `sum` is compensated and gives an exactly rounded result in any order, so the
 spread must be measured with plain loops. The measured spreads were 1.2e-12 for
 integrate, 2.1e-11 for jacobi and exactly zero for matmul, whose entries are integers.
@@ -109,26 +113,27 @@ the way it guards against.
    used (`OMP_NUM_THREADS` set by the Makefile, `mpirun -np 1` and then several), so an
    inherited environment setting cannot quietly skip the many-worker run. The answer must
    not depend on the worker count. This catches a data race, a wrong partition of the work,
-   and an error at the seam between the blocks given to neighbouring workers, none of which
+   and an error at the boundary between the blocks given to neighbouring workers, none of which
    shows with one worker. A timeout catches a deadlock.
 3. **Benchmark and validation of the speed-up.** A benchmark that the agent cannot edit
    times the kernel at several widths and the checker validates the figures. The floor is 1.5
-   times by default, 1.25 for jacobi, which is limited by memory bandwidth, and 3 times for
-   CUDA. The floor for CUDA is lower than it looks because double-precision arithmetic on
-   the laptop-class graphics card used runs at a small fraction of its single-precision
+   times for the other problems, 1.25 for the problems limited by memory
+   bandwidth (jacobi, cg, scan, decay and reservoir), and 3 times for CUDA (set in each
+   problem's Makefile). The floor for CUDA is lower than it looks because double-precision arithmetic on
+   the graphics card used (a laptop-class model) runs at a small fraction of its single-precision
    rate; the reference solution reached 4.5 times, and a program that secretly ran on the
    processor measured about 1 time.
 
 Parts 2 and 3 are independent of each other on purpose. A serial program passes the first
 two parts and fails the third. A fast but wrong program fails the second.
 
-### Seam bugs and races caught by parallel invariance
+### Boundary bugs and races caught by parallel invariance
 
 - Kimi's four failures on the recall-resistant problems were all programs correct with one
   worker and wrong with several: the summary passed between blocks was subtly wrong at the
   boundaries.
 - A deliberately racy histogram kernel passes with one thread and fails with eight.
-- Jacobi under MPI, the halo-exchange case, was the cell that separated the models most. The
+- Jacobi under MPI, the halo-exchange case, was the problem and backend combination that separated the models most. The
   failures were a Kimi kernel that deadlocked (caught by the timeout), a Gemma compile error
   in a gathering call that it did not fix within the time limit, and a Gemma run that used
   up its request budget.
@@ -155,12 +160,13 @@ when any of these holds:
 - the best speed-up is under the floor.
 
 Self-tests confirm that a correct solution passes and a serial kernel fails with "no real
-parallel speed-up". For CUDA, an independent review found a second weakness: the benchmark
+parallel speed-up". For CUDA, a review recorded in my project log found a second weakness: the benchmark
 computed the trusted serial answer at benchmark size and then discarded it, so a kernel with
 a hard-coded launch size could be correct at the small test size and wrong at the benchmark
 size. The benchmark now compares the graphics-card output with its own serial result,
 element by element for matmul and jacobi. All twelve CUDA work folders were graded again
-under the stricter benchmark and none changed its verdict.
+under the stricter benchmark and none changed its verdict (from my project log; the
+re-grade is not in the stored records).
 
 ### The benchmark warm-up fix, and why the first run misleads
 
@@ -174,13 +180,18 @@ to the four newest benchmarks. Prefix sum and histogram have the same structure 
 measured with the older form, so their pass and fail marks for correctness stand but their
 speed figures should be re-checked. This is a limitation, listed again below.
 
+No run of a sanitiser (a tool that detects memory errors and undefined behaviour) or of a
+debugger on the reference solutions is recorded. The correctness evidence is the oracle
+comparison and the one-worker against many-worker comparison described above.
+
 ## Recall-resistant problems and the masking study
 
 The textbook kernels are heavily represented in training data. A model that passes them may
-be recalling a known solution. Published work on programming benchmarks, summarised in the
-author's notes, reports that scores follow how common a problem is in the training data,
-that renaming identifiers alone lowers scores, and that new compositions of familiar parts
-are much harder. An adversarial review of the author's first candidate problems found that
+be recalling a known solution. Published work on programming benchmarks, which I summarised in my notes but do not cite
+here (so these three claims are unsourced in this repository), reports that scores follow
+how common a problem is in the training data, that renaming identifiers alone lowers
+scores, and that new compositions of familiar parts are much harder. A review of
+my first candidate problems, recorded in my project log, found that
 inventing a problem is not enough: if the idea needed to solve it is itself published, it
 can still be recalled. The remedy is to choose problems whose key idea must be re-derived.
 
@@ -215,15 +226,18 @@ logic and the oracle are unchanged, and the report lists every substitution. A m
 problem must still pass its reference gate, because the machinery must not care. The study
 runs masked copies of integrate, jacobi, scan and cg on all four models, single runs, with
 the same frozen agents, and compares pass rate and token use against the unmasked runs. The
-drop, if any, is the models' recall component. The tool is built and the study is being run
-now; no masked results exist yet and none are claimed.
+drop, if any, is the models' recall component. The tool is built, and the study has not
+yet produced records: none of the 237 records in `results/runs.jsonl` is masked. No masked
+results are claimed.
 
 ## The strictness finding
 
 On strong models the three designs are indistinguishable, because everything passes. The
 difference shows on weak models, where the plain agent leads. Counting every run of the two
 weaker models, the plain agent passed 30 of 38, the LangGraph agent 25 and the Pydantic
-agent 24. The plain agent led in the first three problems and in the four harder ones taken
+agent 24. (My project log, which applies the later re-grade described under Limitations,
+gives 29 of 38 for the plain agent, and Llama's total for the four harder problems is 11
+of 30 rather than 12. The ordering is unchanged.) The plain agent led in the first three problems and in the four harder ones taken
 separately, which makes the lean more trustworthy than either set alone. The margin is small and
 the runs are single, so it is a consistent lean, not a proven law.
 
@@ -232,18 +246,20 @@ relative. The framework's validator raises a retry whenever the model's final an
 a condition. Used here, the condition is that the build and tests pass, so the model cannot
 claim success. Two consequences follow.
 
-- On a model that can fix its program, this is pure benefit. Adding a finishing loop of this
-  kind lifted Llama from one pass in three to three in three on integrate under MPI, and
-  on the recall-resistant problems it kept Kimi working through its subtly wrong first
-  attempts: the strict agent passed all four of Kimi's runs, the other two designs two of
-  four each.
+- On a model that can fix its program, this seems to be a benefit. On the recall-resistant
+  problems it kept Kimi working through its subtly wrong first attempts: the strict agent
+  passed all four of Kimi's runs, the other two designs two of four each (from my project
+  log, so this figure is unverified). A pilot, before the agents were frozen, suggested the
+  same for Llama on integrate under MPI, but I have no stored record of that pilot, and in
+  the final comparison the Pydantic run of that cell failed (see the next point), so I do not
+  rely on it.
 - On a model that cannot solve the problem, "cannot solve it" turns into "retry until the
   budget is gone". Every refusal forces another request, and each request sends the whole
   growing conversation again, until the run ends with the log line `The next request would
   exceed the request_limit of 200`. This happened to Llama on integrate under MPI and to
   Gemma on jacobi under MPI. Three of the four budget-exhaustion failures in the whole
-  study were Pydantic runs, and this retrying is the main reason Llama's token bill was so
-  large.
+  study were Pydantic runs, and this retrying was probably a large part of Llama's token
+  bill, although costs per design were not recorded.
 
 The plain and LangGraph agents are less strict, not cleverer. They feed a failure back as
 information and let the run end when the attempts are used, leaving the best work on disk,
@@ -267,7 +283,7 @@ at the gateway's list prices per million tokens: Sonnet 3 dollars in and 15 out,
 in and 3.03 out, Llama 0.72 for both. Gemma was billed by the hour of a rented graphics-card
 instance at about 2 dollars an hour, not by the token. For the harder-problem campaign of
 ten combinations, each run by three agent designs, Kimi cost 0.83 dollars, Sonnet 8.80,
-Llama 28.75 and Gemma about 5 to 6. Llama used 39.6 million prompt tokens, mostly in
+Llama 28.75 and Gemma about 5 to 6. Llama used 39.6 million prompt tokens (39.9 million with the completion tokens), mostly in
 retries. On the recall-resistant problems every model needed more iteration: Kimi about
 6.2 dollars, Sonnet about 17.9, Llama about 23.5 for no passes, and Gemma about 1.2 for 35
 minutes of instance time. The weak model was the most expensive both times. Per-run costs
@@ -279,19 +295,19 @@ for the first comparison were not recorded.
   runs: a case passed one day and failed the next. Differences of one run are within noise.
   The pattern between strong and weak models repeated across problems and backends and is
   the reliable signal. Repeated runs are planned.
-- **Ceiling effects.** On the seven recallable problems the two strongest models pass almost
+- **Ceiling effects.** On the seven well-known problems the two strongest models pass almost
   every run, so those problems cannot rank them. The recall-resistant problems were built to
   fix this.
 - **Contamination.** The textbook problems may be partly recalled. The masking study
   measures this and has not yet produced results.
-- **Lost records.** The records for `decay` and `reservoir`, and the per-run token snapshots,
-  were lost with the host that ran them; their numbers are quoted from the author's log.
+- **Missing records.** The run files for `decay` and `reservoir`, and the per-run token
+  snapshots, were not kept. Their numbers are from my log and cannot be checked.
 - **A re-graded cell.** The raw manifest records a pass for Llama's plain agent on prefix sum
   under MPI. A uniform re-grade at capped memory settings of that problem and of histogram
   under MPI, for every model, did not confirm it. The tables use the recorded result, and
   the re-grade is not in the manifest.
 - **Older benchmark form** on prefix sum and histogram, described above.
-- **One benchmark host**, with 22 processor cores and a laptop-class graphics card.
+- **One benchmark machine**, with 22 processor cores and a laptop-class graphics card.
   Absolute speed-ups would differ elsewhere; the pass and fail verdicts should not.
 - **One sampling setting.** No temperature sweep has been run.
 - **Comparison as harnesses.** All three designs ran the same retrofitted finishing loop and

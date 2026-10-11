@@ -1,5 +1,11 @@
 # eval — run notes
 
+> **About this file.** This is a set of run notes, kept as a working record and not edited into
+> finished prose. It uses abbreviations and a terse note style. The readable account of the
+> study is [../README.md](../README.md). Abbreviations: N is the number of attempts per cell; CI is a 95% confidence interval; QAT is
+> quantisation-aware training; W4A16 means 4-bit weights with 16-bit activations; T is the
+> sampling temperature; B means billion parameters.
+
 ## What it is
 `eval_harness` runs each agent harness (agent_min / agent_langgraph / agent_pydantic)
 over a fixed task set against the real target pipelines, and scores the result.
@@ -29,7 +35,7 @@ Best-of-N (Phase 8 — isolated worktrees, sampling at temperature):
 
 - `--n N`           : run each (harness, task) N times; report success rate k/N + median wall-clock.
 - `--concurrency C` : up to C attempts at once. The model is single-slot, so this overlaps the
-                      local work (pytest/Iris, file/git ops), not the inference itself.
+                      local work (pytest, file and git operations), not the inference itself.
 
 ## Worktree isolation (why best-of-N is safe to parallelise)
 Each attempt runs in its own **detached git worktree of the target at HEAD**

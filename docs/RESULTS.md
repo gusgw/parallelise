@@ -22,20 +22,24 @@ Every results table in the project, with where it came from. The experimental de
 | source | what it holds | dates |
 |---|---|---|
 | `results/manifest-july-2026.tsv` | 237 graded run records: time, problem, backend, model, agent, result, short hash of the agent source | 4 and 5 July 2026 |
-| `results/manifest-phase2-july-2026.tsv` | the same 237 records, a copy kept under the name used in the original project | 4 and 5 July 2026 |
+| `results/manifest-phase2-july-2026.tsv` | a duplicate of the first file, with identical content; "phase2" refers to the second stage of the campaign, which added the CUDA runs and the four harder problems | 4 and 5 July 2026 |
 | `results/tokens-new-problems-july-2026.json` | exact request and token counts per model for the four harder problems | 5 and 6 July 2026 |
-| the author's project log (not in this repository) | records of the campaigns whose files were lost, and a later re-grade that the run records do not contain | 6 July 2026 |
+| my project log (not in this repository) | records of the campaigns whose files were not kept, the reference timings, and a later re-grade that the run records do not contain | 6 July 2026 |
 
-The two manifests have identical content. The 237 records cover 228 distinct cells of
+The two manifests have identical content, so either can be cited. The 237 records cover 228 distinct cells of
 problem, backend, model and agent: 108 for the first three problems and 120 for the four
-harder ones. Six cells were run more than once, for nine extra records. In all, 199 of the 237
-records are passes. Every table in sections 1, 2, 4 and 5.1 to 5.4 was recomputed from the manifest, with
-one exception that is stated where it arises.
+harder ones. Six cells were run more than once, for nine extra records; seven of the
+superseded records carry the note "A later run of the same cell replaced this one" in
+`results/runs.jsonl`, and the other two (both Llama, histogram under MPI) do not. In all, 199
+of the 237 records are passes. Every table in sections 1, 2, 4 and 5.1 to 5.4 was
+recomputed from the manifest. The one respect in which they differ from my log is that none
+applies the later re-grade of Llama's prefix sum under MPI.
 
-Two kinds of numbers cannot be checked against a record. The results for the two
-recall-resistant problems and their costs were recorded in the author's project log
-on the day, and the files behind them were lost with the host that ran them. They are quoted
-from that log. The re-grade of Llama's prefix sum under MPI is also in the log only and is not applied.
+Three kinds of numbers cannot be checked against a record: the results and costs for the
+two recall-resistant problems (sections 3, 5.5, 5.6 and 6.2), the reference timings and
+Python demonstrations (sections 7 and 8), and the re-grade of Llama's prefix sum under MPI.
+All were written in my project log at the time, and the files behind the first group were
+not kept. They are quoted from that log and are labelled as such.
 
 ## 1. The first three problems: 3 problems, 3 backends, 4 models
 
@@ -61,7 +65,8 @@ Notes. The OpenMP and MPI part was run first, with one frozen set of agents; its
 uniformly easy, at 35 of 36 passes in that part; the one failure was Llama's Pydantic agent on
 the heat stencil. The heat stencil under MPI, which needs boundary
 exchange, was the cell that separated the models. One of Llama's CUDA failures on integration (the plain agent) was
-a new kind: a correct answer but a speed-up of only 1.92 times, under the floor of 3.
+a new kind: a correct answer but a speed-up of only 1.92 times, under the floor of 3 (the 1.92 is from my project log, not
+from the records).
 
 ## 2. The four harder problems
 
@@ -84,7 +89,7 @@ CUDA version.
 | **total (of 30)** | **30** | **30** | **28** | **12** |
 
 Every entry matches the run records. The cell "prefix sum, MPI" for llama counts one pass
-(the plain agent). The author's project log says that a later uniform re-grade of prefix sum
+(the plain agent). My project log says that a later uniform re-grade of prefix sum
 and histogram under MPI, for every model and at the same capped memory settings, did not
 confirm that pass. That re-grade is not in the run records, so it is not applied here.
 
@@ -96,9 +101,8 @@ pass and fail marks for correctness stand, but their speed figures should be re-
 
 Problems: `decay` (a running value in which each step takes the largest of three
 quantities) and `reservoir` (a level clamped between empty and a capacity). OpenMP and MPI
-only. Source: the author's project log, 6 July 2026. **The run records for these were lost
-with the host that ran them, so these numbers are quoted from the log and cannot be checked
-against records.**
+only. Source: my project log, 6 July 2026. **Unverified: the run files for these were not kept,
+so these numbers are quoted from the log and cannot be checked against records.**
 
 | problem and backend | sonnet | kimi | gemma | llama |
 |---|---|---|---|---|
@@ -111,7 +115,7 @@ against records.**
 Per problem, over both backends (of 6): decay sonnet 6, kimi 4, gemma 6, llama 0;
 reservoir sonnet 6, kimi 4, gemma 5, llama 0. Llama's programs compiled but computed wrong
 answers (a checksum mismatch). Kimi's four failures were correct with one worker and wrong
-at the seams between blocks with several.
+at the boundaries between blocks with several.
 
 The `decay` runs were made with a header that named the technique family, which was
 reworded afterwards (see `docs/DESIGN.md`); the runs were not repeated.
@@ -120,7 +124,7 @@ reworded afterwards (see `docs/DESIGN.md`); the runs were not repeated.
 
 Passing runs, out of three agent designs per cell. Derived from sections 1 and 2.
 
-| model | OpenMP (of 21) | MPI (of 21) | CUDA (of 15) | seven recallable problems (of 57) | first three (of 27) | four harder (of 30) |
+| model | OpenMP (of 21) | MPI (of 21) | CUDA (of 15) | seven well-known problems (of 57) | first three (of 27) | four harder (of 30) |
 |---|---|---|---|---|---|---|
 | sonnet | 21 | 21 | 15 | 57 | 27 | 30 |
 | kimi | 21 | 20 | 15 | 56 | 26 | 30 |
@@ -143,7 +147,7 @@ Source: `results/manifest-july-2026.tsv`.
 
 ### 5.2 Four harder problems (40 runs per design)
 
-Source: `results/manifest-july-2026.tsv`, taken as recorded.
+Source: `results/manifest-july-2026.tsv`, recomputed without the re-grade.
 
 | design | all models | strong models | weak models |
 |---|---|---|---|
@@ -161,6 +165,10 @@ Sum of 5.1 and 5.2 for gemma and llama.
 | langgraph | 25 |
 | pydantic | 24 |
 
+My project log, which applies the re-grade of Llama's prefix sum under MPI, gives 29 of 38
+for the plain agent, and Llama's total for the four harder problems is 11 of 30 rather than
+12. The ordering of the three designs is unchanged.
+
 The plain agent led in both problem sets taken separately, and the LangGraph agent was
 level with or ahead of the Pydantic agent in both. By backend, for the weak
 models, over the seven problems: OpenMP basic 12, langgraph 11, pydantic 10; MPI basic 10,
@@ -177,7 +185,7 @@ langgraph 9, pydantic 6; CUDA basic 8, langgraph 5, pydantic 8.
 
 ### 5.5 Recall-resistant problems
 
-Source: the author's project log (records lost). Passes out of 16 runs per design across the
+Source: my project log (records not kept). Passes out of 16 runs per design across the
 four models: pydantic 11, basic 10, langgraph 10. The difference sits in one model. For kimi,
 pydantic passed 4 of 4 and basic and langgraph 2 of 4 each. Sonnet passed with every design
 and llama failed with every design. Gemma's one failure was its pydantic run under MPI on
@@ -188,7 +196,7 @@ and llama failed with every design. Gemma's one failure was its pydantic run und
 Four runs in the whole study ended because the request budget was used up. Three were
 Pydantic runs, including Llama on integration under MPI and Gemma on the heat stencil under
 MPI; the log line is `The next request would exceed the request_limit of 200`. This count is
-from the author's notes rather than from the manifest, which records only pass or fail.
+from my notes rather than from the manifest, which records only pass or fail.
 
 ## 6. Token use and cost
 
@@ -198,7 +206,8 @@ Source: `results/tokens-new-problems-july-2026.json`; ten combinations of proble
 backend, three agent designs each, 5 and 6 July 2026. Totals: 3,322 requests, 51,827,746
 prompt tokens and 628,083 completion tokens. Prices are the gateway's list prices per
 million tokens: sonnet 3 dollars for prompt and 15 for completion tokens; kimi 0.60 and
-3.03; llama 0.72 for both. The costs are computed here from the counts and these prices.
+3.03; llama 0.72 for both. The costs are computed here from the counts and these prices. Llama's 39.6 million prompt
+tokens and 0.36 million completion tokens make the 39.9 million quoted in the README.
 
 | model | requests | prompt tokens | completion tokens | cost | per combination (of 10) |
 |---|---|---|---|---|---|
@@ -209,12 +218,12 @@ million tokens: sonnet 3 dollars for prompt and 15 for completion tokens; kimi 0
 
 Gemma was billed by the hour of a rented graphics-card instance at about 2 dollars an
 hour, not by the token, so its cost is an estimate of instance time. The project log
-quotes Llama's cost per combination as about $2.60, which I could not reproduce from these
-counts; ten combinations give $2.88.
+quotes Llama's cost per combination as about $2.60. These counts give $2.88 and I could
+not reproduce the log's figure.
 
 ### 6.2 Recall-resistant problems
 
-Source: the author's project log (token snapshots lost). Prompt and completion tokens in
+Source: my project log (token snapshots not kept). Prompt and completion tokens in
 millions, and cost at the same prices.
 
 | model | prompt tokens | completion tokens | cost | passes |
@@ -225,13 +234,17 @@ millions, and cost at the same prices.
 | gemma | not recorded | not recorded | about $1.2 (35 minutes of instance time) | 11 of 12 |
 
 Total for the campaign: about $49. Every model needed more iteration than on the
-recallable problems. In both campaigns the weakest model was by far the most expensive.
+well-known problems. In both campaigns the weakest model was by far the most expensive.
 
 ## 7. Speed-ups of the known-good reference solutions
 
 These show that the problems can be parallelised and that the speed-up floors are reachable.
-They are the author's measurements from the project log on the 22-core benchmark host (not
-in the manifests), one run each. The prefix sum and histogram figures used the older
+They are my measurements from the project log on a machine with 22 processor cores (not in
+the manifests), one run each. The repeat count, the timer and the processor model are not recorded in this
+repository, so these figures cannot be reproduced from it without re-measuring. The method
+now in the code is wall-clock time (`omp_get_wtime`, `MPI_Wtime` or `clock_gettime`,
+depending on the backend) in each problem's `bench.c`, with the speed-up taken against the
+one-worker run. The prefix sum and histogram figures used the older
 benchmark form.
 
 | problem | OpenMP | MPI | CUDA |
@@ -251,13 +264,13 @@ floor, as intended.
 
 ## 8. Calling a finished kernel from Python
 
-Demonstrations in `bindings/`, using nanobind wrappers around passing kernels. Source: the
-author's project log; one run each. The notebook loop is the original serial Python.
+Demonstrations in `bindings/`, using nanobind wrappers around passing kernels. Source: my
+project log; one run each. The notebook loop is the original serial Python.
 
 | kernel | notebook loop | wrapped C | note |
 |---|---|---|---|
 | integration, OpenMP | 1.33 s | 0.004 s | 365 times faster; answer matches the oracle |
 | matrix multiply, OpenMP | 1.49 s | 0.012 s | 123 times faster; the optimised numpy product takes 0.004 s |
-| heat stencil, OpenMP | not recorded | not recorded | 31 times faster |
+| heat stencil, OpenMP | not recorded | not recorded | 31 times faster (unverified: the timings were not recorded, and `bindings/README.md` does not repeat it) |
 | integration, MPI | 0.0152 s on one process | 0.0044 s on four | 3.4 times faster; answers differ by 6e-14, inside the measured spread |
 | integration, CUDA | not recorded | 2.3 ms | matches the oracle |

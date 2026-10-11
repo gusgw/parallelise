@@ -110,7 +110,7 @@ For stronger isolation use a cluster network policy that allows only the gateway
   does. Do not work around it.
 - **Permission denied writing `/work`.** The mounted directory is not writable by user
   10001. Change its owner or its group permissions.
-- **Pod killed with reason `OOMKilled`.** The memory limit was exceeded; raise it in
+- **Pod killed with reason `OOMKilled` (out of memory).** The memory limit was exceeded; raise it in
   `k8s/job.yaml` if the problem needs it.
 - **Job failed with `DeadlineExceeded`.** The Job reached `activeDeadlineSeconds`.
 - **CUDA tests skip.** There is no `nvcc` or graphics card, which is expected on the CPU

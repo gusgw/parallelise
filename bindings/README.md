@@ -20,12 +20,12 @@ wrapper into an importable Python module.
 | `integrate_binding.cpp`, `integrate_mpi_binding.cpp`, `integrate_cuda_binding.cpp` | Scalar wrappers for the integral, for the OpenMP, MPI and CUDA kernels. They release the Python global interpreter lock around the kernel so that the kernel's own threads can use the cores. |
 | `matmul_binding.cpp`, `jacobi_binding.cpp` | Array wrappers. NumPy arrays of 64-bit floats cross the boundary without copying on the way in; the result buffer is owned by a capsule so that Python frees it safely. |
 | `demo_*.py` | One demonstration per wrapper. Each compares the notebook's own pure-Python loop with the wrapped kernel and checks both against the oracle in `problems/<name>/reference.json`. |
-| `nanobind_mpi_check/` | A small, separate experiment that showed in the first week that MPI code can be called from Python: `mpi4py` hands its communicator to a C function, which sums its slice of a midpoint-rule calculation of pi and combines the slices with an all-reduce. |
+| `nanobind_mpi_check/` | A small, separate experiment that showed that MPI code can be called from Python. It was made before the wrappers above: `mpi4py` hands its communicator to a C function, which sums its slice of a midpoint-rule calculation of pi and combines the slices with an all-reduce. |
 
 ## How they were built and tested in July 2026
 
 Everything was built with CMake against nanobind 2.13, Python 3.14, Open MPI 5.0.10 and
-GCC 16, and the demonstrations were run on a workstation. The CUDA wrapper was built
+GCC 16, and the demonstrations were run on a single machine with several processor cores. The CUDA wrapper was built
 and run on a machine with an NVIDIA GPU. A typical build for the OpenMP integral is:
 
     cmake -S . -B build -DKERNEL_DIR=<folder holding integrate.c> \
@@ -49,6 +49,10 @@ tolerance (these are single runs, not a benchmark study):
 - Matrix multiplication: the Python loop took 1.49 s, the wrapped kernel 0.012 s (about
   123 times faster) and NumPy's `A @ B` 0.004 s. The optimised library beats the simple
   kernel at this size; the point of the demonstration is the array-passing pattern.
+
+The heat stencil wrapper (`jacobi_binding.cpp`, `demo_jacobi_use.py`) has no measurement
+recorded here. `docs/RESULTS.md` quotes 31 times faster from my project log, with the
+timings not recorded, so treat that figure as unverified. The version numbers above are not backed by a build log stored in this repository.
 
 ## One trap worth knowing
 

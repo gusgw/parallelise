@@ -1,5 +1,11 @@
 # Agent performance study — full report
 
+> **About this file.** This is a long working report, kept as a working record and not edited into
+> finished prose. It uses abbreviations and a terse note style. The readable account of the
+> study is [README.md](README.md). Abbreviations: N is the number of attempts per cell; CI is a 95% confidence interval; QAT is
+> quantisation-aware training; W4A16 means 4-bit weights with 16-bit activations; T is the
+> sampling temperature; B means billion parameters.
+
 *A study of how to build an effective autonomous coding agent on a medium-size,
 self-hosted LLM, by comparing several agent designs head-to-head on real pipeline
 code under a controlled, one-variable-at-a-time protocol.*
@@ -11,18 +17,19 @@ artifacts (`RESULTS*.jsonl`).
 
 ## 1. TL;DR
 
-1. **The model is by far the biggest lever.** Holding the agents and task fixed and
-   swapping the 12B for the 31B lifted the whole field ~3× (a band of 15–30% became
-   50–100%) and, for the first time, separated the agents from each other. On a weak
+1. **On this task, the model was the biggest lever.** Holding the agents and task fixed and
+   swapping the 12B model for the 31B model lifted the whole field about threefold (a band
+   of 15% to 30% became 50% to 100%) and, for the first time, separated the agents from each other. On a weak
    model the agent design barely matters; on a capable one it matters a lot.
 2. **Frameworks beat the bare loop — but only once the model is strong enough to use
    them.** At 12B everything is noise (~15–30%, overlapping intervals). At 31B the
    framework agents (LangGraph/deepagents 100%, Pydantic-AI 90%) pull clearly ahead of
    the hand-rolled loop (50%).
-3. **Higher sampling temperature is better here, not worse** — the opposite of the
-   usual intuition. Greedy decoding (T=0) is *catastrophic* for weakly-scaffolded
-   agents; success rises monotonically toward T=1.0. Strong scaffolding makes the
-   knob irrelevant.
+3. **On this task, with these two models, higher sampling temperature was better, not
+   worse**, which is the opposite of the usual expectation. Greedy decoding (temperature 0)
+   gave very poor results for the weakly scaffolded agents, and for the agents where the
+   temperature mattered at all, success rose with temperature up to 1.0. Strong
+   scaffolding made the setting irrelevant.
 4. **Forcing the final answer into a structured object breaks the agent.** Every
    "structured finish" variant scored 0; the value is in *verification*, which must be
    delivered through a plain-prose finish.

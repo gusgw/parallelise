@@ -1,5 +1,11 @@
 # agent_pydantic — run notes
 
+> **About this file.** This is a set of run notes, kept as a working record and not edited into
+> finished prose. It uses abbreviations and a terse note style. The readable account of the
+> study is [../README.md](../README.md). Abbreviations: N is the number of attempts per cell; CI is a 95% confidence interval; QAT is
+> quantisation-aware training; W4A16 means 4-bit weights with 16-bit activations; T is the
+> sampling temperature; B means billion parameters.
+
 ## Status
 Challenger = **Pydantic AI 1.106.0**, small tool surface (`read_file` / `ls` /
 `grep`) over `harness_common`; model via `OpenAIChatModel` + `OpenAIProvider(base_url=…,

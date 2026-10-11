@@ -1,8 +1,14 @@
 # FINDINGS — building effective deep agents on a 12B local model
 
-What we learned driving three agent harnesses (hand-rolled loop, LangGraph +
-deepagents, Pydantic AI) against a real failing-test task with **Gemma 4 12B**
-(QAT W4A16, vLLM, 32k context). Every claim below is backed by a captured
+> **About this file.** This is the running log of the work, kept as a working record and not edited into
+> finished prose. It uses abbreviations and a terse note style. The readable account of the
+> study is [README.md](README.md). Abbreviations: N is the number of attempts per cell; CI is a 95% confidence interval; QAT is
+> quantisation-aware training; W4A16 means 4-bit weights with 16-bit activations; T is the
+> sampling temperature; B means billion parameters.
+
+What I learned driving three agent harnesses (a hand-written loop, LangGraph with
+deepagents, and Pydantic AI) against a real failing-test task with the 12B model of the
+Gemma 4 family, quantised with QAT to W4A16 and served by vLLM with a 32,000-token context. Every claim below is backed by a captured
 conversation log or a source-level reading of the installed frameworks.
 
 ## The measurement
@@ -190,19 +196,24 @@ in `full`), plus a clean failure path instead of a traceback. It removed the lyi
 crashing but **stayed at 0/12 (31B), CI [0%, 24%]** — vs `full`'s 90%. Escalation, each step
 verified live on the 31B:
 
-1. **Verify the claim** → no more lies, no more crashes; still 0. The model does `full`'s
-   *correct* fix (remap the stale test imports to the real functions) but leaves a couple
-   of references behind and runs out of budget.
-2. **Concrete feedback + "don't gut the tests, go edit" directive + budget 8→30** → improved
-   the *behaviour* (correct-shaped edits), not the *outcome*; still 0/12. (Six of twelve
-   attempts produced a byte-identical near-miss diff.)
-3. **Trace the turn-by-turn** → the killer is an **empty-turn storm**: ~10 empty model
-   responses per real action. The model's edits are correct and incremental; it just can't
-   survive the storm. `report_fix=0` — it never even reaches the finish; it dies mid-fix.
-4. **Budget 80 + request cap 200** → 2/4 still exhaust the 80 retries (~565 s), 2/4 hit the
-   900 s wall. Raising the budget only trades retry-exhaustion for timeout. Still 0.
-5. **Tool-free structured finish (`PromptedOutput`)** → the storm vanishes, but a new failure:
-   the model fixates on emitting the report JSON and **never calls a tool** (`calls=0`). Still 0.
+1. I made the agent verify the claim. The agent no longer lied or crashed, but the result
+   was still 0. The model made the same correct fix as `full` (it remapped the stale test
+   imports to the real functions) but left a couple of references behind and ran out of
+   budget.
+2. I gave more concrete feedback, added an instruction not to gut the tests but to go and
+   edit them, and raised the budget from 8 to 30. The edits became better shaped, but the
+   outcome did not change: still 0 of 12. Six of the twelve attempts produced a
+   byte-identical near-miss diff.
+3. I traced the run turn by turn. The cause was a storm of empty turns: about ten empty model
+   responses for every real action. The model's edits were correct and incremental, but it
+   could not survive the storm. It never reached the finish, because `report_fix` was 0
+   in every run; each run ended in the middle of a fix.
+4. I set the budget to 80 and the request cap to 200. Two of four runs still used up the 80
+   retries (about 565 seconds) and two of four hit the 900-second time limit. A larger
+   budget only trades retry exhaustion for a timeout. Still 0.
+5. I used a structured finish with no tools (`PromptedOutput`). The storm vanished, but a new
+   failure appeared: the model fixated on writing the report as JSON and never called a
+   tool (`calls=0`). Still 0.
 
 **Conclusion (multiply confirmed):** on this gemma4 build, forcing the final answer into a
 structured schema — by *any* pydantic-ai mechanism (output tool *or* prompted JSON) — breaks
@@ -226,11 +237,12 @@ Full battery, `MODEL_TEMPERATURE` ∈ {0.0, 0.3, 0.7, 1.0} (0.7 reused from Phas
 | `agent_pydantic_typed` | 0/20 | 0/20 | 0/20 | 0/20 |
 | `agent_pydantic_typed_checked` | 0/20 | 0/20 | (0/12) | 0/20 |
 
-**The headline is counterintuitive: higher temperature is monotonically *better* here, and
-greedy decoding (T=0.0) is catastrophic for the weakly-scaffolded agents.** This is the
-opposite of the usual "lower temperature = more reliable" intuition, and it is large and
-significant — e.g. `agent_min` 0/20 → 13/20 (CIs [0,16%] vs [43,82%]), `pydantic` (full)
-6/20 → 20/20 ([15,52%] vs [84,100%]). Every mid-band agent climbs steadily with temperature.
+**The headline runs against the usual expectation that a lower temperature is more
+reliable: on this task, higher temperature was better, and greedy decoding (T=0.0) was very
+poor for the weakly scaffolded agents.** The effect is large: `agent_min` rose from 0 of 20
+to 13 of 20 (confidence intervals 0% to 16% and 43% to 82%), and `pydantic` (full) from 6 of 20
+to 20 of 20 (15% to 52% and 84% to 100%). Every mid-band agent improved as the temperature
+rose. The scaffolded LangGraph agents did not.
 
 - **Mechanism (confirms the `default_temperature` docstring's bet):** at T=0.0 the model is
   deterministic, so the first wrong move — a mis-targeted exact-string edit, a repeated tool
@@ -265,9 +277,9 @@ reference fix before the agents saw it.
 
 | task | target | kind | result | why |
 |---|---|---|---|---|
-| `feature-inline-threshold` | mealworm | feature (multi-file) | **0/96** frozen budgets, **0/96** relaxed | can't coordinate the publish+consume change |
+| `feature-inline-threshold` | second target | feature (multi-file) | **0/96** frozen budgets, **0/96** relaxed | can't coordinate the publish+consume change |
 | `debug-s3-retry` | weather | debug (retry pattern) | **~100%** (all agents 2/2 smoke) | textbook pattern — too easy |
-| `debug-msgid-trace` | mealworm | debug (subtle 1-file) | **0/24** (default + relaxed + guided) | can't localize; even pointed at it, can't fix |
+| `debug-msgid-trace` | second target | debug (subtle 1-file) | **0/24** (default + relaxed + guided) | can't localize; even pointed at it, can't fix |
 
 - **#1 is capability-, not budget-walled.** First sweep (frozen budgets, N=8×4 temps)
   failed on step/recursion/usage limits. Relaxing the budgets (env knobs, 3×) flipped

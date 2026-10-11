@@ -1,6 +1,8 @@
 # Running a conversion cell on Kubernetes
 
-`job.yaml` holds three objects: a ConfigMap, a Secret and a Job. Together they run one
+`job.yaml` holds three Kubernetes objects: a ConfigMap (a named set of settings), a Secret
+(a named value kept out of ordinary settings, such as a password) and a Job (a task that
+runs once to completion). Together they run one
 conversion cell, that is one problem on one backend with one agent, and then stop.
 
 Build the image and make it available to the cluster first (`make image`, then push it to

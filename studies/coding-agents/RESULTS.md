@@ -85,15 +85,12 @@ The baseline needs almost nothing; the frameworks need a substantial set of pack
 
 ---
 
-## 5. Not yet done / pending
+## 5. Status when this early file was written
 
-- **Real-target tasks** (the `best_weather` failing-test fix, `mealworm` review,
-  AsyncAPI generation): need the target codebases to be present and their own
-  dependencies installed (for example after `uv sync` in the target).
-- **Gemma 4 endpoint** (requested at the time): once provided, flip
-  `MODEL_BASE_URL`/`MODEL_NAME` and re-run everything — the deepagents reference
-  should then drive its full stack.
-- **The eval harness (Phase 4) is built and unit-tested** (`eval/`, 9 tests) — task
-  set, a resilient runner, checks, and markdown output; the actual scoring run is
-  pending the target codebases and the model.
-- **n8n orchestration** (Phase 6) is not yet built.
+This file records the first stage of the study, run on a small Mistral 7B model. It was
+written before the later work and is not a current to-do list. The items that were then
+outstanding were later done, except the last: the real-target tasks and the Gemma 4 model
+were used in the later stages described in `README.md` and `FINDINGS.md`, and the eval
+harness was run to produce the results there. The n8n orchestration layer was never built.
+In the lists above, "live" means a run against the real model and a tick or cross records
+whether it worked.
