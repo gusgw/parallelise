@@ -36,6 +36,8 @@ packages = ["src/parallelise"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+# make `tests.fake_model_server` importable however pytest is launched
+pythonpath = ["."]
 markers = [
     "slow: builds and runs C code; needs gcc with OpenMP",
     "mpi: needs mpicc and mpirun",
