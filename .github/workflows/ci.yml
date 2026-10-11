@@ -48,5 +48,6 @@ jobs:
         run: docker build --target cpu -t parallelise:cpu .
       - name: Check that the command starts
         run: docker run --rm parallelise:cpu --help
-      - name: Build the CUDA image (build only; no graphics card is available to run it)
-        run: docker build --target cuda -t parallelise:cuda .
+      # The CUDA stage is not built here: its development base image is several
+      # gigabytes and exhausts the hosted runner's disk, and the runner has no graphics
+      # card to run it. It is built and tested on the GPU host (see docs/OPERATIONS.md).
