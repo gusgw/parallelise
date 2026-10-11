@@ -143,7 +143,7 @@ also need an OpenAI-compatible gateway; LiteLLM is one way to provide it.
 1. Install the package. The plain agent needs only `httpx`; the extras add the two
    framework agents, the chart and the development tools.
 
-        git clone <this repository> parallelise && cd parallelise
+        git clone https://github.com/gusgw/parallelise.git parallelise && cd parallelise
         python3 -m venv .venv && . .venv/bin/activate
         make install
 
