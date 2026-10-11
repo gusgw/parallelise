@@ -1,0 +1,12 @@
+[gate] build with warnings as errors
+cc -O2 -fopenmp -Wall -Wextra -Werror -std=c11 -c kernel_c.c -o kernel_c.o
+cc -O2 -fopenmp -Wall -Wextra -Werror -std=c11 test_kernel_c.c kernel_c.o -o test_kernel_c -lm
+cc -O2 -fopenmp -Wall -Wextra -Werror -std=c11 bench.c kernel_c.o -o bench -lm
+
+[gate] unit test at one worker and at several, then benchmark
+OMP_NUM_THREADS=1 ./test_kernel_c
+Checksum: -0.433214
+Test failed!
+make: *** [Makefile:19: check] Error 1
+
+GATE FAIL (test-one-worker) /work/masked/basic/scan/openmp/llama-3.3-70b/basic

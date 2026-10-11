@@ -1,0 +1,4 @@
+/usr/local/lib/python3.12/site-packages/parallelise/agents/pydantic_agent.py:85: PydanticAIDeprecationWarning: `httpx.AsyncClient` support for OpenAI-compatible providers is deprecated and will be removed in v3; use `httpx2.AsyncClient` instead.
+  provider = parts["OpenAIProvider"](
+2026-10-11 20:17:26,591 WARNING parallelise.agents.pydantic: pydantic agent stopped: UnexpectedModelBehavior: Exceeded maximum output retries (4)
+FAIL: cg on openmp with pydantic and llama-3.3-70b (failure stage: test-one-worker). Record added to /results/runs.jsonl.

@@ -1,0 +1,3 @@
+/usr/local/lib/python3.12/site-packages/parallelise/agents/pydantic_agent.py:85: PydanticAIDeprecationWarning: `httpx.AsyncClient` support for OpenAI-compatible providers is deprecated and will be removed in v3; use `httpx2.AsyncClient` instead.
+  provider = parts["OpenAIProvider"](
+PASS: cg on mpi with pydantic and claude-sonnet-4.5 (failure stage: none). Record added to /results/runs.jsonl.

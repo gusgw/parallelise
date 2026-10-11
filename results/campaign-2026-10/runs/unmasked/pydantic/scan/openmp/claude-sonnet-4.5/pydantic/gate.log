@@ -1,0 +1,15 @@
+[gate] build with warnings as errors
+cc -O2 -fopenmp -Wall -Wextra -Werror -std=c11 -c scan.c -o scan.o
+cc -O2 -fopenmp -Wall -Wextra -Werror -std=c11 test_scan.c scan.o -o test_scan -lm
+cc -O2 -fopenmp -Wall -Wextra -Werror -std=c11 bench.c scan.o -o bench -lm
+
+[gate] unit test at one worker and at several, then benchmark
+OMP_NUM_THREADS=1 ./test_scan
+1 checks, 0 failed
+OMP_NUM_THREADS=$(nproc) ./test_scan
+1 checks, 0 failed
+./bench 134217728 > bench.csv
+SPEEDUP_FLOOR=1.25 python3 check_bench.py bench.csv
+bench stats OK (best speedup 1.95)
+
+GATE PASS (none) /work/unmasked/pydantic/scan/openmp/claude-sonnet-4.5/pydantic

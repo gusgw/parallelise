@@ -1,0 +1,28 @@
+[gate] build with warnings as errors
+mpicc -O2 -Wall -Wextra -Werror -std=c11 -c jacobi.c -o jacobi.o
+mpicc -O2 -Wall -Wextra -Werror -std=c11 test_jacobi.c jacobi.o -o test_jacobi -lm
+mpicc -O2 -Wall -Wextra -Werror -std=c11 bench.c jacobi.o -o bench -lm
+
+[gate] unit test at one worker and at several, then benchmark
+mpirun --oversubscribe -np 1 ./test_jacobi
+test_jacobi: test_jacobi.c:34: main: Assertion `fabs(checksum - REF_CHECKSUM) < REF_TOL' failed.
+[4ffe4bb6f4a8:00885] *** Process received signal ***
+[4ffe4bb6f4a8:00885] Signal: Aborted (6)
+[4ffe4bb6f4a8:00885] Signal code:  (-6)
+[4ffe4bb6f4a8:00885] [ 0] /lib/x86_64-linux-gnu/libc.so.6(+0x3fd70) [0x7f1b8aca2d70]
+[4ffe4bb6f4a8:00885] [ 1] /lib/x86_64-linux-gnu/libc.so.6(+0x9469c) [0x7f1b8acf769c]
+[4ffe4bb6f4a8:00885] [ 2] /lib/x86_64-linux-gnu/libc.so.6(gsignal+0x12) [0x7f1b8aca2c42]
+[4ffe4bb6f4a8:00885] [ 3] /lib/x86_64-linux-gnu/libc.so.6(abort+0x22) [0x7f1b8ac8b4ac]
+[4ffe4bb6f4a8:00885] [ 4] /lib/x86_64-linux-gnu/libc.so.6(__assert_perror_fail+0x0) [0x7f1b8ac8b420]
+[4ffe4bb6f4a8:00885] [ 5] ./test_jacobi(+0x111f) [0x56392e27511f]
+[4ffe4bb6f4a8:00885] [ 6] /lib/x86_64-linux-gnu/libc.so.6(+0x29ca8) [0x7f1b8ac8cca8]
+[4ffe4bb6f4a8:00885] [ 7] /lib/x86_64-linux-gnu/libc.so.6(__libc_start_main+0x85) [0x7f1b8ac8cd65]
+[4ffe4bb6f4a8:00885] [ 8] ./test_jacobi(+0x1291) [0x56392e275291]
+[4ffe4bb6f4a8:00885] *** End of error message ***
+--------------------------------------------------------------------------
+prterun noticed that process rank 0 with PID 885 on node 4ffe4bb6f4a8 exited on
+signal 6 (Aborted).
+--------------------------------------------------------------------------
+make: *** [Makefile:22: check] Error 134
+
+GATE FAIL (test-one-worker) /work/unmasked/basic/jacobi/mpi/llama-3.3-70b/basic

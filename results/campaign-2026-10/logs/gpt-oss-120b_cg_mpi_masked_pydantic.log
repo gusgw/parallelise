@@ -1,0 +1,4 @@
+/usr/local/lib/python3.12/site-packages/parallelise/agents/pydantic_agent.py:85: PydanticAIDeprecationWarning: `httpx.AsyncClient` support for OpenAI-compatible providers is deprecated and will be removed in v3; use `httpx2.AsyncClient` instead.
+  provider = parts["OpenAIProvider"](
+2026-10-11 18:48:26,507 WARNING parallelise.agents.pydantic: pydantic agent stopped: UnexpectedModelBehavior: Model token limit (provider default) exceeded before any response was generated. Increase the `max_tokens` model setting, or simplify the prompt to result in a shorter response that will fit within the limit.
+PASS: cg on mpi with pydantic and gpt-oss-120b (failure stage: none). Record added to /results/runs.jsonl.

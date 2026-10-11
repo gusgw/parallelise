@@ -1,0 +1,1 @@
+FAIL: jacobi on mpi with langgraph and kimi-k2.5 (failure stage: test-many-workers). Record added to /results/runs.jsonl.

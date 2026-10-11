@@ -24,6 +24,7 @@ Every results table in the project, with where it came from. The experimental de
 | `results/manifest-july-2026.tsv` | 237 graded run records: time, problem, backend, model, agent, result, short hash of the agent source | 4 and 5 July 2026 |
 | `results/manifest-phase2-july-2026.tsv` | a duplicate of the first file, with identical content; "phase2" refers to the second stage of the campaign, which added the CUDA runs and the four harder problems | 4 and 5 July 2026 |
 | `results/tokens-new-problems-july-2026.json` | exact request and token counts per model for the four harder problems | 5 and 6 July 2026 |
+| `results/campaign-2026-10/runs.jsonl` | 192 graded run records of the masked-against-unmasked campaign, with request, token, wall-time and latency fields; per-run logs and files beside it, and `prices.json` | 11 and 12 October 2026 |
 | my project log (not in this repository) | records of the campaigns whose files were not kept, the reference timings, and a later re-grade that the run records do not contain | 6 July 2026 |
 
 The two manifests have identical content, so either can be cited. The 237 records cover 228 distinct cells of
@@ -40,6 +41,23 @@ two recall-resistant problems (sections 3, 5.5, 5.6 and 6.2), the reference timi
 Python demonstrations (sections 7 and 8), and the re-grade of Llama's prefix sum under MPI.
 All were written in my project log at the time, and the files behind the first group were
 not kept. They are quoted from that log and are labelled as such.
+
+## 0. The October 2026 campaign
+
+A second campaign, after the July study, ran integrate, jacobi, scan and cg on OpenMP and MPI
+with four models, three agent designs, and the problems both unmasked and masked. It has its
+own document, [CAMPAIGN-2026-10.md](CAMPAIGN-2026-10.md), with the method, all tables,
+latency and cost, the tamper-check findings and the limitations. Its main table is below.
+Passes out of 24 runs per model and variant, from `results/campaign-2026-10/runs.jsonl`;
+the chart is [figures/masked-vs-unmasked.svg](figures/masked-vs-unmasked.svg).
+
+| model | unmasked | masked | change (points) |
+|---|---|---|---|
+| claude-sonnet-4.5 | 24/24 (100%) | 21/24 (88%) | -12 |
+| kimi-k2.5 | 24/24 (100%) | 20/24 (83%) | -17 |
+| gpt-oss-120b | 21/24 (88%) | 20/24 (83%) | -4 |
+| llama-3.3-70b | 7/24 (29%) | 9/24 (38%) | +8 |
+| all models | 76/96 (79%) | 70/96 (73%) | -6 |
 
 ## 1. The first three problems: 3 problems, 3 backends, 4 models
 

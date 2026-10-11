@@ -1,0 +1,21 @@
+[gate] build with warnings as errors
+cc -O2 -fopenmp -Wall -Wextra -Werror -std=c11 -c cg.c -o cg.o
+cc -O2 -fopenmp -Wall -Wextra -Werror -std=c11 test_cg.c cg.o -o test_cg -lm
+cc -O2 -fopenmp -Wall -Wextra -Werror -std=c11 bench.c cg.o -o bench -lm
+
+[gate] unit test at one worker and at several, then benchmark
+OMP_NUM_THREADS=1 ./test_cg
+Checksum: 311942.8986866853
+Expected: 311942.8986866846
+Error:    6.9849193096e-10
+PASS
+OMP_NUM_THREADS=$(nproc) ./test_cg
+Checksum: 311942.8986866826
+Expected: 311942.8986866846
+Error:    2.0372681320e-09
+PASS
+./bench 1024 > bench.csv
+SPEEDUP_FLOOR=1.25 python3 check_bench.py bench.csv
+bench stats OK (best speedup 5.23)
+
+GATE PASS (none) /work/unmasked/langgraph/cg/openmp/claude-sonnet-4.5/langgraph

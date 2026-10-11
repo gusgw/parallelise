@@ -1,0 +1,12 @@
+{
+  "sha256": {
+    "Makefile": "e735b2fb303847fcaf5b7db16d4d4af6f79553b68724b825fa1ee512d2dd96bf",
+    "bench.c": "ac77d0e45a807613c80a4bf7fa2b4650a42a65cc1fd963cb4cd6e93df52832b4",
+    "bench_sweep.sh": "524b4df029096c804c076908b8cdad4eebaf72a67a4efc437c2d32aa6ea200cd",
+    "check_bench.py": "2e488b594b8dd55323b83f750d029daa45871f9ddfa83d3b757f6cec37079e2b",
+    "check_bench_cuda.py": "16a7683c27926d6f01d6a5adaec444e7f650a466a8a0ba877ad2b9fcd6996f7b",
+    "kernel_a.h": "d82a4f343afa9c28e28721e961fde4c1a371d47ad27116d6393c568db36e0c08",
+    "reference.h": "16936d39529fe5d89817793465914c16115e7efcbd313cb5df68d0719cc8a86b",
+    "testing.h": "1bba09523f90588f42aad90de8954cbdea6efa6c6bcbe44d9080e70d79f98f6d"
+  }
+}

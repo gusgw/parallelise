@@ -1,0 +1,11 @@
+[gate] build with warnings as errors
+mpicc -O2 -Wall -Wextra -Werror -std=c11 -c scan.c -o scan.o
+mpicc -O2 -Wall -Wextra -Werror -std=c11 test_scan.c scan.o -o test_scan -lm
+mpicc -O2 -Wall -Wextra -Werror -std=c11 bench.c scan.o -o bench -lm
+
+[gate] unit test at one worker and at several, then benchmark
+mpirun --oversubscribe -np 1 ./test_scan
+Error: checksum mismatch
+make: *** [Makefile:23: check] Error 1
+
+GATE FAIL (test-one-worker) /work/unmasked/basic/scan/mpi/llama-3.3-70b/basic

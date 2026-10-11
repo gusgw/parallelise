@@ -1,0 +1,11 @@
+[gate] build with warnings as errors
+mpicc -O2 -Wall -Wextra -Werror -std=c11 -c jacobi.c -o jacobi.o
+mpicc -O2 -Wall -Wextra -Werror -std=c11 test_jacobi.c jacobi.o -o test_jacobi -lm
+mpicc -O2 -Wall -Wextra -Werror -std=c11 bench.c jacobi.o -o bench -lm
+
+[gate] unit test at one worker and at several, then benchmark
+mpirun --oversubscribe -np 1 ./test_jacobi
+Checksum mismatch: expected 1016.140640, got 14674.548150
+make: *** [Makefile:22: check] Error 1
+
+GATE FAIL (test-one-worker) /work/unmasked/langgraph/jacobi/mpi/llama-3.3-70b/langgraph

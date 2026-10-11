@@ -1,0 +1,23 @@
+[gate] build with warnings as errors
+mpicc -O2 -Wall -Wextra -Werror -std=c11 -c jacobi.c -o jacobi.o
+mpicc -O2 -Wall -Wextra -Werror -std=c11 test_jacobi.c jacobi.o -o test_jacobi -lm
+mpicc -O2 -Wall -Wextra -Werror -std=c11 bench.c jacobi.o -o bench -lm
+
+[gate] unit test at one worker and at several, then benchmark
+mpirun --oversubscribe -np 1 ./test_jacobi
+checksum = 1016.1406399254510688
+expected = 1016.1406399254716462
+error    = 0.0000000000205773
+tol      = 0.0010000000000000
+PASS: error within tolerance
+mpirun --oversubscribe -np 4 ./test_jacobi
+checksum = 1016.1406399254510688
+expected = 1016.1406399254716462
+error    = 0.0000000000205773
+tol      = 0.0010000000000000
+PASS: error within tolerance
+bash bench_sweep.sh 1024 > bench.csv
+SPEEDUP_FLOOR=1.25 python3 check_bench.py bench.csv
+bench stats OK (best speedup 3.47)
+
+GATE PASS (none) /work/unmasked/pydantic/jacobi/mpi/kimi-k2.5/pydantic

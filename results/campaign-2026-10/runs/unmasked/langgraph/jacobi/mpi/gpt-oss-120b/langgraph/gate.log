@@ -1,0 +1,24 @@
+[gate] build with warnings as errors
+mpicc -O2 -Wall -Wextra -Werror -std=c11 -c jacobi.c -o jacobi.o
+mpicc -O2 -Wall -Wextra -Werror -std=c11 test_jacobi.c jacobi.o -o test_jacobi -lm
+mpicc -O2 -Wall -Wextra -Werror -std=c11 bench.c jacobi.o -o bench -lm
+
+[gate] unit test at one worker and at several, then benchmark
+mpirun --oversubscribe -np 1 ./test_jacobi
+PASS
+1 checks, 0 failed
+mpirun --oversubscribe -np 4 ./test_jacobi
+FAIL: Jacobi checksum: got 1015.64933984 want 1016.14063993 (tol 0.001) (test_jacobi.c:37)
+0 checks, 0 failed
+1 checks, 1 failed
+0 checks, 0 failed
+--------------------------------------------------------------------------
+prterun detected that one or more processes exited with non-zero status,
+thus causing the job to be terminated. The first process to do so was:
+
+   Process name: [prterun-1f0ebfbb4a9d-1441@1,0]
+   Exit code:    1
+--------------------------------------------------------------------------
+make: *** [Makefile:23: check] Error 1
+
+GATE FAIL (test-many-workers) /work/unmasked/langgraph/jacobi/mpi/gpt-oss-120b/langgraph

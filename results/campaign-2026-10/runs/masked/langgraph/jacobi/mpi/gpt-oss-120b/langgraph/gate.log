@@ -1,0 +1,19 @@
+[gate] build with warnings as errors
+mpicc -O2 -Wall -Wextra -Werror -std=c11 -c kernel_b.c -o kernel_b.o
+mpicc -O2 -Wall -Wextra -Werror -std=c11 test_kernel_b.c kernel_b.o -o test_kernel_b -lm
+mpicc -O2 -Wall -Wextra -Werror -std=c11 bench.c kernel_b.o -o bench -lm
+
+[gate] unit test at one worker and at several, then benchmark
+mpirun --oversubscribe -np 1 ./test_kernel_b
+1 checks, 0 failed
+mpirun --oversubscribe -np 4 ./test_kernel_b
+0 checks, 0 failed
+0 checks, 0 failed
+1 checks, 0 failed
+0 checks, 0 failed
+bash bench_sweep.sh 1024 > bench.csv
+SPEEDUP_FLOOR=1.25 python3 check_bench.py bench.csv
+BENCH CHECK FAIL: no real parallel speedup (best 1.00x is below 1.25x): the kernel is probably not decomposed across ranks (serial work repeated on every worker)
+make: *** [Makefile:23: check] Error 1
+
+GATE FAIL (benchmark) /work/masked/langgraph/jacobi/mpi/gpt-oss-120b/langgraph

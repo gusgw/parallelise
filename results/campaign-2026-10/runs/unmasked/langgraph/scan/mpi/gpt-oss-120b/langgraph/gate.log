@@ -1,0 +1,18 @@
+[gate] build with warnings as errors
+mpicc -O2 -Wall -Wextra -Werror -std=c11 -c scan.c -o scan.o
+mpicc -O2 -Wall -Wextra -Werror -std=c11 test_scan.c scan.o -o test_scan -lm
+mpicc -O2 -Wall -Wextra -Werror -std=c11 bench.c scan.o -o bench -lm
+
+[gate] unit test at one worker and at several, then benchmark
+mpirun --oversubscribe -np 1 ./test_scan
+1 checks, 0 failed
+mpirun --oversubscribe -np 4 ./test_scan
+1 checks, 0 failed
+0 checks, 0 failed
+0 checks, 0 failed
+0 checks, 0 failed
+bash bench_sweep.sh 134217728 > bench.csv
+SPEEDUP_FLOOR=1.25 python3 check_bench.py bench.csv
+bench stats OK (best speedup 2.40)
+
+GATE PASS (none) /work/unmasked/langgraph/scan/mpi/gpt-oss-120b/langgraph

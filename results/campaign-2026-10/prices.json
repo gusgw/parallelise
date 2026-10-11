@@ -1,0 +1,9 @@
+{
+  "source": "List prices in US dollars per million tokens for Amazon Bedrock, as the LiteLLM gateway reported them in October 2026. Copied from the gateway's price table; not checked against the provider's price page.",
+  "usd_per_million_tokens": {
+    "claude-sonnet-4.5": {"input": 3.00, "output": 15.00},
+    "kimi-k2.5": {"input": 0.60, "output": 3.03},
+    "gpt-oss-120b": {"input": 0.15, "output": 0.60},
+    "llama-3.3-70b": {"input": 0.72, "output": 0.72}
+  }
+}

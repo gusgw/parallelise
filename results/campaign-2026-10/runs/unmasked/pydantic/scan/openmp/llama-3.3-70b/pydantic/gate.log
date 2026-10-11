@@ -1,0 +1,12 @@
+[gate] build with warnings as errors
+cc -O2 -fopenmp -Wall -Wextra -Werror -std=c11 -c scan.c -o scan.o
+scan.c: In function ‘scan’:
+scan.c:16:17: error: reduction variable ‘sum’ is private in outer context
+   16 |         #pragma omp for reduction(+:sum) schedule(static)
+      |                 ^~~
+scan.c:35:17: error: reduction variable ‘sum’ is private in outer context
+   35 |         #pragma omp for reduction(+:sum) schedule(static)
+      |                 ^~~
+make: *** [Makefile:10: scan.o] Error 1
+
+GATE FAIL (build) /work/unmasked/pydantic/scan/openmp/llama-3.3-70b/pydantic

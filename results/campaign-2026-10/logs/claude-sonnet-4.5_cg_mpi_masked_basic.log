@@ -1,0 +1,2 @@
+2026-10-11 12:04:41,521 WARNING parallelise.model: attempt 1 of 3: could not reach the model gateway (Server disconnected without sending a response.)
+PASS: cg on mpi with basic and claude-sonnet-4.5 (failure stage: none). Record added to /results/runs.jsonl.

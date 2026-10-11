@@ -1,0 +1,3 @@
+[gate] trusted files do not match the digests written at assembly:
+[gate]   Makefile has been changed
+GATE FAIL (tampered) /work/masked/basic/scan/mpi/kimi-k2.5/basic

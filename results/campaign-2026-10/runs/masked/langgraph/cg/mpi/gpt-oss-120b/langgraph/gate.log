@@ -1,0 +1,8 @@
+[gate] build with warnings as errors
+mpicc -O2 -Wall -Wextra -Werror -std=c11 -c kernel_d.c -o kernel_d.o
+kernel_d.c:1:9: error: expected identifier or ‘(’ before ‘if’
+    1 |         if (local_rows > 0) {
+      |         ^~
+make: *** [Makefile:11: kernel_d.o] Error 1
+
+GATE FAIL (build) /work/masked/langgraph/cg/mpi/gpt-oss-120b/langgraph

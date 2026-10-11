@@ -1,0 +1,1 @@
+FAIL: cg on openmp with langgraph and gpt-oss-120b (failure stage: benchmark). Record added to /results/runs.jsonl.

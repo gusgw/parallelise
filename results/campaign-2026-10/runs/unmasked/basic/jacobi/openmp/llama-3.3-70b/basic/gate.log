@@ -1,0 +1,12 @@
+[gate] build with warnings as errors
+cc -O2 -fopenmp -Wall -Wextra -Werror -std=c11 -c jacobi.c -o jacobi.o
+cc -O2 -fopenmp -Wall -Wextra -Werror -std=c11 test_jacobi.c jacobi.o -o test_jacobi -lm
+cc -O2 -fopenmp -Wall -Wextra -Werror -std=c11 bench.c jacobi.o -o bench -lm
+
+[gate] unit test at one worker and at several, then benchmark
+OMP_NUM_THREADS=1 ./test_jacobi
+Checksum: 2080768.000000
+Test failed!
+make: *** [Makefile:23: check] Error 1
+
+GATE FAIL (test-one-worker) /work/unmasked/basic/jacobi/openmp/llama-3.3-70b/basic

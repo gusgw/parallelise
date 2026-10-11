@@ -1,0 +1,28 @@
+[gate] build with warnings as errors
+mpicc -O2 -Wall -Wextra -Werror -std=c11 -c scan.c -o scan.o
+mpicc -O2 -Wall -Wextra -Werror -std=c11 test_scan.c scan.o -o test_scan -lm
+mpicc -O2 -Wall -Wextra -Werror -std=c11 bench.c scan.o -o bench -lm
+
+[gate] unit test at one worker and at several, then benchmark
+mpirun --oversubscribe -np 1 ./test_scan
+Checksum: 166666666666499968.000000
+Test failed!
+mpirun --oversubscribe -np 4 ./test_scan
+[7d4d09964665:415  :0:415] Caught signal 11 (Segmentation fault: address not mapped to object at address (nil))
+==== backtrace (tid:    415) ====
+ 0  /lib/x86_64-linux-gnu/libucs.so.0(ucs_handle_error+0x2bc) [0x7f7ed9cde64c]
+ 1  /lib/x86_64-linux-gnu/libucs.so.0(+0x3182f) [0x7f7ed9cde82f]
+ 2  /lib/x86_64-linux-gnu/libucs.so.0(+0x319fa) [0x7f7ed9cde9fa]
+ 3  /lib/x86_64-linux-gnu/libc.so.6(+0x3fd70) [0x7f7eda126d70]
+ 4  ./test_scan(+0x1180) [0x557b8dbb2180]
+ 5  /lib/x86_64-linux-gnu/libc.so.6(+0x29ca8) [0x7f7eda110ca8]
+ 6  /lib/x86_64-linux-gnu/libc.so.6(__libc_start_main+0x85) [0x7f7eda110d65]
+ 7  ./test_scan(+0x1231) [0x557b8dbb2231]
+=================================
+--------------------------------------------------------------------------
+prterun noticed that process rank 0 with PID 415 on node 7d4d09964665 exited on
+signal 11 (Segmentation fault).
+--------------------------------------------------------------------------
+make: *** [Makefile:24: check] Error 139
+
+GATE FAIL (test-many-workers) /work/unmasked/pydantic/scan/mpi/llama-3.3-70b/pydantic

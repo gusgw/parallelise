@@ -1,0 +1,4 @@
+/usr/local/lib/python3.12/site-packages/parallelise/agents/pydantic_agent.py:85: PydanticAIDeprecationWarning: `httpx.AsyncClient` support for OpenAI-compatible providers is deprecated and will be removed in v3; use `httpx2.AsyncClient` instead.
+  provider = parts["OpenAIProvider"](
+2026-10-11 15:35:28,910 WARNING parallelise.agents.pydantic: pydantic agent stopped: UsageLimitExceeded: The next request would exceed the request_limit of 80. Consider raising the limit, or see the docs on usage limits for budget-aware patterns: https://pydantic.dev/docs/ai/core-concepts/agent/#usage-limits
+FAIL: jacobi on mpi with pydantic and gpt-oss-120b (failure stage: benchmark). Record added to /results/runs.jsonl.

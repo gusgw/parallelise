@@ -1,0 +1,1 @@
+FAIL: scan on openmp with langgraph and claude-sonnet-4.5 (failure stage: benchmark). Record added to /results/runs.jsonl.

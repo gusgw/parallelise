@@ -1,0 +1,70 @@
+2026-10-11 20:14:23,097 ERROR parallelise.cli: the agent failed
+Traceback (most recent call last):
+  File "/usr/local/lib/python3.12/site-packages/langchain_openai/chat_models/base.py", line 1979, in _generate
+    raw_response = self.client.with_raw_response.create(**payload)
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.12/site-packages/openai/_legacy_response.py", line 369, in wrapped
+    return cast(LegacyAPIResponse[R], func(*args, **kwargs))
+                                      ^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.12/site-packages/openai/_utils/_utils.py", line 298, in wrapper
+    return func(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.12/site-packages/openai/resources/chat/completions/completions.py", line 1318, in create
+    return self._post(
+           ^^^^^^^^^^^
+  File "/usr/local/lib/python3.12/site-packages/openai/_base_client.py", line 1440, in post
+    return cast(ResponseT, self.request(cast_to, opts, stream=stream, stream_cls=stream_cls))
+                           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.12/site-packages/openai/_base_client.py", line 1213, in request
+    raise self._make_status_error_from_response(err.response) from None
+openai.RateLimitError: Error code: 429 - {'error': {'message': 'litellm.RateLimitError: BedrockException - {"message":"Too many tokens, please wait before trying again."}. Received Model Group=llama-3.3-70b\nAvailable Model Group Fallbacks=None', 'type': 'throttling_error', 'param': None, 'code': '429'}}
+
+The above exception was the direct cause of the following exception:
+
+Traceback (most recent call last):
+  File "/usr/local/lib/python3.12/site-packages/parallelise/cli.py", line 279, in cmd_run
+    result = agent.run(work_dir, task, settings, client, step_budget=args.step_budget)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.12/site-packages/parallelise/agents/langgraph_agent.py", line 143, in run
+    for state in agent.stream(  # noqa: B007 - the last state is used below
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.12/site-packages/langgraph/pregel/main.py", line 3034, in stream
+    for _ in runner.tick(
+             ^^^^^^^^^^^^
+  File "/usr/local/lib/python3.12/site-packages/langgraph/pregel/_runner.py", line 208, in tick
+    run_with_retry(
+  File "/usr/local/lib/python3.12/site-packages/langgraph/pregel/_retry.py", line 617, in run_with_retry
+    return task.proc.invoke(task.input, config)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.12/site-packages/langgraph/_internal/_runnable.py", line 707, in invoke
+    input = context.run(step.invoke, input, config, **kwargs)
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.12/site-packages/langgraph/_internal/_runnable.py", line 447, in invoke
+    ret = self.func(*args, **kwargs)
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.12/site-packages/langchain/agents/factory.py", line 1536, in model_node
+    model_response = _execute_model_sync(request)
+                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.12/site-packages/langchain/agents/factory.py", line 1506, in _execute_model_sync
+    output = model_.invoke(messages)
+             ^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.12/site-packages/langchain_core/runnables/base.py", line 6018, in invoke
+    return self.bound.invoke(
+           ^^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.12/site-packages/langchain_core/language_models/chat_models.py", line 488, in invoke
+    self.generate_prompt(
+  File "/usr/local/lib/python3.12/site-packages/langchain_core/language_models/chat_models.py", line 1877, in generate_prompt
+    return self.generate(prompt_messages, stop=stop, callbacks=callbacks, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.12/site-packages/langchain_core/language_models/chat_models.py", line 1684, in generate
+    self._generate_with_cache(
+  File "/usr/local/lib/python3.12/site-packages/langchain_core/language_models/chat_models.py", line 2022, in _generate_with_cache
+    result = self._generate(
+             ^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.12/site-packages/langchain_openai/chat_models/base.py", line 1984, in _generate
+    _handle_openai_api_error(e)
+  File "/usr/local/lib/python3.12/site-packages/langchain_openai/chat_models/base.py", line 736, in _handle_openai_api_error
+    raise OpenAIRateLimitError(
+langchain_openai.chat_models.base.OpenAIRateLimitError: Error code: 429 - {'error': {'message': 'litellm.RateLimitError: BedrockException - {"message":"Too many tokens, please wait before trying again."}. Received Model Group=llama-3.3-70b\nAvailable Model Group Fallbacks=None', 'type': 'throttling_error', 'param': None, 'code': '429'}}
+During task with name 'model' and id '8cf63d31-7071-d0a9-5e77-187f0288c404'
+FAIL: cg on openmp with langgraph and llama-3.3-70b (failure stage: agent-error). Record added to /results/runs.jsonl.

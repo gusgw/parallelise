@@ -1,0 +1,28 @@
+[gate] build with warnings as errors
+mpicc -O2 -Wall -Wextra -Werror -std=c11 -c kernel_c.c -o kernel_c.o
+mpicc -O2 -Wall -Wextra -Werror -std=c11 test_kernel_c.c kernel_c.o -o test_kernel_c -lm
+mpicc -O2 -Wall -Wextra -Werror -std=c11 bench.c kernel_c.o -o bench -lm
+
+[gate] unit test at one worker and at several, then benchmark
+mpirun --oversubscribe -np 1 ./test_kernel_c
+test_kernel_c: test_kernel_c.c:25: main: Assertion `fabs(checksum - REF_CHECKSUM) < REF_TOL * 1000000000000000000' failed.
+[4dfed7c7a0f2:00718] *** Process received signal ***
+[4dfed7c7a0f2:00718] Signal: Aborted (6)
+[4dfed7c7a0f2:00718] Signal code:  (-6)
+[4dfed7c7a0f2:00718] [ 0] /lib/x86_64-linux-gnu/libc.so.6(+0x3fd70) [0x7ff9f27b7d70]
+[4dfed7c7a0f2:00718] [ 1] /lib/x86_64-linux-gnu/libc.so.6(+0x9469c) [0x7ff9f280c69c]
+[4dfed7c7a0f2:00718] [ 2] /lib/x86_64-linux-gnu/libc.so.6(gsignal+0x12) [0x7ff9f27b7c42]
+[4dfed7c7a0f2:00718] [ 3] /lib/x86_64-linux-gnu/libc.so.6(abort+0x22) [0x7ff9f27a04ac]
+[4dfed7c7a0f2:00718] [ 4] /lib/x86_64-linux-gnu/libc.so.6(__assert_perror_fail+0x0) [0x7ff9f27a0420]
+[4dfed7c7a0f2:00718] [ 5] ./test_kernel_c(+0x10df) [0x55fb9c7850df]
+[4dfed7c7a0f2:00718] [ 6] /lib/x86_64-linux-gnu/libc.so.6(+0x29ca8) [0x7ff9f27a1ca8]
+[4dfed7c7a0f2:00718] [ 7] /lib/x86_64-linux-gnu/libc.so.6(__libc_start_main+0x85) [0x7ff9f27a1d65]
+[4dfed7c7a0f2:00718] [ 8] ./test_kernel_c(+0x11d1) [0x55fb9c7851d1]
+[4dfed7c7a0f2:00718] *** End of error message ***
+--------------------------------------------------------------------------
+prterun noticed that process rank 0 with PID 718 on node 4dfed7c7a0f2 exited on
+signal 6 (Aborted).
+--------------------------------------------------------------------------
+make: *** [Makefile:20: check] Error 134
+
+GATE FAIL (test-one-worker) /work/masked/basic/scan/mpi/llama-3.3-70b/basic

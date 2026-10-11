@@ -1,0 +1,28 @@
+[gate] build with warnings as errors
+mpicc -O2 -Wall -Wextra -Werror -std=c11 -c kernel_d.c -o kernel_d.o
+mpicc -O2 -Wall -Wextra -Werror -std=c11 test_kernel_d.c kernel_d.o -o test_kernel_d -lm
+mpicc -O2 -Wall -Wextra -Werror -std=c11 bench.c kernel_d.o -o bench -lm
+
+[gate] unit test at one worker and at several, then benchmark
+mpirun --oversubscribe -np 1 ./test_kernel_d
+test_kernel_d: test_kernel_d.c:25: main: Assertion `fabs(checksum - REF_CHECKSUM) < REF_TOL' failed.
+[d168dd017e1b:00104] *** Process received signal ***
+[d168dd017e1b:00104] Signal: Aborted (6)
+[d168dd017e1b:00104] Signal code:  (-6)
+[d168dd017e1b:00104] [ 0] /lib/x86_64-linux-gnu/libc.so.6(+0x3fd70) [0x7fb67d8dfd70]
+[d168dd017e1b:00104] [ 1] /lib/x86_64-linux-gnu/libc.so.6(+0x9469c) [0x7fb67d93469c]
+[d168dd017e1b:00104] [ 2] /lib/x86_64-linux-gnu/libc.so.6(gsignal+0x12) [0x7fb67d8dfc42]
+[d168dd017e1b:00104] [ 3] /lib/x86_64-linux-gnu/libc.so.6(abort+0x22) [0x7fb67d8c84ac]
+[d168dd017e1b:00104] [ 4] /lib/x86_64-linux-gnu/libc.so.6(__assert_perror_fail+0x0) [0x7fb67d8c8420]
+[d168dd017e1b:00104] [ 5] ./test_kernel_d(+0x111f) [0x55f9d628811f]
+[d168dd017e1b:00104] [ 6] /lib/x86_64-linux-gnu/libc.so.6(+0x29ca8) [0x7fb67d8c9ca8]
+[d168dd017e1b:00104] [ 7] /lib/x86_64-linux-gnu/libc.so.6(__libc_start_main+0x85) [0x7fb67d8c9d65]
+[d168dd017e1b:00104] [ 8] ./test_kernel_d(+0x1261) [0x55f9d6288261]
+[d168dd017e1b:00104] *** End of error message ***
+--------------------------------------------------------------------------
+prterun noticed that process rank 0 with PID 104 on node d168dd017e1b exited on
+signal 6 (Aborted).
+--------------------------------------------------------------------------
+make: *** [Makefile:20: check] Error 134
+
+GATE FAIL (test-one-worker) /work/masked/pydantic/cg/mpi/llama-3.3-70b/pydantic

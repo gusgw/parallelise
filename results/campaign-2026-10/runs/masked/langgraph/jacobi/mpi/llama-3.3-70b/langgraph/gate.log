@@ -1,0 +1,28 @@
+[gate] build with warnings as errors
+mpicc -O2 -Wall -Wextra -Werror -std=c11 -c kernel_b.c -o kernel_b.o
+mpicc -O2 -Wall -Wextra -Werror -std=c11 test_kernel_b.c kernel_b.o -o test_kernel_b -lm
+mpicc -O2 -Wall -Wextra -Werror -std=c11 bench.c kernel_b.o -o bench -lm
+
+[gate] unit test at one worker and at several, then benchmark
+mpirun --oversubscribe -np 1 ./test_kernel_b
+test_kernel_b: test_kernel_b.c:24: main: Assertion `fabs(checksum - REF_CHECKSUM) < REF_TOL' failed.
+[129905b7ed0d:00996] *** Process received signal ***
+[129905b7ed0d:00996] Signal: Aborted (6)
+[129905b7ed0d:00996] Signal code:  (-6)
+[129905b7ed0d:00996] [ 0] /lib/x86_64-linux-gnu/libc.so.6(+0x3fd70) [0x7fb77e507d70]
+[129905b7ed0d:00996] [ 1] /lib/x86_64-linux-gnu/libc.so.6(+0x9469c) [0x7fb77e55c69c]
+[129905b7ed0d:00996] [ 2] /lib/x86_64-linux-gnu/libc.so.6(gsignal+0x12) [0x7fb77e507c42]
+[129905b7ed0d:00996] [ 3] /lib/x86_64-linux-gnu/libc.so.6(abort+0x22) [0x7fb77e4f04ac]
+[129905b7ed0d:00996] [ 4] /lib/x86_64-linux-gnu/libc.so.6(__assert_perror_fail+0x0) [0x7fb77e4f0420]
+[129905b7ed0d:00996] [ 5] ./test_kernel_b(+0x111f) [0x5583fd85111f]
+[129905b7ed0d:00996] [ 6] /lib/x86_64-linux-gnu/libc.so.6(+0x29ca8) [0x7fb77e4f1ca8]
+[129905b7ed0d:00996] [ 7] /lib/x86_64-linux-gnu/libc.so.6(__libc_start_main+0x85) [0x7fb77e4f1d65]
+[129905b7ed0d:00996] [ 8] ./test_kernel_b(+0x12a1) [0x5583fd8512a1]
+[129905b7ed0d:00996] *** End of error message ***
+--------------------------------------------------------------------------
+prterun noticed that process rank 0 with PID 996 on node 129905b7ed0d exited on
+signal 6 (Aborted).
+--------------------------------------------------------------------------
+make: *** [Makefile:20: check] Error 134
+
+GATE FAIL (test-one-worker) /work/masked/langgraph/jacobi/mpi/llama-3.3-70b/langgraph

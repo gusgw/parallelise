@@ -1,0 +1,14 @@
+[gate] build with warnings as errors
+mpicc -O2 -Wall -Wextra -Werror -std=c11 -c cg.c -o cg.o
+mpicc -O2 -Wall -Wextra -Werror -std=c11 test_cg.c cg.o -o test_cg -lm
+mpicc -O2 -Wall -Wextra -Werror -std=c11 bench.c cg.o -o bench -lm
+
+[gate] unit test at one worker and at several, then benchmark
+mpirun --oversubscribe -np 1 ./test_cg
+Checksum: 996.470200
+mpirun --oversubscribe -np 4 ./test_cg
+Checksum: 961.880799
+bash bench_sweep.sh 1024 > bench.csv
+make: *** [Makefile:26: check] Error 15
+
+GATE FAIL (benchmark) /work/unmasked/basic/cg/mpi/llama-3.3-70b/basic

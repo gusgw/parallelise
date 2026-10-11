@@ -1,0 +1,15 @@
+[gate] build with warnings as errors
+cc -O2 -fopenmp -Wall -Wextra -Werror -std=c11 -c kernel_a.c -o kernel_a.o
+cc -O2 -fopenmp -Wall -Wextra -Werror -std=c11 test_kernel_a.c kernel_a.o -o test_kernel_a -lm
+cc -O2 -fopenmp -Wall -Wextra -Werror -std=c11 bench.c kernel_a.o -o bench -lm
+
+[gate] unit test at one worker and at several, then benchmark
+OMP_NUM_THREADS=1 ./test_kernel_a
+Test passed
+OMP_NUM_THREADS=$(nproc) ./test_kernel_a
+Test passed
+./bench 50000000 > bench.csv
+python3 check_bench.py bench.csv
+bench stats OK (best speedup 4.07)
+
+GATE PASS (none) /work/masked/basic/integrate/openmp/llama-3.3-70b/basic

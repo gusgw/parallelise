@@ -120,9 +120,14 @@ a timeout. No module reads the network except `model.py`.
   `MAX_PASSES` (8) passes, each limited to `step_budget` steps. `pydantic` stops when the
   checks pass or when the framework's request limit, set to `step_budget`, is reached.
   `docs/DESIGN.md` explains the differences.
-- `report.py` — `build_tables(records) -> str` (Markdown: pass counts by model and
-  backend, by agent design, by problem) and `build_chart(records, dest_svg)` (one
-  grouped bar chart of pass rate by model and backend, drawn with matplotlib).
+- `report.py` — `build_tables(records, masked=False, prices=None) -> str` (Markdown: pass
+  counts by model and backend, by agent design, by problem; when the records hold masked and
+  unmasked runs, masked-against-unmasked tables; when they hold request counts, a serving
+  table with cost if `prices` is given), `load_prices(path)`, `build_chart(records,
+  dest_svg)` (grouped bars of pass rate by model and backend) and
+  `build_comparison_chart(records, dest_svg)` (pass rate by model, unmasked beside masked),
+  both drawn with matplotlib. `parallelise report` takes `--store`, `--prices`, `--chart` and
+  `--masked-chart`.
 - `cli.py` — `main(argv=None)` using argparse with subcommands: `health`, `oracle
   <notebook>`, `assemble <problem> <backend> <dest>`, `run <problem> <backend>
   --agent --model`, `grade <work_dir> --backend`, `mask <problem> <alias> <dest>`,

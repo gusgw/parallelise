@@ -1,0 +1,1 @@
+FAIL: scan on openmp with langgraph and llama-3.3-70b (failure stage: tampered). Record added to /results/runs.jsonl.

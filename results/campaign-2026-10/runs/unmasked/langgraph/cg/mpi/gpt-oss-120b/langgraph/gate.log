@@ -1,0 +1,8 @@
+[gate] build with warnings as errors
+mpicc -O2 -Wall -Wextra -Werror -std=c11 -c cg.c -o cg.o
+cg.c:2:9: error: expected identifier or ‘(’ before ‘if’
+    2 |         if (local_rows > 0) {
+      |         ^~
+make: *** [Makefile:11: cg.o] Error 1
+
+GATE FAIL (build) /work/unmasked/langgraph/cg/mpi/gpt-oss-120b/langgraph

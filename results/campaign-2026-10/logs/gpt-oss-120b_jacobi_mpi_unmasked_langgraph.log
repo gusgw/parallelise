@@ -1,0 +1,1 @@
+FAIL: jacobi on mpi with langgraph and gpt-oss-120b (failure stage: test-many-workers). Record added to /results/runs.jsonl.

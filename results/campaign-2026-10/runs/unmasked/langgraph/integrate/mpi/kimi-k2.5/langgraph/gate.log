@@ -1,0 +1,21 @@
+[gate] build with warnings as errors
+mpicc -O2 -Wall -Wextra -Werror -std=c11 -c integrate.c -o integrate.o
+mpicc -O2 -Wall -Wextra -Werror -std=c11 test_integrate.c integrate.o -o test_integrate -lm
+mpicc -O2 -Wall -Wextra -Werror -std=c11 bench.c integrate.o -o bench -lm
+
+[gate] unit test at one worker and at several, then benchmark
+mpirun --oversubscribe -np 1 ./test_integrate
+integrate(0, 1, 10000000) = 3.14159265358973
+expected = 3.14159265358979
+error = 6.30607e-14 (tol = 1e-06)
+PASS
+mpirun --oversubscribe -np 4 ./test_integrate
+integrate(0, 1, 10000000) = 3.14159265358967
+expected = 3.14159265358979
+error = 1.24345e-13 (tol = 1e-06)
+PASS
+bash bench_sweep.sh 50000000 > bench.csv
+python3 check_bench.py bench.csv
+bench stats OK (best speedup 5.94)
+
+GATE PASS (none) /work/unmasked/langgraph/integrate/mpi/kimi-k2.5/langgraph

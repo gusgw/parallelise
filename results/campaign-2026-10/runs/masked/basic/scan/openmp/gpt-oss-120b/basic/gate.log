@@ -1,0 +1,15 @@
+[gate] build with warnings as errors
+cc -O2 -fopenmp -Wall -Wextra -Werror -std=c11 -c kernel_c.c -o kernel_c.o
+cc -O2 -fopenmp -Wall -Wextra -Werror -std=c11 test_kernel_c.c kernel_c.o -o test_kernel_c -lm
+cc -O2 -fopenmp -Wall -Wextra -Werror -std=c11 bench.c kernel_c.o -o bench -lm
+
+[gate] unit test at one worker and at several, then benchmark
+OMP_NUM_THREADS=1 ./test_kernel_c
+PASS: checksum = 3178464.28882271, diff = 0.000e+00
+OMP_NUM_THREADS=$(nproc) ./test_kernel_c
+PASS: checksum = 3178464.28881898, diff = 3.733e-06
+./bench 134217728 > bench.csv
+SPEEDUP_FLOOR=1.25 python3 check_bench.py bench.csv
+bench stats OK (best speedup 2.34)
+
+GATE PASS (none) /work/masked/basic/scan/openmp/gpt-oss-120b/basic

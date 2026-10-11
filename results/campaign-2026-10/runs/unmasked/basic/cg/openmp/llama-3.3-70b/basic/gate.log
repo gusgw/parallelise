@@ -1,0 +1,12 @@
+[gate] build with warnings as errors
+cc -O2 -fopenmp -Wall -Wextra -Werror -std=c11 -c cg.c -o cg.o
+cc -O2 -fopenmp -Wall -Wextra -Werror -std=c11 test_cg.c cg.o -o test_cg -lm
+cc -O2 -fopenmp -Wall -Wextra -Werror -std=c11 bench.c cg.o -o bench -lm
+
+[gate] unit test at one worker and at several, then benchmark
+OMP_NUM_THREADS=1 ./test_cg
+Checksum: 188776816801499839095562348905103360.000000
+Test failed
+make: *** [Makefile:24: check] Error 1
+
+GATE FAIL (test-one-worker) /work/unmasked/basic/cg/openmp/llama-3.3-70b/basic

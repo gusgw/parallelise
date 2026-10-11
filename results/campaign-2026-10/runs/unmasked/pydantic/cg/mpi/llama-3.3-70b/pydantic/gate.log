@@ -1,0 +1,11 @@
+[gate] build with warnings as errors
+mpicc -O2 -Wall -Wextra -Werror -std=c11 -c cg.c -o cg.o
+mpicc -O2 -Wall -Wextra -Werror -std=c11 test_cg.c cg.o -o test_cg -lm
+mpicc -O2 -Wall -Wextra -Werror -std=c11 bench.c cg.o -o bench -lm
+
+[gate] unit test at one worker and at several, then benchmark
+mpirun --oversubscribe -np 1 ./test_cg
+Checksum mismatch: expected 311942.898687, got 996.470200
+make: *** [Makefile:24: check] Error 1
+
+GATE FAIL (test-one-worker) /work/unmasked/pydantic/cg/mpi/llama-3.3-70b/pydantic

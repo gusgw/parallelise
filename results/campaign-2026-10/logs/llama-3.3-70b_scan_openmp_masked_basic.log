@@ -1,0 +1,1 @@
+FAIL: scan on openmp with basic and llama-3.3-70b (failure stage: test-one-worker). Record added to /results/runs.jsonl.

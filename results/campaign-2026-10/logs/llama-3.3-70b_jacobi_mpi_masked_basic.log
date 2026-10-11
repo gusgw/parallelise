@@ -1,0 +1,12 @@
+2026-10-11 20:00:16,416 ERROR parallelise.cli: the agent failed
+Traceback (most recent call last):
+  File "/usr/local/lib/python3.12/site-packages/parallelise/cli.py", line 279, in cmd_run
+    result = agent.run(work_dir, task, settings, client, step_budget=args.step_budget)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.12/site-packages/parallelise/agents/basic.py", line 47, in run
+    reply = client.chat(messages, tools.TOOL_SCHEMAS)
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.12/site-packages/parallelise/model.py", line 121, in chat
+    raise ModelError(
+parallelise.errors.ModelError: The endpoint rejected the request with HTTP 429: '{"error":{"message":"litellm.RateLimitError: BedrockException - {\\"message\\":\\"Too many tokens, please wait before trying again.\\"}. Received Model Group=llama-3.3-70b\\nAvailable Model Group Fallbacks=None","type":"throttling_error","param":null,"code":"429"}}'. Check the model name ('llama-3.3-70b') and the API key.
+FAIL: jacobi on mpi with basic and llama-3.3-70b (failure stage: agent-error). Record added to /results/runs.jsonl.

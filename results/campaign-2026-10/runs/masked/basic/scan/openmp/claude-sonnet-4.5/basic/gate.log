@@ -1,0 +1,16 @@
+[gate] build with warnings as errors
+cc -O2 -fopenmp -Wall -Wextra -Werror -std=c11 -c kernel_c.c -o kernel_c.o
+cc -O2 -fopenmp -Wall -Wextra -Werror -std=c11 test_kernel_c.c kernel_c.o -o test_kernel_c -lm
+cc -O2 -fopenmp -Wall -Wextra -Werror -std=c11 bench.c kernel_c.o -o bench -lm
+
+[gate] unit test at one worker and at several, then benchmark
+OMP_NUM_THREADS=1 ./test_kernel_c
+1 checks, 0 failed
+OMP_NUM_THREADS=$(nproc) ./test_kernel_c
+1 checks, 0 failed
+./bench 134217728 > bench.csv
+SPEEDUP_FLOOR=1.25 python3 check_bench.py bench.csv
+BENCH CHECK FAIL: no real parallel speedup (best 1.17x is below 1.25x): the kernel is probably not decomposed across threads (serial work repeated on every worker)
+make: *** [Makefile:22: check] Error 1
+
+GATE FAIL (benchmark) /work/masked/basic/scan/openmp/claude-sonnet-4.5/basic

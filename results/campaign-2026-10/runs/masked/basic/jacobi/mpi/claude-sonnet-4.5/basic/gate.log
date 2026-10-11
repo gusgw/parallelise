@@ -1,0 +1,15 @@
+[gate] build with warnings as errors
+mpicc -O2 -Wall -Wextra -Werror -std=c11 -c kernel_b.c -o kernel_b.o
+mpicc -O2 -Wall -Wextra -Werror -std=c11 test_kernel_b.c kernel_b.o -o test_kernel_b -lm
+mpicc -O2 -Wall -Wextra -Werror -std=c11 bench.c kernel_b.o -o bench -lm
+
+[gate] unit test at one worker and at several, then benchmark
+mpirun --oversubscribe -np 1 ./test_kernel_b
+PASS: checksum=1016.1406399255 (expected 1016.1406399255, error 0.0000000000)
+mpirun --oversubscribe -np 4 ./test_kernel_b
+PASS: checksum=1016.1406399255 (expected 1016.1406399255, error 0.0000000000)
+bash bench_sweep.sh 1024 > bench.csv
+SPEEDUP_FLOOR=1.25 python3 check_bench.py bench.csv
+bench stats OK (best speedup 3.23)
+
+GATE PASS (none) /work/masked/basic/jacobi/mpi/claude-sonnet-4.5/basic

@@ -1,0 +1,15 @@
+[gate] build with warnings as errors
+cc -O2 -fopenmp -Wall -Wextra -Werror -std=c11 -c integrate.c -o integrate.o
+cc -O2 -fopenmp -Wall -Wextra -Werror -std=c11 test_integrate.c integrate.o -o test_integrate -lm
+cc -O2 -fopenmp -Wall -Wextra -Werror -std=c11 bench.c integrate.o -o bench -lm
+
+[gate] unit test at one worker and at several, then benchmark
+OMP_NUM_THREADS=1 ./test_integrate
+1 checks, 0 failed
+OMP_NUM_THREADS=$(nproc) ./test_integrate
+1 checks, 0 failed
+./bench 50000000 > bench.csv
+python3 check_bench.py bench.csv
+bench stats OK (best speedup 4.01)
+
+GATE PASS (none) /work/unmasked/langgraph/integrate/openmp/kimi-k2.5/langgraph

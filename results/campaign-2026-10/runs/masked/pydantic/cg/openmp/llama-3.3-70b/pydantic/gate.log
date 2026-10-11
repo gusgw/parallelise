@@ -1,0 +1,17 @@
+[gate] build with warnings as errors
+cc -O2 -fopenmp -Wall -Wextra -Werror -std=c11 -c kernel_d.c -o kernel_d.o
+cc -O2 -fopenmp -Wall -Wextra -Werror -std=c11 test_kernel_d.c kernel_d.o -o test_kernel_d -lm
+cc -O2 -fopenmp -Wall -Wextra -Werror -std=c11 bench.c kernel_d.o -o bench -lm
+
+[gate] unit test at one worker and at several, then benchmark
+OMP_NUM_THREADS=1 ./test_kernel_d
+Checksum: -nan
+Test passed!
+OMP_NUM_THREADS=$(nproc) ./test_kernel_d
+Checksum: -nan
+Test passed!
+./bench 1024 > bench.csv
+SPEEDUP_FLOOR=1.25 python3 check_bench.py bench.csv
+bench stats OK (best speedup 5.59)
+
+GATE PASS (none) /work/masked/pydantic/cg/openmp/llama-3.3-70b/pydantic

@@ -1,0 +1,89 @@
+[gate] build with warnings as errors
+mpicc -O2 -Wall -Wextra -Werror -std=c11 -c kernel_b.c -o kernel_b.o
+kernel_b.c:2:19: error: ‘rank’ undeclared here (not in a function)
+    2 |         int up = (rank == 0) ? MPI_PROC_NULL : rank - 1;
+      |                   ^~~~
+kernel_b.c:2:32: error: ‘MPI_PROC_NULL’ undeclared here (not in a function)
+    2 |         int up = (rank == 0) ? MPI_PROC_NULL : rank - 1;
+      |                                ^~~~~~~~~~~~~
+kernel_b.c:3:29: error: ‘size’ undeclared here (not in a function)
+    3 |         int down = (rank == size - 1) ? MPI_PROC_NULL : rank + 1;
+      |                             ^~~~
+kernel_b.c:4:9: error: unknown type name ‘MPI_Status’
+    4 |         MPI_Status status;
+      |         ^~~~~~~~~~
+kernel_b.c:6:22: error: expected declaration specifiers or ‘...’ before ‘&’ token
+    6 |         MPI_Sendrecv(&cur[1 * n], n, MPI_DOUBLE, up, 0,
+      |                      ^
+kernel_b.c:6:35: error: unknown type name ‘n’
+    6 |         MPI_Sendrecv(&cur[1 * n], n, MPI_DOUBLE, up, 0,
+      |                                   ^
+kernel_b.c:6:38: error: unknown type name ‘MPI_DOUBLE’
+    6 |         MPI_Sendrecv(&cur[1 * n], n, MPI_DOUBLE, up, 0,
+      |                                      ^~~~~~~~~~
+kernel_b.c:6:50: error: expected declaration specifiers or ‘...’ before ‘up’
+    6 |         MPI_Sendrecv(&cur[1 * n], n, MPI_DOUBLE, up, 0,
+      |                                                  ^~
+kernel_b.c:6:54: error: expected declaration specifiers or ‘...’ before numeric constant
+    6 |         MPI_Sendrecv(&cur[1 * n], n, MPI_DOUBLE, up, 0,
+      |                                                      ^
+kernel_b.c:7:22: error: expected declaration specifiers or ‘...’ before ‘&’ token
+    7 |                      &cur[0 * n], n, MPI_DOUBLE, up, 1,
+      |                      ^
+kernel_b.c:7:35: error: unknown type name ‘n’
+    7 |                      &cur[0 * n], n, MPI_DOUBLE, up, 1,
+      |                                   ^
+kernel_b.c:7:38: error: unknown type name ‘MPI_DOUBLE’
+    7 |                      &cur[0 * n], n, MPI_DOUBLE, up, 1,
+      |                                      ^~~~~~~~~~
+kernel_b.c:7:50: error: expected declaration specifiers or ‘...’ before ‘up’
+    7 |                      &cur[0 * n], n, MPI_DOUBLE, up, 1,
+      |                                                  ^~
+kernel_b.c:7:54: error: expected declaration specifiers or ‘...’ before numeric constant
+    7 |                      &cur[0 * n], n, MPI_DOUBLE, up, 1,
+      |                                                      ^
+kernel_b.c:8:22: error: unknown type name ‘MPI_COMM_WORLD’
+    8 |                      MPI_COMM_WORLD, &status);
+      |                      ^~~~~~~~~~~~~~
+kernel_b.c:8:38: error: expected declaration specifiers or ‘...’ before ‘&’ token
+    8 |                      MPI_COMM_WORLD, &status);
+      |                                      ^
+kernel_b.c:10:22: error: expected declaration specifiers or ‘...’ before ‘&’ token
+   10 |         MPI_Sendrecv(&cur[local_n * n], n, MPI_DOUBLE, down, 1,
+      |                      ^
+kernel_b.c:10:41: error: unknown type name ‘n’
+   10 |         MPI_Sendrecv(&cur[local_n * n], n, MPI_DOUBLE, down, 1,
+      |                                         ^
+kernel_b.c:10:44: error: unknown type name ‘MPI_DOUBLE’
+   10 |         MPI_Sendrecv(&cur[local_n * n], n, MPI_DOUBLE, down, 1,
+      |                                            ^~~~~~~~~~
+kernel_b.c:10:56: error: expected declaration specifiers or ‘...’ before ‘down’
+   10 |         MPI_Sendrecv(&cur[local_n * n], n, MPI_DOUBLE, down, 1,
+      |                                                        ^~~~
+kernel_b.c:10:62: error: expected declaration specifiers or ‘...’ before numeric constant
+   10 |         MPI_Sendrecv(&cur[local_n * n], n, MPI_DOUBLE, down, 1,
+      |                                                              ^
+kernel_b.c:11:22: error: expected declaration specifiers or ‘...’ before ‘&’ token
+   11 |                      &cur[(local_n + 1) * n], n, MPI_DOUBLE, down, 0,
+      |                      ^
+kernel_b.c:11:47: error: unknown type name ‘n’
+   11 |                      &cur[(local_n + 1) * n], n, MPI_DOUBLE, down, 0,
+      |                                               ^
+kernel_b.c:11:50: error: unknown type name ‘MPI_DOUBLE’
+   11 |                      &cur[(local_n + 1) * n], n, MPI_DOUBLE, down, 0,
+      |                                                  ^~~~~~~~~~
+kernel_b.c:11:62: error: expected declaration specifiers or ‘...’ before ‘down’
+   11 |                      &cur[(local_n + 1) * n], n, MPI_DOUBLE, down, 0,
+      |                                                              ^~~~
+kernel_b.c:11:68: error: expected declaration specifiers or ‘...’ before numeric constant
+   11 |                      &cur[(local_n + 1) * n], n, MPI_DOUBLE, down, 0,
+      |                                                                    ^
+kernel_b.c:12:22: error: unknown type name ‘MPI_COMM_WORLD’
+   12 |                      MPI_COMM_WORLD, &status);
+      |                      ^~~~~~~~~~~~~~
+kernel_b.c:12:38: error: expected declaration specifiers or ‘...’ before ‘&’ token
+   12 |                      MPI_COMM_WORLD, &status);
+      |                                      ^
+make: *** [Makefile:11: kernel_b.o] Error 1
+
+GATE FAIL (build) /work/masked/basic/jacobi/mpi/gpt-oss-120b/basic

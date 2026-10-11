@@ -124,6 +124,30 @@ recall-resistant problems the strict agent passed all four of Kimi's runs where 
 two passed two of four each. This is a lean seen in single runs, not an established
 effect. The reasoning is in [docs/DESIGN.md](docs/DESIGN.md).
 
+### Masked against unmasked (October 2026)
+
+To measure recall directly, a second campaign ran integrate, jacobi, scan and conjugate
+gradient on OpenMP and MPI, once as they are and once after the masking tool had hidden
+every name that reveals the algorithm. It used four models (Claude Sonnet 4.5, Kimi K2.5,
+gpt-oss-120b and Llama 3.3 70B) and three agent designs, one run per cell, 192 runs in all.
+Passes out of 24 runs per model:
+
+| model | unmasked | masked |
+|---|---|---|
+| claude-sonnet-4.5 | 24 | 21 |
+| kimi-k2.5 | 24 | 20 |
+| gpt-oss-120b | 21 | 20 |
+| llama-3.3-70b | 7 | 9 |
+| all models (of 96) | 76 | 70 |
+
+For the three capable models together the pass rate fell from 96% to 85% when the names were
+hidden, a modest fall that is concentrated in prefix sum and in jacobi under MPI and that
+single runs cannot separate from chance. The new gate also rejected four runs in which an
+agent had rewritten files it must not touch, which the July gate could not have caught. The
+method, all the tables, the latency and cost figures and the limitations are in
+[docs/CAMPAIGN-2026-10.md](docs/CAMPAIGN-2026-10.md); the chart is
+[docs/figures/masked-vs-unmasked.svg](docs/figures/masked-vs-unmasked.svg).
+
 ### Measured token costs
 
 Tokens were counted exactly by a proxy placed between the agents and the gateway, and
@@ -188,7 +212,13 @@ also need an OpenAI-compatible gateway; LiteLLM is one way to provide it.
 
 7. Print the result tables, and draw the chart, from the stored records.
 
-        parallelise report
+        parallelise report --store results/campaign-2026-10/runs.jsonl \
+          --prices results/campaign-2026-10/prices.json \
+          --masked-chart docs/figures/masked-vs-unmasked.svg
+
+   Without a store it reads `results/runs.jsonl`. When the store holds masked and unmasked
+   runs the report adds the comparison tables, and when it holds request counts it adds a
+   serving table, with cost if you pass a price file.
 
 With Docker, the image contains the compilers and Open MPI and runs as an ordinary user:
 
@@ -237,7 +267,9 @@ My own work, all in this repository:
 
 ## How the models were served
 
-The four models were reached through one LiteLLM gateway.
+The four models of the July study were reached through one LiteLLM gateway. The October
+campaign swapped two of them: it used Claude Sonnet 4.5 and gpt-oss-120b, which Amazon
+Bedrock served, in place of Sonnet 4.6 and Gemma 31B.
 
 - `claude-sonnet-4.6`, `kimi-k2.5` and `llama-3.3-70b` were served by Amazon Bedrock. The
   provider does not disclose the numerical precision, so the quantisation is recorded as
@@ -247,9 +279,13 @@ The four models were reached through one LiteLLM gateway.
 
 Run records hold "not recorded" or "not disclosed" in these fields where the information
 does not exist. Results should not be compared with other work on the assumption of full
-precision. The July runs did not record wall-clock time per run or latency. The record format has
-fields for them (`wall_time_s`, `latency_mean_s`, `tokens_per_second`), and they are empty
-in all 237 July records. No latency campaign has been run yet.
+precision. The July runs did not record wall-clock time per run or latency: the fields
+(`wall_time_s`, `latency_mean_s`, `tokens_per_second`) are empty in all 237 July records.
+The October campaign filled them in for every one of its 192 runs. The medians over runs
+were 1.1 to 3.8 seconds per call and 58 to 207 completion tokens per second, with
+claude-sonnet-4.5 the slowest and gpt-oss-120b the fastest; the table, with request and token
+totals and cost, is in [docs/CAMPAIGN-2026-10.md](docs/CAMPAIGN-2026-10.md). These are
+latencies through a gateway to a shared cloud service on one day, not properties of the models.
 
 ## Security
 
@@ -267,12 +303,12 @@ network policy; see [docs/OPERATIONS.md](docs/OPERATIONS.md).
 ## Status and next steps
 
 The comparison of four models, three agent designs and three backends on seven problems is
-complete, as is the first run on the two recall-resistant problems. The masking tool
-is built, but the masked campaign, which re-runs masked copies of familiar problems to
-measure how much of the success is recall, has produced no records: none of the 237 records
-in `results/runs.jsonl` is masked. Latency measurement is also still to be done. Planned after those are
-repeated runs, to put error bars on single-run differences, and a sweep of the sampling
-temperature. [docs/DESIGN.md](docs/DESIGN.md) lists the limitations that motivate them.
+complete, as is the first run on the two recall-resistant problems. The masked-against-unmasked
+campaign of October 2026 is also done: its 192 records are in
+`results/campaign-2026-10/runs.jsonl` (the 237 July records in `results/runs.jsonl` contain no
+masked run), and it also supplied the first measured latency and speed. Still to do are repeated
+runs, to put error bars on single-run differences, and a sweep of the sampling temperature.
+[docs/DESIGN.md](docs/DESIGN.md) lists the limitations that motivate them.
 
 On 11 October 2026 every reference solution, on OpenMP, MPI and CUDA, and a masked MPI reference, passed the gate on a 12-core host with a 16 GB NVIDIA graphics card; see [results/reference-gates-gpu-host.md](results/reference-gates-gpu-host.md).
 

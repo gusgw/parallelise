@@ -224,11 +224,14 @@ variables and benchmark renamed to a neutral alias, the notebook text replaced b
 neutral sentence, code comments removed, and algorithm-naming identifiers renamed. Numbers,
 logic and the oracle are unchanged, and the report lists every substitution. A masked
 problem must still pass its reference gate, because the machinery must not care. The study
-runs masked copies of integrate, jacobi, scan and cg on all four models, single runs, with
-the same frozen agents, and compares pass rate and token use against the unmasked runs. The
-drop, if any, is the models' recall component. The tool is built, and the study has not
-yet produced records: none of the 237 records in `results/runs.jsonl` is masked. No masked
-results are claimed.
+runs masked copies of integrate, jacobi, scan and cg on four models, single runs, with
+the same agent designs, and compares pass rate and token use against the unmasked runs. The
+drop, if any, is the models' recall component. The study has now been run (October 2026, 192
+records in `results/campaign-2026-10/runs.jsonl`, reported in
+[CAMPAIGN-2026-10.md](CAMPAIGN-2026-10.md)). Across the three capable models the pass rate fell
+from 69 of 72 runs to 61 of 72 when the names were hidden, and the weakest model did not fall;
+the single runs and the library call names that the masking leaves visible mean this is a
+rough estimate and not a firm measurement.
 
 ## The strictness finding
 
@@ -299,7 +302,8 @@ for the first comparison were not recorded.
   every run, so those problems cannot rank them. The recall-resistant problems were built to
   fix this.
 - **Contamination.** The textbook problems may be partly recalled. The masking study
-  measures this and has not yet produced results.
+  (October 2026) measured this and found a modest fall in pass rate, with the caveats in
+  [CAMPAIGN-2026-10.md](CAMPAIGN-2026-10.md).
 - **Missing records.** The run files for `decay` and `reservoir`, and the per-run token
   snapshots, were not kept. Their numbers are from my log and cannot be checked.
 - **A re-graded cell.** The raw manifest records a pass for Llama's plain agent on prefix sum

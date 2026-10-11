@@ -1,0 +1,15 @@
+[gate] build with warnings as errors
+mpicc -O2 -Wall -Wextra -Werror -std=c11 -c cg.c -o cg.o
+mpicc -O2 -Wall -Wextra -Werror -std=c11 test_cg.c cg.o -o test_cg -lm
+mpicc -O2 -Wall -Wextra -Werror -std=c11 bench.c cg.o -o bench -lm
+
+[gate] unit test at one worker and at several, then benchmark
+mpirun --oversubscribe -np 1 ./test_cg
+1 checks, 0 failed
+mpirun --oversubscribe -np 4 ./test_cg
+1 checks, 0 failed
+bash bench_sweep.sh 1024 > bench.csv
+SPEEDUP_FLOOR=1.25 python3 check_bench.py bench.csv
+bench stats OK (best speedup 4.33)
+
+GATE PASS (none) /work/unmasked/pydantic/cg/mpi/kimi-k2.5/pydantic
