@@ -21,8 +21,6 @@ jobs:
       - name: Lint
         run: ruff check .
       - name: Type check
-        # Not yet confirmed to pass cleanly, so it reports without failing the build.
-        continue-on-error: true
         run: mypy src/parallelise
       - name: Test (the CUDA tests skip themselves without a graphics card)
         env:

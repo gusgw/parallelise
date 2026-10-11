@@ -1,0 +1,16 @@
+# Dependabot keeps the package's own dependencies current with one weekly pull request
+# group. The pinned requirement files under studies/ record what a finished study ran
+# with; they receive security updates only.
+version: 2
+updates:
+  - package-ecosystem: pip
+    directory: "/"
+    schedule:
+      interval: weekly
+    groups:
+      python-dependencies:
+        patterns: ["*"]
+  - package-ecosystem: github-actions
+    directory: "/"
+    schedule:
+      interval: weekly

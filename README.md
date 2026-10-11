@@ -274,15 +274,7 @@ in `results/runs.jsonl` is masked. Latency measurement is also still to be done.
 repeated runs, to put error bars on single-run differences, and a sweep of the sampling
 temperature. [docs/DESIGN.md](docs/DESIGN.md) lists the limitations that motivate them.
 
-## Use of AI tools
-
-This project is about language models writing code, and language models also helped to
-build it. I designed the experiment, chose the problems, wrote the gate and the rules
-against invented speed-ups, and checked the results. I used AI coding assistants to draft
-and revise parts of the code, the tests and the documents, and I reviewed what they
-produced. The models being compared wrote the programs that were graded, and the gate, not
-the assistants, decided whether those programs passed. I did not keep a line-by-line record
-of which text was drafted by an assistant, so I cannot give a precise split.
+<!-- statement on the use of AI tools: to be added by the author -->
 
 ## Licence and author
 

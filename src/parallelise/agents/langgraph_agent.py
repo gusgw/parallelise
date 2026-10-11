@@ -37,6 +37,7 @@ def build_model(settings: Settings, recorder: LatencyRecorder | None = None):
     try:
         import httpx
         from langchain_openai import ChatOpenAI
+        from pydantic import SecretStr
     except ImportError as exc:
         raise AgentUnavailable(
             f"the langgraph agent needs langchain-openai; {INSTALL_HINT}"
@@ -51,7 +52,7 @@ def build_model(settings: Settings, recorder: LatencyRecorder | None = None):
     )
     return ChatOpenAI(
         base_url=settings.gateway_url,
-        api_key=settings.api_key or "not-needed",
+        api_key=SecretStr(settings.api_key or "not-needed"),
         model=settings.model,
         temperature=settings.temperature,
         http_client=sync_client,

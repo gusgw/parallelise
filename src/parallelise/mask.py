@@ -272,7 +272,10 @@ class _PythonMasker(ast.NodeTransformer):
         node.name = self._name(node.name)
         return self.generic_visit(node)
 
-    visit_AsyncFunctionDef = visit_FunctionDef  # noqa: N815
+    def visit_AsyncFunctionDef(self, node: ast.AsyncFunctionDef) -> ast.AST:  # noqa: N802
+        self._drop_docstring(node)
+        node.name = self._name(node.name)
+        return self.generic_visit(node)
 
     def visit_ClassDef(self, node: ast.ClassDef) -> ast.AST:  # noqa: N802
         self._drop_docstring(node)
@@ -304,6 +307,7 @@ def _mask_python(sources: list[str], renamer: _Renamer, report: MaskReport) -> l
     keep = set(dir(builtins))
     local_args: set[str] = set()
     for src in sources:
+        tree: ast.Module | None
         try:
             tree = ast.parse(src)
         except SyntaxError:

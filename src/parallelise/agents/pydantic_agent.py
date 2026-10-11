@@ -119,16 +119,18 @@ def build_agent(
         return tools.run_shell(work_dir, command)
 
     @agent.tool
-    def check_gate(ctx: run_context[State]) -> str:
+    # The framework is imported lazily, so RunContext is a runtime alias here and the type
+    # checker cannot see it as a class; the agent library reads the real class at run time.
+    def check_gate(ctx: run_context[State]) -> str:  # type: ignore[valid-type]
         """Build and run the unit tests (the checks) and record whether they passed."""
         passed, output = tools.run_gate(work_dir, gate_command)
-        ctx.deps.gate_passed = passed
+        ctx.deps.gate_passed = passed  # type: ignore[attr-defined]
         return output
 
     @agent.output_validator
-    def must_pass(ctx: run_context[State], output: str) -> str:
+    def must_pass(ctx: run_context[State], output: str) -> str:  # type: ignore[valid-type]
         # The exit is guarded: no final answer is accepted until check_gate is green.
-        if not ctx.deps.gate_passed:
+        if not ctx.deps.gate_passed:  # type: ignore[attr-defined]
             raise model_retry(
                 "The checks have not passed. Build the code and call check_gate; finish only "
                 "once it reports success."
