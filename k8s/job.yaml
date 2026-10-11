@@ -1,0 +1,91 @@
+# One conversion cell as a Kubernetes Job. Change the problem and the backend in "args"
+# and the name of the Job, then apply the three objects with:
+#   kubectl apply -f k8s/job.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: parallelise-config
+data:
+  gateway-url: "http://localhost:4000/v1"
+  model: "local"
+---
+# Optional. Leave the key empty when the gateway needs none.
+apiVersion: v1
+kind: Secret
+metadata:
+  name: parallelise-secret
+type: Opaque
+stringData:
+  api-key: ""
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: parallelise-integrate-openmp
+spec:
+  backoffLimit: 0
+  activeDeadlineSeconds: 3600
+  ttlSecondsAfterFinished: 86400
+  template:
+    metadata:
+      labels:
+        app: parallelise
+    spec:
+      restartPolicy: Never
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
+        runAsGroup: 10001
+        fsGroup: 10001
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: parallelise
+          image: parallelise:cpu
+          imagePullPolicy: IfNotPresent
+          args: ["run", "integrate", "openmp", "--agent", "basic"]
+          env:
+            - name: PARALLELISE_GATEWAY_URL
+              valueFrom:
+                configMapKeyRef:
+                  name: parallelise-config
+                  key: gateway-url
+            - name: PARALLELISE_MODEL
+              valueFrom:
+                configMapKeyRef:
+                  name: parallelise-config
+                  key: model
+            - name: PARALLELISE_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: parallelise-secret
+                  key: api-key
+                  optional: true
+            - name: PARALLELISE_WORK_ROOT
+              value: /work
+            - name: PARALLELISE_RESULTS
+              value: /work/results/runs.jsonl
+            - name: TMPDIR
+              value: /work/tmp
+            - name: HOME
+              value: /work/home
+          resources:
+            requests:
+              cpu: "2"
+              memory: 2Gi
+            limits:
+              cpu: "4"
+              memory: 4Gi
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+          volumeMounts:
+            - name: work
+              mountPath: /work
+      volumes:
+        - name: work
+          emptyDir:
+            sizeLimit: 2Gi
