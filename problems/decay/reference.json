@@ -1,0 +1,14 @@
+{
+  "source": "decay.ipynb",
+  "kernel": "decay",
+  "params": {
+    "N": 1000000
+  },
+  "expected": {
+    "CHECKSUM": 971403872.0
+  },
+  "tol": 0.5,
+  "reorder_spread": {
+    "CHECKSUM": 0.0
+  }
+}

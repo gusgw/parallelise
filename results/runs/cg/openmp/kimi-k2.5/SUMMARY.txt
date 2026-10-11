@@ -1,0 +1,52 @@
+======== basic (kimi-k2.5 cg/openmp, agent 28d6e352) ========
+cg.c
+test_cg.c
+[gate] build + unit test + benchmark-stats validation (-Werror)
+cc -O2 -fopenmp -Wall -Wextra -Werror -std=c11 -c cg.c -o cg.o
+cc -O2 -fopenmp -Wall -Wextra -Werror -std=c11 test_cg.c cg.o -o test_cg -lm
+cc -O2 -fopenmp -Wall -Wextra -Werror -std=c11 bench.c cg.o -o bench -lm
+OMP_NUM_THREADS=1 ./test_cg
+1 checks, 0 failed
+OMP_NUM_THREADS=$(nproc) ./test_cg
+1 checks, 0 failed
+./bench 1024 > bench.csv
+SPEEDUP_FLOOR=1.25 python3 check_bench.py bench.csv
+bench stats OK (6 threads points; best speedup 3.90)
+GATE PASS (runs/cg/openmp/kimi-k2.5/basic)
+>>> basic: GATE PASS
+
+======== pydantic (kimi-k2.5 cg/openmp, agent 0dc8429e) ========
+cg.c
+test_cg.c
+[gate] build + unit test + benchmark-stats validation (-Werror)
+cc -O2 -fopenmp -Wall -Wextra -Werror -std=c11 -c cg.c -o cg.o
+cc -O2 -fopenmp -Wall -Wextra -Werror -std=c11 test_cg.c cg.o -o test_cg -lm
+cc -O2 -fopenmp -Wall -Wextra -Werror -std=c11 bench.c cg.o -o bench -lm
+OMP_NUM_THREADS=1 ./test_cg
+1 checks, 0 failed
+OMP_NUM_THREADS=$(nproc) ./test_cg
+1 checks, 0 failed
+./bench 1024 > bench.csv
+SPEEDUP_FLOOR=1.25 python3 check_bench.py bench.csv
+bench stats OK (6 threads points; best speedup 5.17)
+GATE PASS (runs/cg/openmp/kimi-k2.5/pydantic)
+>>> pydantic: GATE PASS
+
+======== langgraph (kimi-k2.5 cg/openmp, agent 74c1e67e) ========
+cg.c
+test_cg.c
+[gate] build + unit test + benchmark-stats validation (-Werror)
+cc -O2 -fopenmp -Wall -Wextra -Werror -std=c11 -c cg.c -o cg.o
+cc -O2 -fopenmp -Wall -Wextra -Werror -std=c11 test_cg.c cg.o -o test_cg -lm
+cc -O2 -fopenmp -Wall -Wextra -Werror -std=c11 bench.c cg.o -o bench -lm
+OMP_NUM_THREADS=1 ./test_cg
+1 checks, 0 failed
+OMP_NUM_THREADS=$(nproc) ./test_cg
+1 checks, 0 failed
+./bench 1024 > bench.csv
+SPEEDUP_FLOOR=1.25 python3 check_bench.py bench.csv
+bench stats OK (6 threads points; best speedup 4.40)
+GATE PASS (runs/cg/openmp/kimi-k2.5/langgraph)
+>>> langgraph: GATE PASS
+
+DONE

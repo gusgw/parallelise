@@ -1,0 +1,50 @@
+======== basic (llama-3.3-70b jacobi/openmp, agent d9cbc526) ========
+jacobi.c
+test_jacobi.c
+[gate] build + unit test + benchmark-stats validation (-Werror)
+cc -O2 -fopenmp -Wall -Wextra -Werror -std=c11 -c jacobi.c -o jacobi.o
+cc -O2 -fopenmp -Wall -Wextra -Werror -std=c11 test_jacobi.c jacobi.o -o test_jacobi -lm
+cc -O2 -fopenmp -Wall -Wextra -Werror -std=c11 bench.c jacobi.o -o bench -lm
+OMP_NUM_THREADS=1 ./test_jacobi
+checksum = 1016.140640
+OMP_NUM_THREADS=$(nproc) ./test_jacobi
+checksum = 1016.140640
+./bench 1024 > bench.csv
+SPEEDUP_FLOOR=1.25 python3 check_bench.py bench.csv
+bench stats OK (6 threads points; best speedup 3.24)
+GATE PASS (runs/jacobi/openmp/llama-3.3-70b/basic)
+>>> basic: GATE PASS
+
+======== pydantic (llama-3.3-70b jacobi/openmp, agent 801d0971) ========
+jacobi.c
+test_jacobi.c
+[gate] build + unit test + benchmark-stats validation (-Werror)
+cc -O2 -fopenmp -Wall -Wextra -Werror -std=c11 -c jacobi.c -o jacobi.o
+cc -O2 -fopenmp -Wall -Wextra -Werror -std=c11 test_jacobi.c jacobi.o -o test_jacobi -lm
+cc -O2 -fopenmp -Wall -Wextra -Werror -std=c11 bench.c jacobi.o -o bench -lm
+OMP_NUM_THREADS=1 ./test_jacobi
+checksum = 563.368941
+ERROR: checksum mismatch
+make: *** [Makefile:23: check] Error 1
+>>> pydantic: GATE FAIL
+
+======== langgraph (llama-3.3-70b jacobi/openmp, agent 8e610f5a) ========
+jacobi.c
+test_jacobi.c
+[gate] build + unit test + benchmark-stats validation (-Werror)
+cc -O2 -fopenmp -Wall -Wextra -Werror -std=c11 -c jacobi.c -o jacobi.o
+cc -O2 -fopenmp -Wall -Wextra -Werror -std=c11 test_jacobi.c jacobi.o -o test_jacobi -lm
+cc -O2 -fopenmp -Wall -Wextra -Werror -std=c11 bench.c jacobi.o -o bench -lm
+OMP_NUM_THREADS=1 ./test_jacobi
+checksum = 1016.140640
+PASS
+OMP_NUM_THREADS=$(nproc) ./test_jacobi
+checksum = 1016.140640
+PASS
+./bench 1024 > bench.csv
+SPEEDUP_FLOOR=1.25 python3 check_bench.py bench.csv
+bench stats OK (6 threads points; best speedup 4.03)
+GATE PASS (runs/jacobi/openmp/llama-3.3-70b/langgraph)
+>>> langgraph: GATE PASS
+
+DONE

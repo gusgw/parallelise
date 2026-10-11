@@ -1,0 +1,52 @@
+======== basic (llama-3.3-70b cg/mpi, agent 28d6e352) ========
+cg.c
+test_cg.c
+[gate] build + unit test + benchmark-stats validation (-Werror)
+mpicc -O2 -Wall -Wextra -Werror -std=c11 -c cg.c -o cg.o
+mpicc -O2 -Wall -Wextra -Werror -std=c11 test_cg.c cg.o -o test_cg -lm
+mpicc -O2 -Wall -Wextra -Werror -std=c11 bench.c cg.o -o bench -lm
+mpirun --oversubscribe -np 1 ./test_cg
+Checksum: 311942.898687
+mpirun --oversubscribe -np 4 ./test_cg
+Checksum: 1486567.205001
+bash bench_sweep.sh 1024 > bench.csv
+SPEEDUP_FLOOR=1.25 python3 check_bench.py bench.csv
+bench stats OK (6 ranks points; best speedup 1.44)
+GATE PASS (runs/cg/mpi/llama-3.3-70b/basic)
+>>> basic: GATE PASS
+
+======== pydantic (llama-3.3-70b cg/mpi, agent 0dc8429e) ========
+cg.c
+test_cg.c
+[gate] build + unit test + benchmark-stats validation (-Werror)
+mpicc -O2 -Wall -Wextra -Werror -std=c11 -c cg.c -o cg.o
+mpicc -O2 -Wall -Wextra -Werror -std=c11 test_cg.c cg.o -o test_cg -lm
+mpicc -O2 -Wall -Wextra -Werror -std=c11 bench.c cg.o -o bench -lm
+mpirun --oversubscribe -np 1 ./test_cg
+Checksum mismatch: 311942.898687 vs 272069.953528
+make: *** [Makefile:24: check] Error 1
+>>> pydantic: GATE FAIL
+
+======== langgraph (llama-3.3-70b cg/mpi, agent 74c1e67e) ========
+cg.c
+test_cg.c
+[gate] build + unit test + benchmark-stats validation (-Werror)
+mpicc -O2 -Wall -Wextra -Werror -std=c11 -c cg.c -o cg.o
+mpicc -O2 -Wall -Wextra -Werror -std=c11 test_cg.c cg.o -o test_cg -lm
+mpicc -O2 -Wall -Wextra -Werror -std=c11 bench.c cg.o -o bench -lm
+mpirun --oversubscribe -np 1 ./test_cg
+Checksum: 311942.898687
+mpirun --oversubscribe -np 4 ./test_cg
+Checksum: 983137128.717040
+Error: checksum does not match reference
+--------------------------------------------------------------------------
+prterun detected that one or more processes exited with non-zero status,
+thus causing the job to be terminated. The first process to do so was:
+
+   Process name: [prterun-host-2985102@1,0]
+   Exit code:    1
+--------------------------------------------------------------------------
+make: *** [Makefile:25: check] Error 1
+>>> langgraph: GATE FAIL
+
+DONE

@@ -1,0 +1,15 @@
+{
+  "source": "cg.ipynb",
+  "kernel": "cg",
+  "params": {
+    "M": 64,
+    "ITERS": 100
+  },
+  "expected": {
+    "CHECKSUM": 311942.8986866846
+  },
+  "tol": 0.001,
+  "reorder_spread": {
+    "CHECKSUM": 9.89530235528946e-10
+  }
+}

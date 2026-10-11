@@ -1,0 +1,60 @@
+======== basic (kimi-k2.5 nbody/mpi, agent 28d6e352) ========
+nbody.c
+test_nbody.c
+[gate] build + unit test + benchmark-stats validation (-Werror)
+mpicc -O2 -Wall -Wextra -Werror -std=c11 -c nbody.c -o nbody.o
+mpicc -O2 -Wall -Wextra -Werror -std=c11 test_nbody.c nbody.o -o test_nbody -lm
+mpicc -O2 -Wall -Wextra -Werror -std=c11 bench.c nbody.o -o bench -lm
+mpirun --oversubscribe -np 1 ./test_nbody
+1 checks, 0 failed
+mpirun --oversubscribe -np 4 ./test_nbody
+1 checks, 0 failed
+bash bench_sweep.sh 32768 > bench.csv
+python3 check_bench.py bench.csv
+bench stats OK (6 ranks points; best speedup 3.77)
+GATE PASS (runs/nbody/mpi/kimi-k2.5/basic)
+>>> basic: GATE PASS
+
+======== pydantic (kimi-k2.5 nbody/mpi, agent 0dc8429e) ========
+nbody.c
+test_nbody.c
+[gate] build + unit test + benchmark-stats validation (-Werror)
+mpicc -O2 -Wall -Wextra -Werror -std=c11 -c nbody.c -o nbody.o
+mpicc -O2 -Wall -Wextra -Werror -std=c11 test_nbody.c nbody.o -o test_nbody -lm
+mpicc -O2 -Wall -Wextra -Werror -std=c11 bench.c nbody.o -o bench -lm
+mpirun --oversubscribe -np 1 ./test_nbody
+checksum = 1.0533954952812879e+06
+expected = 1.0533954952812886e+06
+error    = 6.9849193096160889e-10
+tol      = 9.9999999999999995e-07
+PASS
+mpirun --oversubscribe -np 4 ./test_nbody
+checksum = 1.0533954952812879e+06
+expected = 1.0533954952812886e+06
+error    = 6.9849193096160889e-10
+tol      = 9.9999999999999995e-07
+PASS
+bash bench_sweep.sh 32768 > bench.csv
+python3 check_bench.py bench.csv
+bench stats OK (6 ranks points; best speedup 3.76)
+GATE PASS (runs/nbody/mpi/kimi-k2.5/pydantic)
+>>> pydantic: GATE PASS
+
+======== langgraph (kimi-k2.5 nbody/mpi, agent 74c1e67e) ========
+nbody.c
+test_nbody.c
+[gate] build + unit test + benchmark-stats validation (-Werror)
+mpicc -O2 -Wall -Wextra -Werror -std=c11 -c nbody.c -o nbody.o
+mpicc -O2 -Wall -Wextra -Werror -std=c11 test_nbody.c nbody.o -o test_nbody -lm
+mpicc -O2 -Wall -Wextra -Werror -std=c11 bench.c nbody.o -o bench -lm
+mpirun --oversubscribe -np 1 ./test_nbody
+1 checks, 0 failed
+mpirun --oversubscribe -np 4 ./test_nbody
+1 checks, 0 failed
+bash bench_sweep.sh 32768 > bench.csv
+python3 check_bench.py bench.csv
+bench stats OK (6 ranks points; best speedup 3.53)
+GATE PASS (runs/nbody/mpi/kimi-k2.5/langgraph)
+>>> langgraph: GATE PASS
+
+DONE

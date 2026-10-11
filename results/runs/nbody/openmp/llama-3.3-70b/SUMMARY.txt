@@ -1,0 +1,22 @@
+======== basic (llama-3.3-70b nbody/openmp, agent 28d6e352) ========
+ls: cannot access 'nbody.c*': No such file or directory
+ls: cannot access 'test_nbody.c': No such file or directory
+[gate] build + unit test + benchmark-stats validation (-Werror)
+make: *** No rule to make target 'test_nbody.c', needed by 'test_nbody'.  Stop.
+>>> basic: GATE FAIL
+
+======== pydantic (llama-3.3-70b nbody/openmp, agent 0dc8429e) ========
+ls: cannot access 'nbody.c*': No such file or directory
+ls: cannot access 'test_nbody.c': No such file or directory
+[gate] build + unit test + benchmark-stats validation (-Werror)
+make: *** No rule to make target 'test_nbody.c', needed by 'test_nbody'.  Stop.
+>>> pydantic: GATE FAIL
+
+======== langgraph (llama-3.3-70b nbody/openmp, agent 74c1e67e) ========
+ls: cannot access 'nbody.c*': No such file or directory
+ls: cannot access 'test_nbody.c': No such file or directory
+[gate] build + unit test + benchmark-stats validation (-Werror)
+make: *** No rule to make target 'test_nbody.c', needed by 'test_nbody'.  Stop.
+>>> langgraph: GATE FAIL
+
+DONE

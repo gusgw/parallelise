@@ -1,0 +1,70 @@
+======== basic (gemma-31b integrate/openmp, agent d9cbc526) ========
+integrate.c
+test_integrate.c
+[gate] build + unit test + benchmark-stats validation (-Werror)
+cc -O2 -fopenmp -Wall -Wextra -Werror -std=c11 -c integrate.c -o integrate.o
+cc -O2 -fopenmp -Wall -Wextra -Werror -std=c11 test_integrate.c integrate.o -o test_integrate -lm
+cc -O2 -fopenmp -Wall -Wextra -Werror -std=c11 bench.c integrate.o -o bench -lm
+OMP_NUM_THREADS=1 ./test_integrate
+Result: 3.141592653589731
+Expected: 3.141592653589731
+Error: 0.000000000000000
+PASS
+OMP_NUM_THREADS=$(nproc) ./test_integrate
+Result: 3.141592653589797
+Expected: 3.141592653589731
+Error: 0.000000000000066
+PASS
+./bench 50000000 > bench.csv
+python3 check_bench.py bench.csv
+bench stats OK (6 threads points; best speedup 5.22)
+GATE PASS (runs/integrate/openmp/gemma-31b/basic)
+>>> basic: GATE PASS
+
+======== pydantic (gemma-31b integrate/openmp, agent 801d0971) ========
+integrate.c
+test_integrate.c
+[gate] build + unit test + benchmark-stats validation (-Werror)
+cc -O2 -fopenmp -Wall -Wextra -Werror -std=c11 -c integrate.c -o integrate.o
+cc -O2 -fopenmp -Wall -Wextra -Werror -std=c11 test_integrate.c integrate.o -o test_integrate -lm
+cc -O2 -fopenmp -Wall -Wextra -Werror -std=c11 bench.c integrate.o -o bench -lm
+OMP_NUM_THREADS=1 ./test_integrate
+Result:   3.141592653589731
+Expected: 3.141592653589731
+Error:    0.000000000000000
+PASS
+OMP_NUM_THREADS=$(nproc) ./test_integrate
+Result:   3.141592653589797
+Expected: 3.141592653589731
+Error:    0.000000000000066
+PASS
+./bench 50000000 > bench.csv
+python3 check_bench.py bench.csv
+bench stats OK (6 threads points; best speedup 5.24)
+GATE PASS (runs/integrate/openmp/gemma-31b/pydantic)
+>>> pydantic: GATE PASS
+
+======== langgraph (gemma-31b integrate/openmp, agent 8e610f5a) ========
+integrate.c
+test_integrate.c
+[gate] build + unit test + benchmark-stats validation (-Werror)
+cc -O2 -fopenmp -Wall -Wextra -Werror -std=c11 -c integrate.c -o integrate.o
+cc -O2 -fopenmp -Wall -Wextra -Werror -std=c11 test_integrate.c integrate.o -o test_integrate -lm
+cc -O2 -fopenmp -Wall -Wextra -Werror -std=c11 bench.c integrate.o -o bench -lm
+OMP_NUM_THREADS=1 ./test_integrate
+Result:   3.141592653589731
+Expected: 3.141592653589731
+Error:    0.000000000000000
+PASS
+OMP_NUM_THREADS=$(nproc) ./test_integrate
+Result:   3.141592653589798
+Expected: 3.141592653589731
+Error:    0.000000000000067
+PASS
+./bench 50000000 > bench.csv
+python3 check_bench.py bench.csv
+bench stats OK (6 threads points; best speedup 5.64)
+GATE PASS (runs/integrate/openmp/gemma-31b/langgraph)
+>>> langgraph: GATE PASS
+
+DONE

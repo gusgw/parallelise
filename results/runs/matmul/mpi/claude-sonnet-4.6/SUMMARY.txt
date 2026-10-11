@@ -1,0 +1,54 @@
+======== basic (claude-sonnet-4.6 matmul/mpi, agent d9cbc526) ========
+matmul.c
+test_matmul.c
+[gate] build + unit test + benchmark-stats validation (-Werror)
+mpicc -O2 -Wall -Wextra -Werror -std=c11 -c matmul.c -o matmul.o
+mpicc -O2 -Wall -Wextra -Werror -std=c11 test_matmul.c matmul.o -o test_matmul -lm
+mpicc -O2 -Wall -Wextra -Werror -std=c11 bench.c matmul.o -o bench -lm
+mpirun --oversubscribe -np 1 ./test_matmul
+checksum = 704626403.0  (expected 704626403.0)
+1 checks, 0 failed
+mpirun --oversubscribe -np 4 ./test_matmul
+checksum = 704626403.0  (expected 704626403.0)
+1 checks, 0 failed
+bash bench_sweep.sh 1024 > bench.csv
+python3 check_bench.py bench.csv
+bench stats OK (6 ranks points; best speedup 2.75)
+GATE PASS (runs/matmul/mpi/claude-sonnet-4.6/basic)
+>>> basic: GATE PASS
+
+======== pydantic (claude-sonnet-4.6 matmul/mpi, agent 801d0971) ========
+matmul.c
+test_matmul.c
+[gate] build + unit test + benchmark-stats validation (-Werror)
+mpicc -O2 -Wall -Wextra -Werror -std=c11 -c matmul.c -o matmul.o
+mpicc -O2 -Wall -Wextra -Werror -std=c11 test_matmul.c matmul.o -o test_matmul -lm
+mpicc -O2 -Wall -Wextra -Werror -std=c11 bench.c matmul.o -o bench -lm
+mpirun --oversubscribe -np 1 ./test_matmul
+1 checks, 0 failed
+mpirun --oversubscribe -np 4 ./test_matmul
+1 checks, 0 failed
+bash bench_sweep.sh 1024 > bench.csv
+python3 check_bench.py bench.csv
+bench stats OK (6 ranks points; best speedup 2.60)
+GATE PASS (runs/matmul/mpi/claude-sonnet-4.6/pydantic)
+>>> pydantic: GATE PASS
+
+======== langgraph (claude-sonnet-4.6 matmul/mpi, agent 8e610f5a) ========
+matmul.c
+test_matmul.c
+[gate] build + unit test + benchmark-stats validation (-Werror)
+mpicc -O2 -Wall -Wextra -Werror -std=c11 -c matmul.c -o matmul.o
+mpicc -O2 -Wall -Wextra -Werror -std=c11 test_matmul.c matmul.o -o test_matmul -lm
+mpicc -O2 -Wall -Wextra -Werror -std=c11 bench.c matmul.o -o bench -lm
+mpirun --oversubscribe -np 1 ./test_matmul
+PASS  checksum=704626403.0  ref=704626403.0  err=0
+mpirun --oversubscribe -np 4 ./test_matmul
+PASS  checksum=704626403.0  ref=704626403.0  err=0
+bash bench_sweep.sh 1024 > bench.csv
+python3 check_bench.py bench.csv
+bench stats OK (6 ranks points; best speedup 2.00)
+GATE PASS (runs/matmul/mpi/claude-sonnet-4.6/langgraph)
+>>> langgraph: GATE PASS
+
+DONE

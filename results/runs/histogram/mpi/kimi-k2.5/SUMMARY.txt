@@ -1,0 +1,52 @@
+======== basic (kimi-k2.5 histogram/mpi, agent 28d6e352) ========
+histogram.c
+test_histogram.c
+[gate] build + unit test + benchmark-stats validation (-Werror)
+mpicc -O2 -Wall -Wextra -Werror -std=c11 -c histogram.c -o histogram.o
+mpicc -O2 -Wall -Wextra -Werror -std=c11 test_histogram.c histogram.o -o test_histogram -lm
+mpicc -O2 -Wall -Wextra -Werror -std=c11 bench.c histogram.o -o bench -lm
+mpirun --oversubscribe -np 1 ./test_histogram
+2 checks, 0 failed
+mpirun --oversubscribe -np 4 ./test_histogram
+2 checks, 0 failed
+bash bench_sweep.sh 200000000 > bench.csv
+SPEEDUP_FLOOR=1.5 python3 check_bench.py bench.csv
+bench stats OK (6 ranks points; best speedup 4.62)
+GATE PASS (runs/histogram/mpi/kimi-k2.5/basic)
+>>> basic: GATE PASS
+
+======== pydantic (kimi-k2.5 histogram/mpi, agent 0dc8429e) ========
+histogram.c
+test_histogram.c
+[gate] build + unit test + benchmark-stats validation (-Werror)
+mpicc -O2 -Wall -Wextra -Werror -std=c11 -c histogram.c -o histogram.o
+mpicc -O2 -Wall -Wextra -Werror -std=c11 test_histogram.c histogram.o -o test_histogram -lm
+mpicc -O2 -Wall -Wextra -Werror -std=c11 bench.c histogram.o -o bench -lm
+mpirun --oversubscribe -np 1 ./test_histogram
+2 checks, 0 failed
+mpirun --oversubscribe -np 4 ./test_histogram
+2 checks, 0 failed
+bash bench_sweep.sh 200000000 > bench.csv
+SPEEDUP_FLOOR=1.5 python3 check_bench.py bench.csv
+bench stats OK (6 ranks points; best speedup 4.58)
+GATE PASS (runs/histogram/mpi/kimi-k2.5/pydantic)
+>>> pydantic: GATE PASS
+
+======== langgraph (kimi-k2.5 histogram/mpi, agent 74c1e67e) ========
+histogram.c
+test_histogram.c
+[gate] build + unit test + benchmark-stats validation (-Werror)
+mpicc -O2 -Wall -Wextra -Werror -std=c11 -c histogram.c -o histogram.o
+mpicc -O2 -Wall -Wextra -Werror -std=c11 test_histogram.c histogram.o -o test_histogram -lm
+mpicc -O2 -Wall -Wextra -Werror -std=c11 bench.c histogram.o -o bench -lm
+mpirun --oversubscribe -np 1 ./test_histogram
+2 checks, 0 failed
+mpirun --oversubscribe -np 4 ./test_histogram
+2 checks, 0 failed
+bash bench_sweep.sh 200000000 > bench.csv
+SPEEDUP_FLOOR=1.5 python3 check_bench.py bench.csv
+bench stats OK (6 ranks points; best speedup 4.59)
+GATE PASS (runs/histogram/mpi/kimi-k2.5/langgraph)
+>>> langgraph: GATE PASS
+
+DONE

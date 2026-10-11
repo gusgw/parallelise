@@ -1,0 +1,50 @@
+======== basic (llama-3.3-70b matmul/openmp, agent d9cbc526) ========
+matmul.c
+test_matmul.c
+[gate] build + unit test + benchmark-stats validation (-Werror)
+cc -O2 -fopenmp -Wall -Wextra -Werror -std=c11 -c matmul.c -o matmul.o
+cc -O2 -fopenmp -Wall -Wextra -Werror -std=c11 test_matmul.c matmul.o -o test_matmul -lm
+cc -O2 -fopenmp -Wall -Wextra -Werror -std=c11 bench.c matmul.o -o bench -lm
+OMP_NUM_THREADS=1 ./test_matmul
+OMP_NUM_THREADS=$(nproc) ./test_matmul
+./bench 1024 > bench.csv
+python3 check_bench.py bench.csv
+bench stats OK (6 threads points; best speedup 5.61)
+GATE PASS (runs/matmul/openmp/llama-3.3-70b/basic)
+>>> basic: GATE PASS
+
+======== pydantic (llama-3.3-70b matmul/openmp, agent 801d0971) ========
+matmul.c
+test_matmul.c
+[gate] build + unit test + benchmark-stats validation (-Werror)
+cc -O2 -fopenmp -Wall -Wextra -Werror -std=c11 -c matmul.c -o matmul.o
+cc -O2 -fopenmp -Wall -Wextra -Werror -std=c11 test_matmul.c matmul.o -o test_matmul -lm
+cc -O2 -fopenmp -Wall -Wextra -Werror -std=c11 bench.c matmul.o -o bench -lm
+OMP_NUM_THREADS=1 ./test_matmul
+checksum = 704626403.000000
+OMP_NUM_THREADS=$(nproc) ./test_matmul
+checksum = 704626403.000000
+./bench 1024 > bench.csv
+python3 check_bench.py bench.csv
+bench stats OK (6 threads points; best speedup 5.14)
+GATE PASS (runs/matmul/openmp/llama-3.3-70b/pydantic)
+>>> pydantic: GATE PASS
+
+======== langgraph (llama-3.3-70b matmul/openmp, agent 8e610f5a) ========
+matmul.c
+test_matmul.c
+[gate] build + unit test + benchmark-stats validation (-Werror)
+cc -O2 -fopenmp -Wall -Wextra -Werror -std=c11 -c matmul.c -o matmul.o
+cc -O2 -fopenmp -Wall -Wextra -Werror -std=c11 test_matmul.c matmul.o -o test_matmul -lm
+cc -O2 -fopenmp -Wall -Wextra -Werror -std=c11 bench.c matmul.o -o bench -lm
+OMP_NUM_THREADS=1 ./test_matmul
+PASS: checksum = 704626403.000000
+OMP_NUM_THREADS=$(nproc) ./test_matmul
+PASS: checksum = 704626403.000000
+./bench 1024 > bench.csv
+python3 check_bench.py bench.csv
+bench stats OK (6 threads points; best speedup 5.65)
+GATE PASS (runs/matmul/openmp/llama-3.3-70b/langgraph)
+>>> langgraph: GATE PASS
+
+DONE

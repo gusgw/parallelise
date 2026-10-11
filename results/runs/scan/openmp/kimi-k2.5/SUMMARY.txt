@@ -1,0 +1,60 @@
+======== basic (kimi-k2.5 scan/openmp, agent 28d6e352) ========
+scan.c
+test_scan.c
+[gate] build + unit test + benchmark-stats validation (-Werror)
+cc -O2 -fopenmp -Wall -Wextra -Werror -std=c11 -c scan.c -o scan.o
+cc -O2 -fopenmp -Wall -Wextra -Werror -std=c11 test_scan.c scan.o -o test_scan -lm
+cc -O2 -fopenmp -Wall -Wextra -Werror -std=c11 bench.c scan.o -o bench -lm
+OMP_NUM_THREADS=1 ./test_scan
+1 checks, 0 failed
+OMP_NUM_THREADS=$(nproc) ./test_scan
+1 checks, 0 failed
+./bench 134217728 > bench.csv
+SPEEDUP_FLOOR=1.25 python3 check_bench.py bench.csv
+bench stats OK (6 threads points; best speedup 5.74)
+GATE PASS (runs/scan/openmp/kimi-k2.5/basic)
+>>> basic: GATE PASS
+
+======== pydantic (kimi-k2.5 scan/openmp, agent 0dc8429e) ========
+scan.c
+test_scan.c
+[gate] build + unit test + benchmark-stats validation (-Werror)
+cc -O2 -fopenmp -Wall -Wextra -Werror -std=c11 -c scan.c -o scan.o
+cc -O2 -fopenmp -Wall -Wextra -Werror -std=c11 test_scan.c scan.o -o test_scan -lm
+cc -O2 -fopenmp -Wall -Wextra -Werror -std=c11 bench.c scan.o -o bench -lm
+OMP_NUM_THREADS=1 ./test_scan
+checksum = 3178464.2888227086514235
+expected = 3178464.2888227086514235
+error    = 0.0000000000000000e+00
+tol      = 1.0000000000000000e-04
+PASS
+OMP_NUM_THREADS=$(nproc) ./test_scan
+checksum = 3178464.2888191221281886
+expected = 3178464.2888227086514235
+error    = 3.5865232348442078e-06
+tol      = 1.0000000000000000e-04
+PASS
+./bench 134217728 > bench.csv
+SPEEDUP_FLOOR=1.25 python3 check_bench.py bench.csv
+bench stats OK (6 threads points; best speedup 5.83)
+GATE PASS (runs/scan/openmp/kimi-k2.5/pydantic)
+>>> pydantic: GATE PASS
+
+======== langgraph (kimi-k2.5 scan/openmp, agent 74c1e67e) ========
+scan.c
+test_scan.c
+[gate] build + unit test + benchmark-stats validation (-Werror)
+cc -O2 -fopenmp -Wall -Wextra -Werror -std=c11 -c scan.c -o scan.o
+cc -O2 -fopenmp -Wall -Wextra -Werror -std=c11 test_scan.c scan.o -o test_scan -lm
+cc -O2 -fopenmp -Wall -Wextra -Werror -std=c11 bench.c scan.o -o bench -lm
+OMP_NUM_THREADS=1 ./test_scan
+1 checks, 0 failed
+OMP_NUM_THREADS=$(nproc) ./test_scan
+1 checks, 0 failed
+./bench 134217728 > bench.csv
+SPEEDUP_FLOOR=1.25 python3 check_bench.py bench.csv
+bench stats OK (6 threads points; best speedup 5.90)
+GATE PASS (runs/scan/openmp/kimi-k2.5/langgraph)
+>>> langgraph: GATE PASS
+
+DONE

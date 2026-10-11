@@ -1,0 +1,39 @@
+======== basic (llama-3.3-70b cg/cuda, agent 28d6e352) ========
+cg.cu
+test_cg.c
+[gate] build + unit test + benchmark-stats validation (-Werror)
+/opt/cuda/bin/nvcc -O2 -Xcompiler -Wall,-Wextra,-Werror -c cg.cu -o cg.o
+/opt/cuda/bin/nvcc -O2 -Xcompiler -Wall,-Wextra,-Werror test_cg.c cg.o -o test_cg -lm
+/opt/cuda/bin/nvcc -O2 -Xcompiler -Wall,-Wextra,-Werror bench.c cg.o -o bench -lm
+./test_cg
+checksum = nan
+OK
+./bench 1024 > bench.csv
+make: *** [Makefile:26: check] Error 139
+>>> basic: GATE FAIL
+
+======== pydantic (llama-3.3-70b cg/cuda, agent 0dc8429e) ========
+cg.cu
+test_cg.c
+[gate] build + unit test + benchmark-stats validation (-Werror)
+/opt/cuda/bin/nvcc -O2 -Xcompiler -Wall,-Wextra,-Werror -c cg.cu -o cg.o
+/opt/cuda/bin/nvcc -O2 -Xcompiler -Wall,-Wextra,-Werror test_cg.c cg.o -o test_cg -lm
+/opt/cuda/bin/nvcc -O2 -Xcompiler -Wall,-Wextra,-Werror bench.c cg.o -o bench -lm
+./test_cg
+ERROR: checksum mismatch
+make: *** [Makefile:25: check] Error 1
+>>> pydantic: GATE FAIL
+
+======== langgraph (llama-3.3-70b cg/cuda, agent 74c1e67e) ========
+cg.cu
+test_cg.c
+[gate] build + unit test + benchmark-stats validation (-Werror)
+/opt/cuda/bin/nvcc -O2 -Xcompiler -Wall,-Wextra,-Werror -c cg.cu -o cg.o
+/opt/cuda/bin/nvcc -O2 -Xcompiler -Wall,-Wextra,-Werror test_cg.c cg.o -o test_cg -lm
+/usr/bin/ld: /tmp/tmpxft_002daf55_00000000-5_test_cg.o: in function `main':
+test_cg.c:(.text.startup+0x164): undefined reference to `cg'
+collect2: error: ld returned 1 exit status
+make: *** [Makefile:13: test_cg] Error 1
+>>> langgraph: GATE FAIL
+
+DONE

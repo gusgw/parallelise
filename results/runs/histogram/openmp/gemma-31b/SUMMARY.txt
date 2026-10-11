@@ -1,0 +1,58 @@
+======== basic (gemma-31b histogram/openmp, agent 28d6e352) ========
+histogram.c
+test_histogram.c
+[gate] build + unit test + benchmark-stats validation (-Werror)
+cc -O2 -fopenmp -Wall -Wextra -Werror -std=c11 -c histogram.c -o histogram.o
+cc -O2 -fopenmp -Wall -Wextra -Werror -std=c11 test_histogram.c histogram.o -o test_histogram -lm
+cc -O2 -fopenmp -Wall -Wextra -Werror -std=c11 bench.c histogram.o -o bench -lm
+OMP_NUM_THREADS=1 ./test_histogram
+Checksum: 128499644.000000 (Expected: 128499644.000000)
+PASS
+OMP_NUM_THREADS=$(nproc) ./test_histogram
+Checksum: 128499644.000000 (Expected: 128499644.000000)
+PASS
+./bench 50000000 > bench.csv
+SPEEDUP_FLOOR=1.5 python3 check_bench.py bench.csv
+bench stats OK (6 threads points; best speedup 8.15)
+GATE PASS (runs/histogram/openmp/gemma-31b/basic)
+>>> basic: GATE PASS
+
+======== pydantic (gemma-31b histogram/openmp, agent 0dc8429e) ========
+histogram.c
+test_histogram.c
+[gate] build + unit test + benchmark-stats validation (-Werror)
+cc -O2 -fopenmp -Wall -Wextra -Werror -std=c11 -c histogram.c -o histogram.o
+cc -O2 -fopenmp -Wall -Wextra -Werror -std=c11 test_histogram.c histogram.o -o test_histogram -lm
+cc -O2 -fopenmp -Wall -Wextra -Werror -std=c11 bench.c histogram.o -o bench -lm
+OMP_NUM_THREADS=1 ./test_histogram
+Checksum: 128499644.000000 (Expected: 128499644.000000)
+PASS
+OMP_NUM_THREADS=$(nproc) ./test_histogram
+Checksum: 128499644.000000 (Expected: 128499644.000000)
+PASS
+./bench 50000000 > bench.csv
+SPEEDUP_FLOOR=1.5 python3 check_bench.py bench.csv
+bench stats OK (6 threads points; best speedup 7.92)
+GATE PASS (runs/histogram/openmp/gemma-31b/pydantic)
+>>> pydantic: GATE PASS
+
+======== langgraph (gemma-31b histogram/openmp, agent 74c1e67e) ========
+histogram.c
+test_histogram.c
+[gate] build + unit test + benchmark-stats validation (-Werror)
+cc -O2 -fopenmp -Wall -Wextra -Werror -std=c11 -c histogram.c -o histogram.o
+cc -O2 -fopenmp -Wall -Wextra -Werror -std=c11 test_histogram.c histogram.o -o test_histogram -lm
+cc -O2 -fopenmp -Wall -Wextra -Werror -std=c11 bench.c histogram.o -o bench -lm
+OMP_NUM_THREADS=1 ./test_histogram
+Checksum: 128499644.000000 (Expected: 128499644.000000)
+PASS
+OMP_NUM_THREADS=$(nproc) ./test_histogram
+Checksum: 128499644.000000 (Expected: 128499644.000000)
+PASS
+./bench 50000000 > bench.csv
+SPEEDUP_FLOOR=1.5 python3 check_bench.py bench.csv
+bench stats OK (6 threads points; best speedup 8.19)
+GATE PASS (runs/histogram/openmp/gemma-31b/langgraph)
+>>> langgraph: GATE PASS
+
+DONE

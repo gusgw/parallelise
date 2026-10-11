@@ -1,0 +1,49 @@
+======== basic (claude-sonnet-4.6 cg/cuda, agent 28d6e352) ========
+cg.cu
+test_cg.c
+[gate] build + unit test + benchmark-stats validation (-Werror)
+/opt/cuda/bin/nvcc -O2 -Xcompiler -Wall,-Wextra,-Werror -c cg.cu -o cg.o
+/opt/cuda/bin/nvcc -O2 -Xcompiler -Wall,-Wextra,-Werror test_cg.c cg.o -o test_cg -lm
+/opt/cuda/bin/nvcc -O2 -Xcompiler -Wall,-Wextra,-Werror bench.c cg.o -o bench -lm
+./test_cg
+checksum = 311942.8987  (expected 311942.8987, tol 0.001)
+1 checks, 0 failed
+./bench 1024 > bench.csv
+SPEEDUP_FLOOR=3 python3 check_bench_cuda.py bench.csv
+bench stats OK (gpu 22.1x over one CPU core)
+GATE PASS (runs/cg/cuda/claude-sonnet-4.6/basic)
+>>> basic: GATE PASS
+
+======== pydantic (claude-sonnet-4.6 cg/cuda, agent 0dc8429e) ========
+cg.cu
+test_cg.c
+[gate] build + unit test + benchmark-stats validation (-Werror)
+/opt/cuda/bin/nvcc -O2 -Xcompiler -Wall,-Wextra,-Werror -c cg.cu -o cg.o
+/opt/cuda/bin/nvcc -O2 -Xcompiler -Wall,-Wextra,-Werror test_cg.c cg.o -o test_cg -lm
+/opt/cuda/bin/nvcc -O2 -Xcompiler -Wall,-Wextra,-Werror bench.c cg.o -o bench -lm
+./test_cg
+checksum = 311942.8987  (want 311942.8987  tol 0.001)
+1 checks, 0 failed
+./bench 1024 > bench.csv
+SPEEDUP_FLOOR=3 python3 check_bench_cuda.py bench.csv
+bench stats OK (gpu 13.1x over one CPU core)
+GATE PASS (runs/cg/cuda/claude-sonnet-4.6/pydantic)
+>>> pydantic: GATE PASS
+
+======== langgraph (claude-sonnet-4.6 cg/cuda, agent 74c1e67e) ========
+cg.cu
+test_cg.c
+[gate] build + unit test + benchmark-stats validation (-Werror)
+/opt/cuda/bin/nvcc -O2 -Xcompiler -Wall,-Wextra,-Werror -c cg.cu -o cg.o
+/opt/cuda/bin/nvcc -O2 -Xcompiler -Wall,-Wextra,-Werror test_cg.c cg.o -o test_cg -lm
+/opt/cuda/bin/nvcc -O2 -Xcompiler -Wall,-Wextra,-Werror bench.c cg.o -o bench -lm
+./test_cg
+checksum = 311942.8987  (want 311942.8987, tol 0.001)
+1 checks, 0 failed
+./bench 1024 > bench.csv
+SPEEDUP_FLOOR=3 python3 check_bench_cuda.py bench.csv
+bench stats OK (gpu 8.2x over one CPU core)
+GATE PASS (runs/cg/cuda/claude-sonnet-4.6/langgraph)
+>>> langgraph: GATE PASS
+
+DONE

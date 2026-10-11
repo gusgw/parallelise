@@ -1,0 +1,49 @@
+======== basic (llama-3.3-70b histogram/openmp, agent 28d6e352) ========
+histogram.c
+test_histogram.c
+[gate] build + unit test + benchmark-stats validation (-Werror)
+cc -O2 -fopenmp -Wall -Wextra -Werror -std=c11 -c histogram.c -o histogram.o
+cc -O2 -fopenmp -Wall -Wextra -Werror -std=c11 test_histogram.c histogram.o -o test_histogram -lm
+cc -O2 -fopenmp -Wall -Wextra -Werror -std=c11 bench.c histogram.o -o bench -lm
+OMP_NUM_THREADS=1 ./test_histogram
+OK
+OMP_NUM_THREADS=$(nproc) ./test_histogram
+OK
+./bench 200000000 > bench.csv
+SPEEDUP_FLOOR=1.5 python3 check_bench.py bench.csv
+bench stats OK (6 threads points; best speedup 4.59)
+GATE PASS (runs/histogram/openmp/llama-3.3-70b/basic)
+>>> basic: GATE PASS
+
+======== pydantic (llama-3.3-70b histogram/openmp, agent 0dc8429e) ========
+histogram.c
+test_histogram.c
+[gate] build + unit test + benchmark-stats validation (-Werror)
+cc -O2 -fopenmp -Wall -Wextra -Werror -std=c11 -c histogram.c -o histogram.o
+cc -O2 -fopenmp -Wall -Wextra -Werror -std=c11 test_histogram.c histogram.o -o test_histogram -lm
+cc -O2 -fopenmp -Wall -Wextra -Werror -std=c11 bench.c histogram.o -o bench -lm
+OMP_NUM_THREADS=1 ./test_histogram
+OK
+OMP_NUM_THREADS=$(nproc) ./test_histogram
+ERROR: checksum mismatch
+make: *** [Makefile:25: check] Error 1
+>>> pydantic: GATE FAIL
+
+======== langgraph (llama-3.3-70b histogram/openmp, agent 74c1e67e) ========
+histogram.c
+test_histogram.c
+[gate] build + unit test + benchmark-stats validation (-Werror)
+cc -O2 -fopenmp -Wall -Wextra -Werror -std=c11 -c histogram.c -o histogram.o
+cc -O2 -fopenmp -Wall -Wextra -Werror -std=c11 test_histogram.c histogram.o -o test_histogram -lm
+cc -O2 -fopenmp -Wall -Wextra -Werror -std=c11 bench.c histogram.o -o bench -lm
+OMP_NUM_THREADS=1 ./test_histogram
+checksum = 128501622.000000
+OMP_NUM_THREADS=$(nproc) ./test_histogram
+checksum = 128501622.000000
+./bench 200000000 > bench.csv
+SPEEDUP_FLOOR=1.5 python3 check_bench.py bench.csv
+bench stats OK (6 threads points; best speedup 4.35)
+GATE PASS (runs/histogram/openmp/llama-3.3-70b/langgraph)
+>>> langgraph: GATE PASS
+
+DONE

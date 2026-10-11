@@ -1,0 +1,54 @@
+======== basic (llama-3.3-70b histogram/mpi, agent 28d6e352) ========
+histogram.c
+test_histogram.c
+[gate] build + unit test + benchmark-stats validation (-Werror)
+mpicc -O2 -Wall -Wextra -Werror -std=c11 -c histogram.c -o histogram.o
+mpicc -O2 -Wall -Wextra -Werror -std=c11 test_histogram.c histogram.o -o test_histogram -lm
+mpicc -O2 -Wall -Wextra -Werror -std=c11 bench.c histogram.o -o bench -lm
+mpirun --oversubscribe -np 1 ./test_histogram
+Checksum: 128499644.000000
+PASS
+mpirun --oversubscribe -np 4 ./test_histogram
+Checksum: 128499644.000000
+PASS
+bash bench_sweep.sh 50000000 > bench.csv
+SPEEDUP_FLOOR=1.5 python3 check_bench.py bench.csv
+bench stats OK (4 ranks points; best speedup 3.48)
+GATE PASS (runs/histogram/mpi/llama-3.3-70b/basic)
+>>> basic: GATE PASS
+
+======== pydantic (llama-3.3-70b histogram/mpi, agent 0dc8429e) ========
+histogram.c
+test_histogram.c
+[gate] build + unit test + benchmark-stats validation (-Werror)
+mpicc -O2 -Wall -Wextra -Werror -std=c11 -c histogram.c -o histogram.o
+mpicc -O2 -Wall -Wextra -Werror -std=c11 test_histogram.c histogram.o -o test_histogram -lm
+mpicc -O2 -Wall -Wextra -Werror -std=c11 bench.c histogram.o -o bench -lm
+mpirun --oversubscribe -np 1 ./test_histogram
+PASS
+mpirun --oversubscribe -np 4 ./test_histogram
+PASS
+bash bench_sweep.sh 50000000 > bench.csv
+SPEEDUP_FLOOR=1.5 python3 check_bench.py bench.csv
+bench stats OK (4 ranks points; best speedup 2.99)
+GATE PASS (runs/histogram/mpi/llama-3.3-70b/pydantic)
+>>> pydantic: GATE PASS
+
+======== langgraph (llama-3.3-70b histogram/mpi, agent 74c1e67e) ========
+histogram.c
+test_histogram.c
+[gate] build + unit test + benchmark-stats validation (-Werror)
+mpicc -O2 -Wall -Wextra -Werror -std=c11 -c histogram.c -o histogram.o
+mpicc -O2 -Wall -Wextra -Werror -std=c11 test_histogram.c histogram.o -o test_histogram -lm
+mpicc -O2 -Wall -Wextra -Werror -std=c11 bench.c histogram.o -o bench -lm
+mpirun --oversubscribe -np 1 ./test_histogram
+PASS: checksum = 128499644.000000
+mpirun --oversubscribe -np 4 ./test_histogram
+PASS: checksum = 128499644.000000
+bash bench_sweep.sh 50000000 > bench.csv
+SPEEDUP_FLOOR=1.5 python3 check_bench.py bench.csv
+bench stats OK (4 ranks points; best speedup 3.03)
+GATE PASS (runs/histogram/mpi/llama-3.3-70b/langgraph)
+>>> langgraph: GATE PASS
+
+DONE

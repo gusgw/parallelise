@@ -1,0 +1,14 @@
+{
+  "source": "matmul.ipynb",
+  "kernel": "matmul",
+  "params": {
+    "N": 256
+  },
+  "expected": {
+    "CHECKSUM": 704626403.0
+  },
+  "tol": 0.5,
+  "reorder_spread": {
+    "CHECKSUM": 0.0
+  }
+}

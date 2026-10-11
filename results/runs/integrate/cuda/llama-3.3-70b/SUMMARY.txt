@@ -1,0 +1,40 @@
+======== basic (llama-3.3-70b integrate/cuda, agent 28d6e352) ========
+integrate.cu
+test_integrate.c
+[gate] build + unit test + benchmark-stats validation (-Werror)
+/opt/cuda/bin/nvcc -O2 -Xcompiler -Wall,-Wextra,-Werror -c integrate.cu -o integrate.o
+/opt/cuda/bin/nvcc -O2 -Xcompiler -Wall,-Wextra,-Werror test_integrate.c integrate.o -o test_integrate -lm
+/opt/cuda/bin/nvcc -O2 -Xcompiler -Wall,-Wextra,-Werror bench.c integrate.o -o bench -lm
+./test_integrate
+PASS
+./bench 200000000 > bench.csv
+SPEEDUP_FLOOR=3 python3 check_bench_cuda.py bench.csv
+BENCH CHECK FAIL: gpu speedup 1.92x is below the floor 3.0x -- the kernel is probably not really running on the GPU
+make: *** [Makefile:27: check] Error 1
+>>> basic: GATE FAIL
+
+======== pydantic (llama-3.3-70b integrate/cuda, agent 0dc8429e) ========
+integrate.cu
+test_integrate.c
+[gate] build + unit test + benchmark-stats validation (-Werror)
+/opt/cuda/bin/nvcc -O2 -Xcompiler -Wall,-Wextra,-Werror -c integrate.cu -o integrate.o
+/opt/cuda/bin/nvcc -O2 -Xcompiler -Wall,-Wextra,-Werror test_integrate.c integrate.o -o test_integrate -lm
+/opt/cuda/bin/nvcc -O2 -Xcompiler -Wall,-Wextra,-Werror bench.c integrate.o -o bench -lm
+./test_integrate
+Test passed
+./bench 200000000 > bench.csv
+make: *** [Makefile:26: check] Error 1
+>>> pydantic: GATE FAIL
+
+======== langgraph (llama-3.3-70b integrate/cuda, agent 74c1e67e) ========
+integrate.cu
+test_integrate.c
+[gate] build + unit test + benchmark-stats validation (-Werror)
+/opt/cuda/bin/nvcc -O2 -Xcompiler -Wall,-Wextra,-Werror -c integrate.cu -o integrate.o
+/opt/cuda/bin/nvcc -O2 -Xcompiler -Wall,-Wextra,-Werror test_integrate.c integrate.o -o test_integrate -lm
+/opt/cuda/bin/nvcc -O2 -Xcompiler -Wall,-Wextra,-Werror bench.c integrate.o -o bench -lm
+./test_integrate
+make: *** [Makefile:25: check] Segmentation fault (core dumped)
+>>> langgraph: GATE FAIL
+
+DONE

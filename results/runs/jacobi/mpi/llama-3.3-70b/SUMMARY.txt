@@ -1,0 +1,93 @@
+======== basic (llama-3.3-70b jacobi/mpi, agent d9cbc526) ========
+jacobi.c
+test_jacobi.c
+[gate] build + unit test + benchmark-stats validation (-Werror)
+mpicc -O2 -Wall -Wextra -Werror -std=c11 -c jacobi.c -o jacobi.o
+mpicc -O2 -Wall -Wextra -Werror -std=c11 test_jacobi.c jacobi.o -o test_jacobi -lm
+mpicc -O2 -Wall -Wextra -Werror -std=c11 bench.c jacobi.o -o bench -lm
+mpirun --oversubscribe -np 1 ./test_jacobi
+checksum = 1016.140640
+mpirun --oversubscribe -np 4 ./test_jacobi
+test_jacobi: test_jacobi.c:36: main: Assertion `fabs(checksum - REF_CHECKSUM) < REF_TOL' failed.
+[host:2652785] *** Process received signal ***
+[host:2652785] Signal: Aborted (6)
+[host:2652785] Signal code:  (-6)
+[host:2652785] [ 0] /usr/lib/libc.so.6(+0x3e8f0) [0x7f6fb0c3e8f0]
+[host:2652785] [ 1] /usr/lib/libc.so.6(+0x9a29c) [0x7f6fb0c9a29c]
+[host:2652785] [ 2] /usr/lib/libc.so.6(gsignal+0x20) [0x7f6fb0c3e7d0]
+[host:2652785] [ 3] /usr/lib/libc.so.6(abort+0x26) [0x7f6fb0c25681]
+[host:2652785] [ 4] /usr/lib/libc.so.6(+0x26700) [0x7f6fb0c26700]
+[host:2652785] [ 5] /usr/lib/libc.so.6(__assert_fail+0xc2) [0x7f6fb0c36532]
+[host:2652785] [ 6] ./test_jacobi(+0x111f) [0x563ba8d1d11f]
+[host:2652785] [ 7] /usr/lib/libc.so.6(+0x27741) [0x7f6fb0c27741]
+[host:2652785] [ 8] /usr/lib/libc.so.6(__libc_start_main+0x89) [0x7f6fb0c27879]
+[host:2652785] [ 9] ./test_jacobi(+0x12f5) [0x563ba8d1d2f5]
+[host:2652785] *** End of error message ***
+--------------------------------------------------------------------------
+prterun noticed that process rank 0 with PID 2652785 on node host exited on
+signal 6 (Aborted).
+--------------------------------------------------------------------------
+make: *** [Makefile:23: check] Error 134
+>>> basic: GATE FAIL
+
+======== pydantic (llama-3.3-70b jacobi/mpi, agent 801d0971) ========
+jacobi.c
+test_jacobi.c
+[gate] build + unit test + benchmark-stats validation (-Werror)
+mpicc -O2 -Wall -Wextra -Werror -std=c11 -c jacobi.c -o jacobi.o
+mpicc -O2 -Wall -Wextra -Werror -std=c11 test_jacobi.c jacobi.o -o test_jacobi -lm
+mpicc -O2 -Wall -Wextra -Werror -std=c11 bench.c jacobi.o -o bench -lm
+mpirun --oversubscribe -np 1 ./test_jacobi
+test_jacobi: test_jacobi.c:32: main: Assertion `fabs(checksum - REF_CHECKSUM) < REF_TOL' failed.
+[host:2652855] *** Process received signal ***
+[host:2652855] Signal: Aborted (6)
+[host:2652855] Signal code:  (-6)
+[host:2652855] [ 0] /usr/lib/libc.so.6(+0x3e8f0) [0x7fbfaf63e8f0]
+[host:2652855] [ 1] /usr/lib/libc.so.6(+0x9a29c) [0x7fbfaf69a29c]
+[host:2652855] [ 2] /usr/lib/libc.so.6(gsignal+0x20) [0x7fbfaf63e7d0]
+[host:2652855] [ 3] /usr/lib/libc.so.6(abort+0x26) [0x7fbfaf625681]
+[host:2652855] [ 4] /usr/lib/libc.so.6(+0x26700) [0x7fbfaf626700]
+[host:2652855] [ 5] /usr/lib/libc.so.6(__assert_fail+0xc2) [0x7fbfaf636532]
+[host:2652855] [ 6] ./test_jacobi(+0x111f) [0x55f57ea4d11f]
+[host:2652855] [ 7] /usr/lib/libc.so.6(+0x27741) [0x7fbfaf627741]
+[host:2652855] [ 8] /usr/lib/libc.so.6(__libc_start_main+0x89) [0x7fbfaf627879]
+[host:2652855] [ 9] ./test_jacobi(+0x12b5) [0x55f57ea4d2b5]
+[host:2652855] *** End of error message ***
+--------------------------------------------------------------------------
+prterun noticed that process rank 0 with PID 2652855 on node host exited on
+signal 6 (Aborted).
+--------------------------------------------------------------------------
+make: *** [Makefile:22: check] Error 134
+>>> pydantic: GATE FAIL
+
+======== langgraph (llama-3.3-70b jacobi/mpi, agent 8e610f5a) ========
+jacobi.c
+test_jacobi.c
+[gate] build + unit test + benchmark-stats validation (-Werror)
+mpicc -O2 -Wall -Wextra -Werror -std=c11 -c jacobi.c -o jacobi.o
+mpicc -O2 -Wall -Wextra -Werror -std=c11 test_jacobi.c jacobi.o -o test_jacobi -lm
+mpicc -O2 -Wall -Wextra -Werror -std=c11 bench.c jacobi.o -o bench -lm
+mpirun --oversubscribe -np 1 ./test_jacobi
+test_jacobi: test_jacobi.c:33: main: Assertion `fabs(checksum - REF_CHECKSUM) < REF_TOL' failed.
+[host:2652897] *** Process received signal ***
+[host:2652897] Signal: Aborted (6)
+[host:2652897] Signal code:  (-6)
+[host:2652897] [ 0] /usr/lib/libc.so.6(+0x3e8f0) [0x7fc68643e8f0]
+[host:2652897] [ 1] /usr/lib/libc.so.6(+0x9a29c) [0x7fc68649a29c]
+[host:2652897] [ 2] /usr/lib/libc.so.6(gsignal+0x20) [0x7fc68643e7d0]
+[host:2652897] [ 3] /usr/lib/libc.so.6(abort+0x26) [0x7fc686425681]
+[host:2652897] [ 4] /usr/lib/libc.so.6(+0x26700) [0x7fc686426700]
+[host:2652897] [ 5] /usr/lib/libc.so.6(__assert_fail+0xc2) [0x7fc686436532]
+[host:2652897] [ 6] ./test_jacobi(+0x111f) [0x561ae001311f]
+[host:2652897] [ 7] /usr/lib/libc.so.6(+0x27741) [0x7fc686427741]
+[host:2652897] [ 8] /usr/lib/libc.so.6(__libc_start_main+0x89) [0x7fc686427879]
+[host:2652897] [ 9] ./test_jacobi(+0x12b5) [0x561ae00132b5]
+[host:2652897] *** End of error message ***
+--------------------------------------------------------------------------
+prterun noticed that process rank 0 with PID 2652897 on node host exited on
+signal 6 (Aborted).
+--------------------------------------------------------------------------
+make: *** [Makefile:22: check] Error 134
+>>> langgraph: GATE FAIL
+
+DONE

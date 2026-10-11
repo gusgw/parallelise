@@ -1,0 +1,62 @@
+======== basic (kimi-k2.5 matmul/openmp, agent d9cbc526) ========
+matmul.c
+test_matmul.c
+[gate] build + unit test + benchmark-stats validation (-Werror)
+cc -O2 -fopenmp -Wall -Wextra -Werror -std=c11 -c matmul.c -o matmul.o
+cc -O2 -fopenmp -Wall -Wextra -Werror -std=c11 test_matmul.c matmul.o -o test_matmul -lm
+cc -O2 -fopenmp -Wall -Wextra -Werror -std=c11 bench.c matmul.o -o bench -lm
+OMP_NUM_THREADS=1 ./test_matmul
+1 checks, 0 failed
+OMP_NUM_THREADS=$(nproc) ./test_matmul
+1 checks, 0 failed
+./bench 1024 > bench.csv
+python3 check_bench.py bench.csv
+bench stats OK (6 threads points; best speedup 5.91)
+GATE PASS (runs/matmul/openmp/kimi-k2.5/basic)
+>>> basic: GATE PASS
+
+======== pydantic (kimi-k2.5 matmul/openmp, agent 801d0971) ========
+matmul.c
+test_matmul.c
+[gate] build + unit test + benchmark-stats validation (-Werror)
+cc -O2 -fopenmp -Wall -Wextra -Werror -std=c11 -c matmul.c -o matmul.o
+cc -O2 -fopenmp -Wall -Wextra -Werror -std=c11 test_matmul.c matmul.o -o test_matmul -lm
+cc -O2 -fopenmp -Wall -Wextra -Werror -std=c11 bench.c matmul.o -o bench -lm
+OMP_NUM_THREADS=1 ./test_matmul
+checksum = 704626403.0
+expected = 704626403.0
+diff     = 0
+tol      = 0.5
+PASS
+OMP_NUM_THREADS=$(nproc) ./test_matmul
+checksum = 704626403.0
+expected = 704626403.0
+diff     = 0
+tol      = 0.5
+PASS
+./bench 1024 > bench.csv
+python3 check_bench.py bench.csv
+bench stats OK (6 threads points; best speedup 6.33)
+GATE PASS (runs/matmul/openmp/kimi-k2.5/pydantic)
+>>> pydantic: GATE PASS
+
+======== langgraph (kimi-k2.5 matmul/openmp, agent 8e610f5a) ========
+matmul.c
+test_matmul.c
+[gate] build + unit test + benchmark-stats validation (-Werror)
+cc -O2 -fopenmp -Wall -Wextra -Werror -std=c11 -c matmul.c -o matmul.o
+cc -O2 -fopenmp -Wall -Wextra -Werror -std=c11 test_matmul.c matmul.o -o test_matmul -lm
+cc -O2 -fopenmp -Wall -Wextra -Werror -std=c11 bench.c matmul.o -o bench -lm
+OMP_NUM_THREADS=1 ./test_matmul
+checksum = 704626403.0 (expected 704626403.0, diff = 0, tol = 0.5)
+TEST PASSED
+OMP_NUM_THREADS=$(nproc) ./test_matmul
+checksum = 704626403.0 (expected 704626403.0, diff = 0, tol = 0.5)
+TEST PASSED
+./bench 1024 > bench.csv
+python3 check_bench.py bench.csv
+bench stats OK (6 threads points; best speedup 5.63)
+GATE PASS (runs/matmul/openmp/kimi-k2.5/langgraph)
+>>> langgraph: GATE PASS
+
+DONE

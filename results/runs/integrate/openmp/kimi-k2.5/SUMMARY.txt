@@ -1,0 +1,52 @@
+======== basic (kimi-k2.5 integrate/openmp, agent d9cbc526) ========
+integrate.c
+test_integrate.c
+[gate] build + unit test + benchmark-stats validation (-Werror)
+cc -O2 -fopenmp -Wall -Wextra -Werror -std=c11 -c integrate.c -o integrate.o
+cc -O2 -fopenmp -Wall -Wextra -Werror -std=c11 test_integrate.c integrate.o -o test_integrate -lm
+cc -O2 -fopenmp -Wall -Wextra -Werror -std=c11 bench.c integrate.o -o bench -lm
+OMP_NUM_THREADS=1 ./test_integrate
+1 checks, 0 failed
+OMP_NUM_THREADS=$(nproc) ./test_integrate
+1 checks, 0 failed
+./bench 50000000 > bench.csv
+python3 check_bench.py bench.csv
+bench stats OK (6 threads points; best speedup 5.83)
+GATE PASS (runs/integrate/openmp/kimi-k2.5/basic)
+>>> basic: GATE PASS
+
+======== pydantic (kimi-k2.5 integrate/openmp, agent 801d0971) ========
+integrate.c
+test_integrate.c
+[gate] build + unit test + benchmark-stats validation (-Werror)
+cc -O2 -fopenmp -Wall -Wextra -Werror -std=c11 -c integrate.c -o integrate.o
+cc -O2 -fopenmp -Wall -Wextra -Werror -std=c11 test_integrate.c integrate.o -o test_integrate -lm
+cc -O2 -fopenmp -Wall -Wextra -Werror -std=c11 bench.c integrate.o -o bench -lm
+OMP_NUM_THREADS=1 ./test_integrate
+1 checks, 0 failed
+OMP_NUM_THREADS=$(nproc) ./test_integrate
+1 checks, 0 failed
+./bench 50000000 > bench.csv
+python3 check_bench.py bench.csv
+bench stats OK (6 threads points; best speedup 5.36)
+GATE PASS (runs/integrate/openmp/kimi-k2.5/pydantic)
+>>> pydantic: GATE PASS
+
+======== langgraph (kimi-k2.5 integrate/openmp, agent 8e610f5a) ========
+integrate.c
+test_integrate.c
+[gate] build + unit test + benchmark-stats validation (-Werror)
+cc -O2 -fopenmp -Wall -Wextra -Werror -std=c11 -c integrate.c -o integrate.o
+cc -O2 -fopenmp -Wall -Wextra -Werror -std=c11 test_integrate.c integrate.o -o test_integrate -lm
+cc -O2 -fopenmp -Wall -Wextra -Werror -std=c11 bench.c integrate.o -o bench -lm
+OMP_NUM_THREADS=1 ./test_integrate
+2 checks, 0 failed
+OMP_NUM_THREADS=$(nproc) ./test_integrate
+2 checks, 0 failed
+./bench 50000000 > bench.csv
+python3 check_bench.py bench.csv
+bench stats OK (6 threads points; best speedup 5.21)
+GATE PASS (runs/integrate/openmp/kimi-k2.5/langgraph)
+>>> langgraph: GATE PASS
+
+DONE

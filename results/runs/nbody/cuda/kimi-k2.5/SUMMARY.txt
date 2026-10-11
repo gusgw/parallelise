@@ -1,0 +1,50 @@
+======== basic (kimi-k2.5 nbody/cuda, agent 28d6e352) ========
+nbody.cu
+test_nbody.c
+[gate] build + unit test + benchmark-stats validation (-Werror)
+/opt/cuda/bin/nvcc -O2 -Xcompiler -Wall,-Wextra,-Werror -c nbody.cu -o nbody.o
+/opt/cuda/bin/nvcc -O2 -Xcompiler -Wall,-Wextra,-Werror test_nbody.c nbody.o -o test_nbody -lm
+/opt/cuda/bin/nvcc -O2 -Xcompiler -Wall,-Wextra,-Werror bench.c nbody.o -o bench -lm
+./test_nbody
+1 checks, 0 failed
+./bench 32768 > bench.csv
+SPEEDUP_FLOOR=3 python3 check_bench_cuda.py bench.csv
+bench stats OK (gpu 7.8x over one CPU core)
+GATE PASS (runs/nbody/cuda/kimi-k2.5/basic)
+>>> basic: GATE PASS
+
+======== pydantic (kimi-k2.5 nbody/cuda, agent 0dc8429e) ========
+nbody.cu
+test_nbody.c
+[gate] build + unit test + benchmark-stats validation (-Werror)
+/opt/cuda/bin/nvcc -O2 -Xcompiler -Wall,-Wextra,-Werror -c nbody.cu -o nbody.o
+/opt/cuda/bin/nvcc -O2 -Xcompiler -Wall,-Wextra,-Werror test_nbody.c nbody.o -o test_nbody -lm
+/opt/cuda/bin/nvcc -O2 -Xcompiler -Wall,-Wextra,-Werror bench.c nbody.o -o bench -lm
+./test_nbody
+Computed checksum: 1053395.4952812879346311
+Reference checksum: 1053395.4952812886331230
+Difference: 6.9849193096160889e-10
+Tolerance: 9.9999999999999995e-07
+PASS: checksum within tolerance
+./bench 32768 > bench.csv
+SPEEDUP_FLOOR=3 python3 check_bench_cuda.py bench.csv
+bench stats OK (gpu 7.0x over one CPU core)
+GATE PASS (runs/nbody/cuda/kimi-k2.5/pydantic)
+>>> pydantic: GATE PASS
+
+======== langgraph (kimi-k2.5 nbody/cuda, agent 74c1e67e) ========
+nbody.cu
+test_nbody.c
+[gate] build + unit test + benchmark-stats validation (-Werror)
+/opt/cuda/bin/nvcc -O2 -Xcompiler -Wall,-Wextra,-Werror -c nbody.cu -o nbody.o
+/opt/cuda/bin/nvcc -O2 -Xcompiler -Wall,-Wextra,-Werror test_nbody.c nbody.o -o test_nbody -lm
+/opt/cuda/bin/nvcc -O2 -Xcompiler -Wall,-Wextra,-Werror bench.c nbody.o -o bench -lm
+./test_nbody
+1 checks, 0 failed
+./bench 32768 > bench.csv
+SPEEDUP_FLOOR=3 python3 check_bench_cuda.py bench.csv
+bench stats OK (gpu 7.9x over one CPU core)
+GATE PASS (runs/nbody/cuda/kimi-k2.5/langgraph)
+>>> langgraph: GATE PASS
+
+DONE

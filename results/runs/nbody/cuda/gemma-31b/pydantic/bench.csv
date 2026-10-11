@@ -1,0 +1,3 @@
+impl,time_s,speedup
+serial,3.142099,1.0
+gpu,0.424294,7.405

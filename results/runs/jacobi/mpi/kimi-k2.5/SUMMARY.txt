@@ -1,0 +1,56 @@
+======== basic (kimi-k2.5 jacobi/mpi, agent d9cbc526) ========
+jacobi.c
+test_jacobi.c
+[gate] build + unit test + benchmark-stats validation (-Werror)
+mpicc -O2 -Wall -Wextra -Werror -std=c11 -c jacobi.c -o jacobi.o
+mpicc -O2 -Wall -Wextra -Werror -std=c11 test_jacobi.c jacobi.o -o test_jacobi -lm
+mpicc -O2 -Wall -Wextra -Werror -std=c11 bench.c jacobi.o -o bench -lm
+mpirun --oversubscribe -np 1 ./test_jacobi
+double free or corruption (!prev)
+[host:2617164] *** Process received signal ***
+[host:2617164] Signal: Aborted (6)
+[host:2617164] Signal code:  (-6)
+Abort is in progress...hit ctrl-c again to forcibly terminate
+
+>>> basic: GATE FAIL
+
+======== pydantic (kimi-k2.5 jacobi/mpi, agent 801d0971) ========
+jacobi.c
+test_jacobi.c
+[gate] build + unit test + benchmark-stats validation (-Werror)
+mpicc -O2 -Wall -Wextra -Werror -std=c11 -c jacobi.c -o jacobi.o
+mpicc -O2 -Wall -Wextra -Werror -std=c11 test_jacobi.c jacobi.o -o test_jacobi -lm
+mpicc -O2 -Wall -Wextra -Werror -std=c11 bench.c jacobi.o -o bench -lm
+mpirun --oversubscribe -np 1 ./test_jacobi
+make: *** [Makefile:22: check] Error 1
+checksum = 1016.140639925451
+1 checks, 0 failed
+mpirun --oversubscribe -np 4 ./test_jacobi
+checksum = 1016.140639925451
+1 checks, 0 failed
+bash bench_sweep.sh 1024 > bench.csv
+SPEEDUP_FLOOR=1.25 python3 check_bench.py bench.csv
+bench stats OK (6 ranks points; best speedup 3.09)
+GATE PASS (runs/jacobi/mpi/kimi-k2.5/pydantic)
+>>> pydantic: GATE PASS
+
+======== langgraph (kimi-k2.5 jacobi/mpi, agent 8e610f5a) ========
+jacobi.c
+test_jacobi.c
+[gate] build + unit test + benchmark-stats validation (-Werror)
+mpicc -O2 -Wall -Wextra -Werror -std=c11 -c jacobi.c -o jacobi.o
+mpicc -O2 -Wall -Wextra -Werror -std=c11 test_jacobi.c jacobi.o -o test_jacobi -lm
+mpicc -O2 -Wall -Wextra -Werror -std=c11 bench.c jacobi.o -o bench -lm
+mpirun --oversubscribe -np 1 ./test_jacobi
+Checksum: 1016.14063993 (expected 1016.14063993)
+1 checks, 0 failed
+mpirun --oversubscribe -np 4 ./test_jacobi
+Checksum: 1016.14063993 (expected 1016.14063993)
+1 checks, 0 failed
+bash bench_sweep.sh 1024 > bench.csv
+SPEEDUP_FLOOR=1.25 python3 check_bench.py bench.csv
+bench stats OK (6 ranks points; best speedup 2.41)
+GATE PASS (runs/jacobi/mpi/kimi-k2.5/langgraph)
+>>> langgraph: GATE PASS
+
+DONE

@@ -1,0 +1,56 @@
+======== basic (claude-sonnet-4.6 cg/mpi, agent 28d6e352) ========
+cg.c
+test_cg.c
+[gate] build + unit test + benchmark-stats validation (-Werror)
+mpicc -O2 -Wall -Wextra -Werror -std=c11 -c cg.c -o cg.o
+mpicc -O2 -Wall -Wextra -Werror -std=c11 test_cg.c cg.o -o test_cg -lm
+mpicc -O2 -Wall -Wextra -Werror -std=c11 bench.c cg.o -o bench -lm
+mpirun --oversubscribe -np 1 ./test_cg
+checksum = 311942.8987  (ref = 311942.8987  tol = 0.001)
+1 checks, 0 failed
+mpirun --oversubscribe -np 4 ./test_cg
+checksum = 311942.8987  (ref = 311942.8987  tol = 0.001)
+1 checks, 0 failed
+bash bench_sweep.sh 1024 > bench.csv
+SPEEDUP_FLOOR=1.25 python3 check_bench.py bench.csv
+bench stats OK (6 ranks points; best speedup 5.05)
+GATE PASS (runs/cg/mpi/claude-sonnet-4.6/basic)
+>>> basic: GATE PASS
+
+======== pydantic (claude-sonnet-4.6 cg/mpi, agent 0dc8429e) ========
+cg.c
+test_cg.c
+[gate] build + unit test + benchmark-stats validation (-Werror)
+mpicc -O2 -Wall -Wextra -Werror -std=c11 -c cg.c -o cg.o
+mpicc -O2 -Wall -Wextra -Werror -std=c11 test_cg.c cg.o -o test_cg -lm
+mpicc -O2 -Wall -Wextra -Werror -std=c11 bench.c cg.o -o bench -lm
+mpirun --oversubscribe -np 1 ./test_cg
+PASS  checksum=311942.8986866853  ref=311942.8986866846  err=6.98e-10  tol=1.00e-03
+mpirun --oversubscribe -np 4 ./test_cg
+PASS  checksum=311942.8986866824  ref=311942.8986866846  err=2.21e-09  tol=1.00e-03
+bash bench_sweep.sh 1024 > bench.csv
+SPEEDUP_FLOOR=1.25 python3 check_bench.py bench.csv
+bench stats OK (6 ranks points; best speedup 4.42)
+GATE PASS (runs/cg/mpi/claude-sonnet-4.6/pydantic)
+>>> pydantic: GATE PASS
+
+======== langgraph (claude-sonnet-4.6 cg/mpi, agent 74c1e67e) ========
+cg.c
+test_cg.c
+[gate] build + unit test + benchmark-stats validation (-Werror)
+mpicc -O2 -Wall -Wextra -Werror -std=c11 -c cg.c -o cg.o
+mpicc -O2 -Wall -Wextra -Werror -std=c11 test_cg.c cg.o -o test_cg -lm
+mpicc -O2 -Wall -Wextra -Werror -std=c11 bench.c cg.o -o bench -lm
+mpirun --oversubscribe -np 1 ./test_cg
+checksum = 311942.8987  (ref = 311942.8987  tol = 0.001)
+1 checks, 0 failed
+mpirun --oversubscribe -np 4 ./test_cg
+checksum = 311942.8987  (ref = 311942.8987  tol = 0.001)
+1 checks, 0 failed
+bash bench_sweep.sh 1024 > bench.csv
+SPEEDUP_FLOOR=1.25 python3 check_bench.py bench.csv
+bench stats OK (6 ranks points; best speedup 4.34)
+GATE PASS (runs/cg/mpi/claude-sonnet-4.6/langgraph)
+>>> langgraph: GATE PASS
+
+DONE

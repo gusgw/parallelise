@@ -1,0 +1,53 @@
+======== basic (gemma-31b nbody/cuda, agent 28d6e352) ========
+nbody.cu
+test_nbody.c
+[gate] build + unit test + benchmark-stats validation (-Werror)
+/opt/cuda/bin/nvcc -O2 -Xcompiler -Wall,-Wextra,-Werror -c nbody.cu -o nbody.o
+/opt/cuda/bin/nvcc -O2 -Xcompiler -Wall,-Wextra,-Werror test_nbody.c nbody.o -o test_nbody -lm
+/opt/cuda/bin/nvcc -O2 -Xcompiler -Wall,-Wextra,-Werror bench.c nbody.o -o bench -lm
+./test_nbody
+Checksum: 1053395.495281
+Reference: 1053395.495281
+PASS
+./bench 32768 > bench.csv
+SPEEDUP_FLOOR=3 python3 check_bench_cuda.py bench.csv
+bench stats OK (gpu 7.2x over one CPU core)
+GATE PASS (runs/nbody/cuda/gemma-31b/basic)
+>>> basic: GATE PASS
+
+======== pydantic (gemma-31b nbody/cuda, agent 0dc8429e) ========
+nbody.cu
+test_nbody.c
+[gate] build + unit test + benchmark-stats validation (-Werror)
+/opt/cuda/bin/nvcc -O2 -Xcompiler -Wall,-Wextra,-Werror -c nbody.cu -o nbody.o
+/opt/cuda/bin/nvcc -O2 -Xcompiler -Wall,-Wextra,-Werror test_nbody.c nbody.o -o test_nbody -lm
+/opt/cuda/bin/nvcc -O2 -Xcompiler -Wall,-Wextra,-Werror bench.c nbody.o -o bench -lm
+./test_nbody
+Checksum: 1053395.495281
+Reference: 1053395.495281
+PASS
+./bench 32768 > bench.csv
+SPEEDUP_FLOOR=3 python3 check_bench_cuda.py bench.csv
+bench stats OK (gpu 7.4x over one CPU core)
+GATE PASS (runs/nbody/cuda/gemma-31b/pydantic)
+>>> pydantic: GATE PASS
+
+======== langgraph (gemma-31b nbody/cuda, agent 74c1e67e) ========
+nbody.cu
+test_nbody.c
+[gate] build + unit test + benchmark-stats validation (-Werror)
+/opt/cuda/bin/nvcc -O2 -Xcompiler -Wall,-Wextra,-Werror -c nbody.cu -o nbody.o
+/opt/cuda/bin/nvcc -O2 -Xcompiler -Wall,-Wextra,-Werror test_nbody.c nbody.o -o test_nbody -lm
+/opt/cuda/bin/nvcc -O2 -Xcompiler -Wall,-Wextra,-Werror bench.c nbody.o -o bench -lm
+./test_nbody
+Checksum: 1053395.4952812879
+Reference: 1053395.4952812886
+Diff: 6.9849193096e-10
+PASS
+./bench 32768 > bench.csv
+SPEEDUP_FLOOR=3 python3 check_bench_cuda.py bench.csv
+bench stats OK (gpu 7.7x over one CPU core)
+GATE PASS (runs/nbody/cuda/gemma-31b/langgraph)
+>>> langgraph: GATE PASS
+
+DONE

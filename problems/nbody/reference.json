@@ -1,0 +1,14 @@
+{
+  "source": "nbody.ipynb",
+  "kernel": "nbody",
+  "params": {
+    "N": 1024
+  },
+  "expected": {
+    "CHECKSUM": 1053395.4952812886
+  },
+  "tol": 1e-06,
+  "reorder_spread": {
+    "CHECKSUM": 1.3969838619232178e-09
+  }
+}

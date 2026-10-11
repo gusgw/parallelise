@@ -1,0 +1,16 @@
+{
+  "source": "integrate.ipynb",
+  "kernel": "integrate",
+  "params": {
+    "A": 0.0,
+    "B": 1.0,
+    "N_TEST": 10000000
+  },
+  "expected": {
+    "EXPECTED": 3.141592653589794
+  },
+  "tol": 1e-06,
+  "reorder_spread": {
+    "EXPECTED": 1.1688428003253648e-12
+  }
+}

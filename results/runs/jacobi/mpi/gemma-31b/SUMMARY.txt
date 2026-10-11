@@ -1,0 +1,62 @@
+======== basic (gemma-31b jacobi/mpi, agent d9cbc526) ========
+jacobi.c
+test_jacobi.c
+[gate] build + unit test + benchmark-stats validation (-Werror)
+mpicc -O2 -Wall -Wextra -Werror -std=c11 -c jacobi.c -o jacobi.o
+mpicc -O2 -Wall -Wextra -Werror -std=c11 test_jacobi.c jacobi.o -o test_jacobi -lm
+mpicc -O2 -Wall -Wextra -Werror -std=c11 bench.c jacobi.o -o bench -lm
+mpirun --oversubscribe -np 1 ./test_jacobi
+Checksum: 1016.140640, Expected: 1016.140640, Diff: 0.000000
+Test PASSED
+mpirun --oversubscribe -np 4 ./test_jacobi
+Abort is in progress...hit ctrl-c again to forcibly terminate
+
+>>> basic: GATE FAIL
+
+======== pydantic (gemma-31b jacobi/mpi, agent 801d0971) ========
+jacobi.c
+test_jacobi.c
+[gate] build + unit test + benchmark-stats validation (-Werror)
+mpicc -O2 -Wall -Wextra -Werror -std=c11 -c jacobi.c -o jacobi.o
+jacobi.c: In function 'jacobi':
+jacobi.c:73:23: error: passing argument 5 of 'MPI_Allgatherv' from incompatible pointer type [-Wincompatible-pointer-types]
+   73 |                    u, recv_counts, displs, MPI_DOUBLE, MPI_COMM_WORLD);
+      |                       ^~~~~~~~~~~
+      |                       |
+      |                       long int *
+In file included from jacobi.c:1:
+/usr/include/mpi.h:1398:60: note: expected 'const int *' but argument is of type 'long int *'
+ 1398 |                                   void *recvbuf, const int recvcounts[], const int displs[], MPI_Datatype recvtype,
+      |                                                  ~~~~~~~~~~^~~~~~~~~~~~
+jacobi.c:73:36: error: passing argument 6 of 'MPI_Allgatherv' from incompatible pointer type [-Wincompatible-pointer-types]
+   73 |                    u, recv_counts, displs, MPI_DOUBLE, MPI_COMM_WORLD);
+      |                                    ^~~~~~
+      |                                    |
+      |                                    long int *
+/usr/include/mpi.h:1398:84: note: expected 'const int *' but argument is of type 'long int *'
+ 1398 |                                   void *recvbuf, const int recvcounts[], const int displs[], MPI_Datatype recvtype,
+      |                                                                          ~~~~~~~~~~^~~~~~~~
+make: *** [Makefile:11: jacobi.o] Error 1
+>>> pydantic: GATE FAIL
+
+======== langgraph (gemma-31b jacobi/mpi, agent 8e610f5a) ========
+jacobi.c
+test_jacobi.c
+[gate] build + unit test + benchmark-stats validation (-Werror)
+mpicc -O2 -Wall -Wextra -Werror -std=c11 -c jacobi.c -o jacobi.o
+mpicc -O2 -Wall -Wextra -Werror -std=c11 test_jacobi.c jacobi.o -o test_jacobi -lm
+mpicc -O2 -Wall -Wextra -Werror -std=c11 bench.c jacobi.o -o bench -lm
+make: *** [Makefile:23: check] Error 1
+mpirun --oversubscribe -np 1 ./test_jacobi
+Checksum: 1016.140640 (Expected: 1016.140640, Tol: 0.001000)
+PASSED
+mpirun --oversubscribe -np 4 ./test_jacobi
+Checksum: 1016.140640 (Expected: 1016.140640, Tol: 0.001000)
+PASSED
+bash bench_sweep.sh 1024 > bench.csv
+SPEEDUP_FLOOR=1.25 python3 check_bench.py bench.csv
+bench stats OK (6 ranks points; best speedup 3.39)
+GATE PASS (runs/jacobi/mpi/gemma-31b/langgraph)
+>>> langgraph: GATE PASS
+
+DONE

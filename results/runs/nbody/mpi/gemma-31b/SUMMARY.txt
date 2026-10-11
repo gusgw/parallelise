@@ -1,0 +1,58 @@
+======== basic (gemma-31b nbody/mpi, agent 28d6e352) ========
+nbody.c
+test_nbody.c
+[gate] build + unit test + benchmark-stats validation (-Werror)
+mpicc -O2 -Wall -Wextra -Werror -std=c11 -c nbody.c -o nbody.o
+mpicc -O2 -Wall -Wextra -Werror -std=c11 test_nbody.c nbody.o -o test_nbody -lm
+mpicc -O2 -Wall -Wextra -Werror -std=c11 bench.c nbody.o -o bench -lm
+mpirun --oversubscribe -np 1 ./test_nbody
+Checksum: 1053395.495281 (Expected: 1053395.495281, Tol: 0.000001)
+Test passed!
+mpirun --oversubscribe -np 4 ./test_nbody
+Checksum: 1053395.495281 (Expected: 1053395.495281, Tol: 0.000001)
+Test passed!
+bash bench_sweep.sh 32768 > bench.csv
+python3 check_bench.py bench.csv
+bench stats OK (6 ranks points; best speedup 5.50)
+GATE PASS (runs/nbody/mpi/gemma-31b/basic)
+>>> basic: GATE PASS
+
+======== pydantic (gemma-31b nbody/mpi, agent 0dc8429e) ========
+nbody.c
+test_nbody.c
+[gate] build + unit test + benchmark-stats validation (-Werror)
+mpicc -O2 -Wall -Wextra -Werror -std=c11 -c nbody.c -o nbody.o
+mpicc -O2 -Wall -Wextra -Werror -std=c11 test_nbody.c nbody.o -o test_nbody -lm
+mpicc -O2 -Wall -Wextra -Werror -std=c11 bench.c nbody.o -o bench -lm
+mpirun --oversubscribe -np 1 ./test_nbody
+Checksum: 1053395.495281 (Expected: 1053395.495281, Tol: 0.000001)
+Test passed!
+mpirun --oversubscribe -np 4 ./test_nbody
+Checksum: 1053395.495281 (Expected: 1053395.495281, Tol: 0.000001)
+Test passed!
+bash bench_sweep.sh 32768 > bench.csv
+python3 check_bench.py bench.csv
+bench stats OK (6 ranks points; best speedup 5.07)
+GATE PASS (runs/nbody/mpi/gemma-31b/pydantic)
+>>> pydantic: GATE PASS
+
+======== langgraph (gemma-31b nbody/mpi, agent 74c1e67e) ========
+nbody.c
+test_nbody.c
+[gate] build + unit test + benchmark-stats validation (-Werror)
+mpicc -O2 -Wall -Wextra -Werror -std=c11 -c nbody.c -o nbody.o
+mpicc -O2 -Wall -Wextra -Werror -std=c11 test_nbody.c nbody.o -o test_nbody -lm
+mpicc -O2 -Wall -Wextra -Werror -std=c11 bench.c nbody.o -o bench -lm
+mpirun --oversubscribe -np 1 ./test_nbody
+Checksum: 1053395.495281 (Expected: 1053395.495281, Tol: 0.000001)
+Test passed!
+mpirun --oversubscribe -np 4 ./test_nbody
+Checksum: 1053395.495281 (Expected: 1053395.495281, Tol: 0.000001)
+Test passed!
+bash bench_sweep.sh 32768 > bench.csv
+python3 check_bench.py bench.csv
+bench stats OK (6 ranks points; best speedup 4.74)
+GATE PASS (runs/nbody/mpi/gemma-31b/langgraph)
+>>> langgraph: GATE PASS
+
+DONE

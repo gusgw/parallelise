@@ -1,0 +1,34 @@
+#include "integrate.h"
+
+#include <mpi.h>
+
+/* Midpoint-rule estimate of the integral of 4/(1+x^2) over [a, b] using n
+ * subintervals; on [0, 1] this converges to pi.
+ *
+ * This is a COLLECTIVE routine: every MPI rank calls it together and it
+ * returns the SAME full integral on every rank. The work is split across
+ * ranks and combined with MPI_Allreduce. */
+double integrate(double a, double b, long n)
+{
+    int rank, size;
+    MPI_Comm_rank(MPI_COMM_WORLD, &rank);
+    MPI_Comm_size(MPI_COMM_WORLD, &size);
+
+    double h = (b - a) / (double)n;
+
+    /* Compute local range: each rank gets a block of iterations */
+    long lo = n * rank / size;
+    long hi = n * (rank + 1) / size;
+
+    double local_sum = 0.0;
+    for (long i = lo; i < hi; i++) {
+        double x = a + (i + 0.5) * h;
+        local_sum += 4.0 / (1.0 + x * x);
+    }
+
+    /* Combine partial sums from all ranks */
+    double global_sum = 0.0;
+    MPI_Allreduce(&local_sum, &global_sum, 1, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
+
+    return global_sum * h;
+}

@@ -1,0 +1,15 @@
+{
+  "source": "reservoir.ipynb",
+  "kernel": "reservoir",
+  "params": {
+    "N": 1000000,
+    "CAP": 20000
+  },
+  "expected": {
+    "CHECKSUM": 1925369016.0
+  },
+  "tol": 0.5,
+  "reorder_spread": {
+    "CHECKSUM": 0.0
+  }
+}

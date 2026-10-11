@@ -1,0 +1,58 @@
+======== basic (claude-sonnet-4.6 jacobi/mpi, agent d9cbc526) ========
+jacobi.c
+test_jacobi.c
+[gate] build + unit test + benchmark-stats validation (-Werror)
+mpicc -O2 -Wall -Wextra -Werror -std=c11 -c jacobi.c -o jacobi.o
+mpicc -O2 -Wall -Wextra -Werror -std=c11 test_jacobi.c jacobi.o -o test_jacobi -lm
+mpicc -O2 -Wall -Wextra -Werror -std=c11 bench.c jacobi.o -o bench -lm
+mpirun --oversubscribe -np 1 ./test_jacobi
+checksum = 1016.140639925  (ref = 1016.140639925, tol = 0.001)
+1 checks, 0 failed
+mpirun --oversubscribe -np 4 ./test_jacobi
+checksum = 1016.140639925  (ref = 1016.140639925, tol = 0.001)
+1 checks, 0 failed
+bash bench_sweep.sh 1024 > bench.csv
+SPEEDUP_FLOOR=1.25 python3 check_bench.py bench.csv
+bench stats OK (6 ranks points; best speedup 2.94)
+GATE PASS (runs/jacobi/mpi/claude-sonnet-4.6/basic)
+>>> basic: GATE PASS
+
+======== pydantic (claude-sonnet-4.6 jacobi/mpi, agent 801d0971) ========
+jacobi.c
+test_jacobi.c
+[gate] build + unit test + benchmark-stats validation (-Werror)
+mpicc -O2 -Wall -Wextra -Werror -std=c11 -c jacobi.c -o jacobi.o
+mpicc -O2 -Wall -Wextra -Werror -std=c11 test_jacobi.c jacobi.o -o test_jacobi -lm
+mpicc -O2 -Wall -Wextra -Werror -std=c11 bench.c jacobi.o -o bench -lm
+mpirun --oversubscribe -np 1 ./test_jacobi
+checksum = 1016.140639925  (ref = 1016.140639925, tol = 0.001)
+1 checks, 0 failed
+mpirun --oversubscribe -np 4 ./test_jacobi
+checksum = 1016.140639925  (ref = 1016.140639925, tol = 0.001)
+1 checks, 0 failed
+bash bench_sweep.sh 1024 > bench.csv
+SPEEDUP_FLOOR=1.25 python3 check_bench.py bench.csv
+bench stats OK (6 ranks points; best speedup 3.53)
+GATE PASS (runs/jacobi/mpi/claude-sonnet-4.6/pydantic)
+>>> pydantic: GATE PASS
+
+======== langgraph (claude-sonnet-4.6 jacobi/mpi, agent 8e610f5a) ========
+jacobi.c
+test_jacobi.c
+[gate] build + unit test + benchmark-stats validation (-Werror)
+mpicc -O2 -Wall -Wextra -Werror -std=c11 -c jacobi.c -o jacobi.o
+mpicc -O2 -Wall -Wextra -Werror -std=c11 test_jacobi.c jacobi.o -o test_jacobi -lm
+mpicc -O2 -Wall -Wextra -Werror -std=c11 bench.c jacobi.o -o bench -lm
+mpirun --oversubscribe -np 1 ./test_jacobi
+checksum = 1016.140639925  (ref = 1016.140639925, tol = 0.001)
+2 checks, 0 failed
+mpirun --oversubscribe -np 4 ./test_jacobi
+checksum = 1016.140639925  (ref = 1016.140639925, tol = 0.001)
+2 checks, 0 failed
+bash bench_sweep.sh 1024 > bench.csv
+SPEEDUP_FLOOR=1.25 python3 check_bench.py bench.csv
+bench stats OK (6 ranks points; best speedup 3.03)
+GATE PASS (runs/jacobi/mpi/claude-sonnet-4.6/langgraph)
+>>> langgraph: GATE PASS
+
+DONE

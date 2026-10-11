@@ -1,0 +1,50 @@
+======== basic (llama-3.3-70b integrate/openmp, agent d9cbc526) ========
+integrate.c
+test_integrate.c
+[gate] build + unit test + benchmark-stats validation (-Werror)
+cc -O2 -fopenmp -Wall -Wextra -Werror -std=c11 -c integrate.c -o integrate.o
+cc -O2 -fopenmp -Wall -Wextra -Werror -std=c11 test_integrate.c integrate.o -o test_integrate -lm
+cc -O2 -fopenmp -Wall -Wextra -Werror -std=c11 bench.c integrate.o -o bench -lm
+OMP_NUM_THREADS=1 ./test_integrate
+OMP_NUM_THREADS=$(nproc) ./test_integrate
+./bench 50000000 > bench.csv
+python3 check_bench.py bench.csv
+bench stats OK (6 threads points; best speedup 4.98)
+GATE PASS (runs/integrate/openmp/llama-3.3-70b/basic)
+>>> basic: GATE PASS
+
+======== pydantic (llama-3.3-70b integrate/openmp, agent 801d0971) ========
+integrate.c
+test_integrate.c
+[gate] build + unit test + benchmark-stats validation (-Werror)
+cc -O2 -fopenmp -Wall -Wextra -Werror -std=c11 -c integrate.c -o integrate.o
+cc -O2 -fopenmp -Wall -Wextra -Werror -std=c11 test_integrate.c integrate.o -o test_integrate -lm
+cc -O2 -fopenmp -Wall -Wextra -Werror -std=c11 bench.c integrate.o -o bench -lm
+OMP_NUM_THREADS=1 ./test_integrate
+approx = 3.141593  error = 0.000000
+PASS
+OMP_NUM_THREADS=$(nproc) ./test_integrate
+approx = 3.141593  error = 0.000000
+PASS
+./bench 50000000 > bench.csv
+python3 check_bench.py bench.csv
+bench stats OK (6 threads points; best speedup 5.60)
+GATE PASS (runs/integrate/openmp/llama-3.3-70b/pydantic)
+>>> pydantic: GATE PASS
+
+======== langgraph (llama-3.3-70b integrate/openmp, agent 8e610f5a) ========
+integrate.c
+test_integrate.c
+[gate] build + unit test + benchmark-stats validation (-Werror)
+cc -O2 -fopenmp -Wall -Wextra -Werror -std=c11 -c integrate.c -o integrate.o
+cc -O2 -fopenmp -Wall -Wextra -Werror -std=c11 test_integrate.c integrate.o -o test_integrate -lm
+cc -O2 -fopenmp -Wall -Wextra -Werror -std=c11 bench.c integrate.o -o bench -lm
+OMP_NUM_THREADS=1 ./test_integrate
+OMP_NUM_THREADS=$(nproc) ./test_integrate
+./bench 50000000 > bench.csv
+python3 check_bench.py bench.csv
+bench stats OK (5 threads points; best speedup 1.63)
+GATE PASS (runs/integrate/openmp/llama-3.3-70b/langgraph)
+>>> langgraph: GATE PASS
+
+DONE

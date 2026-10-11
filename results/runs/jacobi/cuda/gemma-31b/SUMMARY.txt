@@ -1,0 +1,52 @@
+======== basic (gemma-31b jacobi/cuda, agent 28d6e352) ========
+jacobi.cu
+test_jacobi.c
+[gate] build + unit test + benchmark-stats validation (-Werror)
+/opt/cuda/bin/nvcc -O2 -Xcompiler -Wall,-Wextra,-Werror -c jacobi.cu -o jacobi.o
+/opt/cuda/bin/nvcc -O2 -Xcompiler -Wall,-Wextra,-Werror test_jacobi.c jacobi.o -o test_jacobi -lm
+/opt/cuda/bin/nvcc -O2 -Xcompiler -Wall,-Wextra,-Werror bench.c jacobi.o -o bench -lm
+./test_jacobi
+Checksum: 1016.140640
+Reference: 1016.140640
+PASSED
+./bench 1024 > bench.csv
+SPEEDUP_FLOOR=3 python3 check_bench_cuda.py bench.csv
+bench stats OK (gpu 7.4x over one CPU core)
+GATE PASS (runs/jacobi/cuda/gemma-31b/basic)
+>>> basic: GATE PASS
+
+======== pydantic (gemma-31b jacobi/cuda, agent 0dc8429e) ========
+jacobi.cu
+test_jacobi.c
+[gate] build + unit test + benchmark-stats validation (-Werror)
+/opt/cuda/bin/nvcc -O2 -Xcompiler -Wall,-Wextra,-Werror -c jacobi.cu -o jacobi.o
+/opt/cuda/bin/nvcc -O2 -Xcompiler -Wall,-Wextra,-Werror test_jacobi.c jacobi.o -o test_jacobi -lm
+/opt/cuda/bin/nvcc -O2 -Xcompiler -Wall,-Wextra,-Werror bench.c jacobi.o -o bench -lm
+./test_jacobi
+Checksum: 1016.140640
+Reference: 1016.140640
+PASS
+./bench 1024 > bench.csv
+SPEEDUP_FLOOR=3 python3 check_bench_cuda.py bench.csv
+bench stats OK (gpu 7.5x over one CPU core)
+GATE PASS (runs/jacobi/cuda/gemma-31b/pydantic)
+>>> pydantic: GATE PASS
+
+======== langgraph (gemma-31b jacobi/cuda, agent 74c1e67e) ========
+jacobi.cu
+test_jacobi.c
+[gate] build + unit test + benchmark-stats validation (-Werror)
+/opt/cuda/bin/nvcc -O2 -Xcompiler -Wall,-Wextra,-Werror -c jacobi.cu -o jacobi.o
+/opt/cuda/bin/nvcc -O2 -Xcompiler -Wall,-Wextra,-Werror test_jacobi.c jacobi.o -o test_jacobi -lm
+/opt/cuda/bin/nvcc -O2 -Xcompiler -Wall,-Wextra,-Werror bench.c jacobi.o -o bench -lm
+./test_jacobi
+Checksum: 1016.140640
+Reference: 1016.140640
+PASSED
+./bench 1024 > bench.csv
+SPEEDUP_FLOOR=3 python3 check_bench_cuda.py bench.csv
+bench stats OK (gpu 7.5x over one CPU core)
+GATE PASS (runs/jacobi/cuda/gemma-31b/langgraph)
+>>> langgraph: GATE PASS
+
+DONE

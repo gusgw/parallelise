@@ -1,0 +1,60 @@
+======== basic (gemma-31b matmul/mpi, agent d9cbc526) ========
+matmul.c
+test_matmul.c
+[gate] build + unit test + benchmark-stats validation (-Werror)
+mpicc -O2 -Wall -Wextra -Werror -std=c11 -c matmul.c -o matmul.o
+mpicc -O2 -Wall -Wextra -Werror -std=c11 test_matmul.c matmul.o -o test_matmul -lm
+mpicc -O2 -Wall -Wextra -Werror -std=c11 bench.c matmul.o -o bench -lm
+mpirun --oversubscribe -np 1 ./test_matmul
+Checksum: 704626403.000000 (Expected: 704626403.000000)
+PASS
+mpirun --oversubscribe -np 4 ./test_matmul
+Checksum: 704626403.000000 (Expected: 704626403.000000)
+PASS
+bash bench_sweep.sh 1024 > bench.csv
+python3 check_bench.py bench.csv
+bench stats OK (6 ranks points; best speedup 3.61)
+GATE PASS (runs/matmul/mpi/gemma-31b/basic)
+>>> basic: GATE PASS
+
+======== pydantic (gemma-31b matmul/mpi, agent 801d0971) ========
+matmul.c
+test_matmul.c
+[gate] build + unit test + benchmark-stats validation (-Werror)
+mpicc -O2 -Wall -Wextra -Werror -std=c11 -c matmul.c -o matmul.o
+mpicc -O2 -Wall -Wextra -Werror -std=c11 test_matmul.c matmul.o -o test_matmul -lm
+mpicc -O2 -Wall -Wextra -Werror -std=c11 bench.c matmul.o -o bench -lm
+mpirun --oversubscribe -np 1 ./test_matmul
+Checksum: 704626403.000000, Expected: 704626403.000000, Diff: 0.000000
+PASS
+mpirun --oversubscribe -np 4 ./test_matmul
+Checksum: 704626403.000000, Expected: 704626403.000000, Diff: 0.000000
+PASS
+bash bench_sweep.sh 1024 > bench.csv
+python3 check_bench.py bench.csv
+bench stats OK (6 ranks points; best speedup 2.72)
+GATE PASS (runs/matmul/mpi/gemma-31b/pydantic)
+>>> pydantic: GATE PASS
+
+======== langgraph (gemma-31b matmul/mpi, agent 8e610f5a) ========
+matmul.c
+test_matmul.c
+[gate] build + unit test + benchmark-stats validation (-Werror)
+mpicc -O2 -Wall -Wextra -Werror -std=c11 -c matmul.c -o matmul.o
+mpicc -O2 -Wall -Wextra -Werror -std=c11 test_matmul.c matmul.o -o test_matmul -lm
+mpicc -O2 -Wall -Wextra -Werror -std=c11 bench.c matmul.o -o bench -lm
+mpirun --oversubscribe -np 1 ./test_matmul
+Expected checksum: 704626403.000000
+Actual checksum:   704626403.000000
+PASS
+mpirun --oversubscribe -np 4 ./test_matmul
+Expected checksum: 704626403.000000
+Actual checksum:   704626403.000000
+PASS
+bash bench_sweep.sh 1024 > bench.csv
+python3 check_bench.py bench.csv
+bench stats OK (6 ranks points; best speedup 3.22)
+GATE PASS (runs/matmul/mpi/gemma-31b/langgraph)
+>>> langgraph: GATE PASS
+
+DONE

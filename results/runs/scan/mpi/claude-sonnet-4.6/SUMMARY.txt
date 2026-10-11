@@ -1,0 +1,54 @@
+======== basic (claude-sonnet-4.6 scan/mpi, agent 28d6e352) ========
+scan.c
+test_scan.c
+[gate] build + unit test + benchmark-stats validation (-Werror)
+mpicc -O2 -Wall -Wextra -Werror -std=c11 -c scan.c -o scan.o
+mpicc -O2 -Wall -Wextra -Werror -std=c11 test_scan.c scan.o -o test_scan -lm
+mpicc -O2 -Wall -Wextra -Werror -std=c11 bench.c scan.o -o bench -lm
+mpirun --oversubscribe -np 1 ./test_scan
+checksum = 3178464.289  (expected 3178464.289, tol 0.0001)
+1 checks, 0 failed
+mpirun --oversubscribe -np 4 ./test_scan
+checksum = 3178464.289  (expected 3178464.289, tol 0.0001)
+1 checks, 0 failed
+bash bench_sweep.sh 134217728 > bench.csv
+SPEEDUP_FLOOR=1.25 python3 check_bench.py bench.csv
+bench stats OK (6 ranks points; best speedup 3.05)
+GATE PASS (runs/scan/mpi/claude-sonnet-4.6/basic)
+>>> basic: GATE PASS
+
+======== pydantic (claude-sonnet-4.6 scan/mpi, agent 0dc8429e) ========
+scan.c
+test_scan.c
+[gate] build + unit test + benchmark-stats validation (-Werror)
+mpicc -O2 -Wall -Wextra -Werror -std=c11 -c scan.c -o scan.o
+mpicc -O2 -Wall -Wextra -Werror -std=c11 test_scan.c scan.o -o test_scan -lm
+mpicc -O2 -Wall -Wextra -Werror -std=c11 bench.c scan.o -o bench -lm
+mpirun --oversubscribe -np 1 ./test_scan
+10 checks, 0 failed
+mpirun --oversubscribe -np 4 ./test_scan
+9 checks, 0 failed
+bash bench_sweep.sh 134217728 > bench.csv
+SPEEDUP_FLOOR=1.25 python3 check_bench.py bench.csv
+bench stats OK (6 ranks points; best speedup 4.13)
+GATE PASS (runs/scan/mpi/claude-sonnet-4.6/pydantic)
+>>> pydantic: GATE PASS
+
+======== langgraph (claude-sonnet-4.6 scan/mpi, agent 74c1e67e) ========
+scan.c
+test_scan.c
+[gate] build + unit test + benchmark-stats validation (-Werror)
+mpicc -O2 -Wall -Wextra -Werror -std=c11 -c scan.c -o scan.o
+mpicc -O2 -Wall -Wextra -Werror -std=c11 test_scan.c scan.o -o test_scan -lm
+mpicc -O2 -Wall -Wextra -Werror -std=c11 bench.c scan.o -o bench -lm
+mpirun --oversubscribe -np 1 ./test_scan
+8 checks, 0 failed
+mpirun --oversubscribe -np 4 ./test_scan
+4 checks, 0 failed
+bash bench_sweep.sh 134217728 > bench.csv
+SPEEDUP_FLOOR=1.25 python3 check_bench.py bench.csv
+bench stats OK (6 ranks points; best speedup 3.77)
+GATE PASS (runs/scan/mpi/claude-sonnet-4.6/langgraph)
+>>> langgraph: GATE PASS
+
+DONE

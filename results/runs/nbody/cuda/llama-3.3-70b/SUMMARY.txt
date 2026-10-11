@@ -1,0 +1,44 @@
+======== basic (llama-3.3-70b nbody/cuda, agent 28d6e352) ========
+nbody.cu
+test_nbody.c
+[gate] build + unit test + benchmark-stats validation (-Werror)
+/opt/cuda/bin/nvcc -O2 -Xcompiler -Wall,-Wextra,-Werror -c nbody.cu -o nbody.o
+/opt/cuda/bin/nvcc -O2 -Xcompiler -Wall,-Wextra,-Werror test_nbody.c nbody.o -o test_nbody -lm
+/opt/cuda/bin/nvcc -O2 -Xcompiler -Wall,-Wextra,-Werror bench.c nbody.o -o bench -lm
+./test_nbody
+OK
+./bench 32768 > bench.csv
+SPEEDUP_FLOOR=3 python3 check_bench_cuda.py bench.csv
+bench stats OK (gpu 7.4x over one CPU core)
+GATE PASS (runs/nbody/cuda/llama-3.3-70b/basic)
+>>> basic: GATE PASS
+
+======== pydantic (llama-3.3-70b nbody/cuda, agent 0dc8429e) ========
+nbody.cu
+test_nbody.c
+[gate] build + unit test + benchmark-stats validation (-Werror)
+/opt/cuda/bin/nvcc -O2 -Xcompiler -Wall,-Wextra,-Werror -c nbody.cu -o nbody.o
+/opt/cuda/bin/nvcc -O2 -Xcompiler -Wall,-Wextra,-Werror test_nbody.c nbody.o -o test_nbody -lm
+/opt/cuda/bin/nvcc -O2 -Xcompiler -Wall,-Wextra,-Werror bench.c nbody.o -o bench -lm
+./test_nbody
+Checksum match: 1053395.495281
+./bench 32768 > bench.csv
+SPEEDUP_FLOOR=3 python3 check_bench_cuda.py bench.csv
+bench stats OK (gpu 7.0x over one CPU core)
+GATE PASS (runs/nbody/cuda/llama-3.3-70b/pydantic)
+>>> pydantic: GATE PASS
+
+======== langgraph (llama-3.3-70b nbody/cuda, agent 74c1e67e) ========
+nbody.cu
+test_nbody.c
+[gate] build + unit test + benchmark-stats validation (-Werror)
+/opt/cuda/bin/nvcc -O2 -Xcompiler -Wall,-Wextra,-Werror -c nbody.cu -o nbody.o
+/opt/cuda/bin/nvcc -O2 -Xcompiler -Wall,-Wextra,-Werror test_nbody.c nbody.o -o test_nbody -lm
+/opt/cuda/bin/nvcc -O2 -Xcompiler -Wall,-Wextra,-Werror bench.c nbody.o -o bench -lm
+./test_nbody
+Checksum match: 1053395.653250
+./bench 32768 > bench.csv
+make: *** [Makefile:26: check] Error 1
+>>> langgraph: GATE FAIL
+
+DONE

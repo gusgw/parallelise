@@ -1,0 +1,60 @@
+======== basic (claude-sonnet-4.6 nbody/openmp, agent 28d6e352) ========
+nbody.c
+test_nbody.c
+[gate] build + unit test + benchmark-stats validation (-Werror)
+cc -O2 -fopenmp -Wall -Wextra -Werror -std=c11 -c nbody.c -o nbody.o
+cc -O2 -fopenmp -Wall -Wextra -Werror -std=c11 test_nbody.c nbody.o -o test_nbody -lm
+cc -O2 -fopenmp -Wall -Wextra -Werror -std=c11 bench.c nbody.o -o bench -lm
+OMP_NUM_THREADS=1 ./test_nbody
+checksum      = 1053395.4952812879
+ref checksum  = 1053395.4952812886
+relative error= 6.631e-16  (tol = 1.000e-06)
+PASS
+OMP_NUM_THREADS=$(nproc) ./test_nbody
+checksum      = 1053395.4952812879
+ref checksum  = 1053395.4952812886
+relative error= 6.631e-16  (tol = 1.000e-06)
+PASS
+./bench 32768 > bench.csv
+python3 check_bench.py bench.csv
+bench stats OK (6 threads points; best speedup 11.35)
+GATE PASS (runs/nbody/openmp/claude-sonnet-4.6/basic)
+>>> basic: GATE PASS
+
+======== pydantic (claude-sonnet-4.6 nbody/openmp, agent 0dc8429e) ========
+nbody.c
+test_nbody.c
+[gate] build + unit test + benchmark-stats validation (-Werror)
+cc -O2 -fopenmp -Wall -Wextra -Werror -std=c11 -c nbody.c -o nbody.o
+cc -O2 -fopenmp -Wall -Wextra -Werror -std=c11 test_nbody.c nbody.o -o test_nbody -lm
+cc -O2 -fopenmp -Wall -Wextra -Werror -std=c11 bench.c nbody.o -o bench -lm
+OMP_NUM_THREADS=1 ./test_nbody
+  checksum = 1053395.495  (expected 1053395.495, tol 1.1)
+6 checks, 0 failed
+OMP_NUM_THREADS=$(nproc) ./test_nbody
+  checksum = 1053395.495  (expected 1053395.495, tol 1.1)
+6 checks, 0 failed
+./bench 32768 > bench.csv
+python3 check_bench.py bench.csv
+bench stats OK (6 threads points; best speedup 5.65)
+GATE PASS (runs/nbody/openmp/claude-sonnet-4.6/pydantic)
+>>> pydantic: GATE PASS
+
+======== langgraph (claude-sonnet-4.6 nbody/openmp, agent 74c1e67e) ========
+nbody.c
+test_nbody.c
+[gate] build + unit test + benchmark-stats validation (-Werror)
+cc -O2 -fopenmp -Wall -Wextra -Werror -std=c11 -c nbody.c -o nbody.o
+cc -O2 -fopenmp -Wall -Wextra -Werror -std=c11 test_nbody.c nbody.o -o test_nbody -lm
+cc -O2 -fopenmp -Wall -Wextra -Werror -std=c11 bench.c nbody.o -o bench -lm
+OMP_NUM_THREADS=1 ./test_nbody
+8 checks, 0 failed
+OMP_NUM_THREADS=$(nproc) ./test_nbody
+8 checks, 0 failed
+./bench 32768 > bench.csv
+python3 check_bench.py bench.csv
+bench stats OK (6 threads points; best speedup 4.08)
+GATE PASS (runs/nbody/openmp/claude-sonnet-4.6/langgraph)
+>>> langgraph: GATE PASS
+
+DONE

@@ -1,0 +1,52 @@
+======== basic (llama-3.3-70b cg/openmp, agent 28d6e352) ========
+cg.c
+test_cg.c
+[gate] build + unit test + benchmark-stats validation (-Werror)
+cc -O2 -fopenmp -Wall -Wextra -Werror -std=c11 -c cg.c -o cg.o
+cc -O2 -fopenmp -Wall -Wextra -Werror -std=c11 test_cg.c cg.o -o test_cg -lm
+cc -O2 -fopenmp -Wall -Wextra -Werror -std=c11 bench.c cg.o -o bench -lm
+OMP_NUM_THREADS=1 ./test_cg
+Checksum match
+OMP_NUM_THREADS=$(nproc) ./test_cg
+Checksum match
+./bench 1024 > bench.csv
+SPEEDUP_FLOOR=1.25 python3 check_bench.py bench.csv
+bench stats OK (6 threads points; best speedup 5.71)
+GATE PASS (runs/cg/openmp/llama-3.3-70b/basic)
+>>> basic: GATE PASS
+
+======== pydantic (llama-3.3-70b cg/openmp, agent 0dc8429e) ========
+cg.c
+test_cg.c
+[gate] build + unit test + benchmark-stats validation (-Werror)
+cc -O2 -fopenmp -Wall -Wextra -Werror -std=c11 -c cg.c -o cg.o
+cc -O2 -fopenmp -Wall -Wextra -Werror -std=c11 test_cg.c cg.o -o test_cg -lm
+cc -O2 -fopenmp -Wall -Wextra -Werror -std=c11 bench.c cg.o -o bench -lm
+OMP_NUM_THREADS=1 ./test_cg
+Checksum match: 311942.898687
+OMP_NUM_THREADS=$(nproc) ./test_cg
+Checksum match: 311942.898687
+./bench 1024 > bench.csv
+SPEEDUP_FLOOR=1.25 python3 check_bench.py bench.csv
+bench stats OK (6 threads points; best speedup 5.26)
+GATE PASS (runs/cg/openmp/llama-3.3-70b/pydantic)
+>>> pydantic: GATE PASS
+
+======== langgraph (llama-3.3-70b cg/openmp, agent 74c1e67e) ========
+cg.c
+test_cg.c
+[gate] build + unit test + benchmark-stats validation (-Werror)
+cc -O2 -fopenmp -Wall -Wextra -Werror -std=c11 -c cg.c -o cg.o
+cc -O2 -fopenmp -Wall -Wextra -Werror -std=c11 test_cg.c cg.o -o test_cg -lm
+cc -O2 -fopenmp -Wall -Wextra -Werror -std=c11 bench.c cg.o -o bench -lm
+OMP_NUM_THREADS=1 ./test_cg
+OK
+OMP_NUM_THREADS=$(nproc) ./test_cg
+OK
+./bench 1024 > bench.csv
+SPEEDUP_FLOOR=1.25 python3 check_bench.py bench.csv
+BENCH CHECK FAIL: no CSV header line starting with 'threads' or 'ranks'
+make: *** [Makefile:27: check] Error 1
+>>> langgraph: GATE FAIL
+
+DONE

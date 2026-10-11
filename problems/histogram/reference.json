@@ -1,0 +1,15 @@
+{
+  "source": "histogram.ipynb",
+  "kernel": "histogram",
+  "params": {
+    "N": 1000000,
+    "NBINS": 256
+  },
+  "expected": {
+    "CHECKSUM": 128499644.0
+  },
+  "tol": 0.5,
+  "reorder_spread": {
+    "CHECKSUM": 0.0
+  }
+}

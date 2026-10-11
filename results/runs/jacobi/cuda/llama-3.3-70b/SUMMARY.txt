@@ -1,0 +1,43 @@
+======== basic (llama-3.3-70b jacobi/cuda, agent 28d6e352) ========
+jacobi.cu
+test_jacobi.c
+[gate] build + unit test + benchmark-stats validation (-Werror)
+/opt/cuda/bin/nvcc -O2 -Xcompiler -Wall,-Wextra,-Werror -c jacobi.cu -o jacobi.o
+/opt/cuda/bin/nvcc -O2 -Xcompiler -Wall,-Wextra,-Werror test_jacobi.c jacobi.o -o test_jacobi -lm
+/opt/cuda/bin/nvcc -O2 -Xcompiler -Wall,-Wextra,-Werror bench.c jacobi.o -o bench -lm
+./test_jacobi
+checksum = 1016.140640
+./bench 1024 > bench.csv
+SPEEDUP_FLOOR=3 python3 check_bench_cuda.py bench.csv
+bench stats OK (gpu 4.1x over one CPU core)
+GATE PASS (runs/jacobi/cuda/llama-3.3-70b/basic)
+>>> basic: GATE PASS
+
+======== pydantic (llama-3.3-70b jacobi/cuda, agent 0dc8429e) ========
+jacobi.cu
+test_jacobi.c
+[gate] build + unit test + benchmark-stats validation (-Werror)
+/opt/cuda/bin/nvcc -O2 -Xcompiler -Wall,-Wextra,-Werror -c jacobi.cu -o jacobi.o
+/opt/cuda/bin/nvcc -O2 -Xcompiler -Wall,-Wextra,-Werror test_jacobi.c jacobi.o -o test_jacobi -lm
+/opt/cuda/bin/nvcc -O2 -Xcompiler -Wall,-Wextra,-Werror bench.c jacobi.o -o bench -lm
+./test_jacobi
+Checksum: 1016.140640
+./bench 1024 > bench.csv
+SPEEDUP_FLOOR=3 python3 check_bench_cuda.py bench.csv
+bench stats OK (gpu 3.8x over one CPU core)
+GATE PASS (runs/jacobi/cuda/llama-3.3-70b/pydantic)
+>>> pydantic: GATE PASS
+
+======== langgraph (llama-3.3-70b jacobi/cuda, agent 74c1e67e) ========
+jacobi.cu
+test_jacobi.c
+[gate] build + unit test + benchmark-stats validation (-Werror)
+/opt/cuda/bin/nvcc -O2 -Xcompiler -Wall,-Wextra,-Werror -c jacobi.cu -o jacobi.o
+/opt/cuda/bin/nvcc -O2 -Xcompiler -Wall,-Wextra,-Werror test_jacobi.c jacobi.o -o test_jacobi -lm
+/opt/cuda/bin/nvcc -O2 -Xcompiler -Wall,-Wextra,-Werror bench.c jacobi.o -o bench -lm
+./test_jacobi
+ERROR: checksum mismatch
+make: *** [Makefile:25: check] Error 1
+>>> langgraph: GATE FAIL
+
+DONE

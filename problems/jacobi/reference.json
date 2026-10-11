@@ -1,0 +1,15 @@
+{
+  "source": "jacobi.ipynb",
+  "kernel": "jacobi",
+  "params": {
+    "N": 128,
+    "ITERS": 200
+  },
+  "expected": {
+    "CHECKSUM": 1016.1406399254716
+  },
+  "tol": 0.001,
+  "reorder_spread": {
+    "CHECKSUM": 2.0804691303055733e-11
+  }
+}

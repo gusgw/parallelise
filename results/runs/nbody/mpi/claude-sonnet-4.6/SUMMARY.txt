@@ -1,0 +1,56 @@
+======== basic (claude-sonnet-4.6 nbody/mpi, agent 28d6e352) ========
+nbody.c
+test_nbody.c
+[gate] build + unit test + benchmark-stats validation (-Werror)
+mpicc -O2 -Wall -Wextra -Werror -std=c11 -c nbody.c -o nbody.o
+mpicc -O2 -Wall -Wextra -Werror -std=c11 test_nbody.c nbody.o -o test_nbody -lm
+mpicc -O2 -Wall -Wextra -Werror -std=c11 bench.c nbody.o -o bench -lm
+mpirun --oversubscribe -np 1 ./test_nbody
+checksum = 1053395.495  (ref = 1053395.495, tol = 1.0534)
+1 checks, 0 failed
+mpirun --oversubscribe -np 4 ./test_nbody
+checksum = 1053395.495  (ref = 1053395.495, tol = 1.0534)
+1 checks, 0 failed
+bash bench_sweep.sh 32768 > bench.csv
+python3 check_bench.py bench.csv
+bench stats OK (6 ranks points; best speedup 4.00)
+GATE PASS (runs/nbody/mpi/claude-sonnet-4.6/basic)
+>>> basic: GATE PASS
+
+======== pydantic (claude-sonnet-4.6 nbody/mpi, agent 0dc8429e) ========
+nbody.c
+test_nbody.c
+[gate] build + unit test + benchmark-stats validation (-Werror)
+mpicc -O2 -Wall -Wextra -Werror -std=c11 -c nbody.c -o nbody.o
+mpicc -O2 -Wall -Wextra -Werror -std=c11 test_nbody.c nbody.o -o test_nbody -lm
+mpicc -O2 -Wall -Wextra -Werror -std=c11 bench.c nbody.o -o bench -lm
+mpirun --oversubscribe -np 1 ./test_nbody
+1 checks, 0 failed
+mpirun --oversubscribe -np 4 ./test_nbody
+1 checks, 0 failed
+bash bench_sweep.sh 32768 > bench.csv
+python3 check_bench.py bench.csv
+bench stats OK (6 ranks points; best speedup 3.82)
+GATE PASS (runs/nbody/mpi/claude-sonnet-4.6/pydantic)
+>>> pydantic: GATE PASS
+
+======== langgraph (claude-sonnet-4.6 nbody/mpi, agent 74c1e67e) ========
+nbody.c
+test_nbody.c
+[gate] build + unit test + benchmark-stats validation (-Werror)
+mpicc -O2 -Wall -Wextra -Werror -std=c11 -c nbody.c -o nbody.o
+mpicc -O2 -Wall -Wextra -Werror -std=c11 test_nbody.c nbody.o -o test_nbody -lm
+mpicc -O2 -Wall -Wextra -Werror -std=c11 bench.c nbody.o -o bench -lm
+mpirun --oversubscribe -np 1 ./test_nbody
+checksum = 1053395.495  (ref = 1053395.495)
+1 checks, 0 failed
+mpirun --oversubscribe -np 4 ./test_nbody
+checksum = 1053395.495  (ref = 1053395.495)
+1 checks, 0 failed
+bash bench_sweep.sh 32768 > bench.csv
+python3 check_bench.py bench.csv
+bench stats OK (6 ranks points; best speedup 3.68)
+GATE PASS (runs/nbody/mpi/claude-sonnet-4.6/langgraph)
+>>> langgraph: GATE PASS
+
+DONE

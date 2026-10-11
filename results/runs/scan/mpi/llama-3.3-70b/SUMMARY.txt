@@ -1,0 +1,82 @@
+======== basic (llama-3.3-70b scan/mpi, agent 28d6e352) ========
+scan.c
+test_scan.c
+[gate] build + unit test + benchmark-stats validation (-Werror)
+mpicc -O2 -Wall -Wextra -Werror -std=c11 -c scan.c -o scan.o
+mpicc -O2 -Wall -Wextra -Werror -std=c11 test_scan.c scan.o -o test_scan -lm
+mpicc -O2 -Wall -Wextra -Werror -std=c11 bench.c scan.o -o bench -lm
+mpirun --oversubscribe -np 1 ./test_scan
+checksum = 3178464.288823
+mpirun --oversubscribe -np 4 ./test_scan
+checksum = 3178464.288822
+bash bench_sweep.sh 134217728 > bench.csv
+SPEEDUP_FLOOR=1.25 python3 check_bench.py bench.csv
+bench stats OK (6 ranks points; best speedup 1.33)
+GATE PASS (runs/scan/mpi/llama-3.3-70b/basic)
+>>> basic: GATE PASS
+
+======== pydantic (llama-3.3-70b scan/mpi, agent 0dc8429e) ========
+scan.c
+test_scan.c
+[gate] build + unit test + benchmark-stats validation (-Werror)
+mpicc -O2 -Wall -Wextra -Werror -std=c11 -c scan.c -o scan.o
+mpicc -O2 -Wall -Wextra -Werror -std=c11 test_scan.c scan.o -o test_scan -lm
+mpicc -O2 -Wall -Wextra -Werror -std=c11 bench.c scan.o -o bench -lm
+mpirun --oversubscribe -np 1 ./test_scan
+Checksum matches reference: 3178464.288823
+mpirun --oversubscribe -np 4 ./test_scan
+test_scan: test_scan.c:33: main: Assertion `fabs(checksum - REF_CHECKSUM) <= REF_TOL' failed.
+[host:3007145] *** Process received signal ***
+[host:3007145] Signal: Aborted (6)
+[host:3007145] Signal code:  (-6)
+[host:3007145] [ 0] /usr/lib/libc.so.6(+0x3e8f0) [0x7f5fb4e3e8f0]
+[host:3007145] [ 1] /usr/lib/libc.so.6(+0x9a29c) [0x7f5fb4e9a29c]
+[host:3007145] [ 2] /usr/lib/libc.so.6(gsignal+0x20) [0x7f5fb4e3e7d0]
+[host:3007145] [ 3] /usr/lib/libc.so.6(abort+0x26) [0x7f5fb4e25681]
+[host:3007145] [ 4] /usr/lib/libc.so.6(+0x26700) [0x7f5fb4e26700]
+[host:3007145] [ 5] /usr/lib/libc.so.6(__assert_fail+0xc2) [0x7f5fb4e36532]
+[host:3007145] [ 6] ./test_scan(+0x10ff) [0x55876e38e0ff]
+[host:3007145] [ 7] /usr/lib/libc.so.6(+0x27741) [0x7f5fb4e27741]
+[host:3007145] [ 8] /usr/lib/libc.so.6(__libc_start_main+0x89) [0x7f5fb4e27879]
+[host:3007145] [ 9] ./test_scan(+0x12c5) [0x55876e38e2c5]
+[host:3007145] *** End of error message ***
+--------------------------------------------------------------------------
+prterun noticed that process rank 0 with PID 3007145 on node host exited on
+signal 6 (Aborted).
+--------------------------------------------------------------------------
+make: *** [Makefile:24: check] Error 134
+>>> pydantic: GATE FAIL
+
+======== langgraph (llama-3.3-70b scan/mpi, agent 74c1e67e) ========
+scan.c
+test_scan.c
+[gate] build + unit test + benchmark-stats validation (-Werror)
+mpicc -O2 -Wall -Wextra -Werror -std=c11 -c scan.c -o scan.o
+mpicc -O2 -Wall -Wextra -Werror -std=c11 test_scan.c scan.o -o test_scan -lm
+mpicc -O2 -Wall -Wextra -Werror -std=c11 bench.c scan.o -o bench -lm
+mpirun --oversubscribe -np 1 ./test_scan
+checksum = 3178464.288823
+mpirun --oversubscribe -np 4 ./test_scan
+test_scan: test_scan.c:31: main: Assertion `fabs(checksum - 3178464.2888227087) < 1e-4' failed.
+[host:3007215] *** Process received signal ***
+[host:3007215] Signal: Aborted (6)
+[host:3007215] Signal code:  (-6)
+[host:3007215] [ 0] /usr/lib/libc.so.6(+0x3e8f0) [0x7f54f503e8f0]
+[host:3007215] [ 1] /usr/lib/libc.so.6(+0x9a29c) [0x7f54f509a29c]
+[host:3007215] [ 2] /usr/lib/libc.so.6(gsignal+0x20) [0x7f54f503e7d0]
+[host:3007215] [ 3] /usr/lib/libc.so.6(abort+0x26) [0x7f54f5025681]
+[host:3007215] [ 4] /usr/lib/libc.so.6(+0x26700) [0x7f54f5026700]
+[host:3007215] [ 5] /usr/lib/libc.so.6(__assert_fail+0xc2) [0x7f54f5036532]
+[host:3007215] [ 6] ./test_scan(+0x10ff) [0x563db7f840ff]
+[host:3007215] [ 7] /usr/lib/libc.so.6(+0x27741) [0x7f54f5027741]
+[host:3007215] [ 8] /usr/lib/libc.so.6(__libc_start_main+0x89) [0x7f54f5027879]
+[host:3007215] [ 9] ./test_scan(+0x12a5) [0x563db7f842a5]
+[host:3007215] *** End of error message ***
+--------------------------------------------------------------------------
+prterun noticed that process rank 0 with PID 3007215 on node host exited on
+signal 6 (Aborted).
+--------------------------------------------------------------------------
+make: *** [Makefile:24: check] Error 134
+>>> langgraph: GATE FAIL
+
+DONE

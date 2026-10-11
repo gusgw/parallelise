@@ -1,0 +1,58 @@
+======== basic (claude-sonnet-4.6 jacobi/openmp, agent d9cbc526) ========
+jacobi.c
+test_jacobi.c
+[gate] build + unit test + benchmark-stats validation (-Werror)
+cc -O2 -fopenmp -Wall -Wextra -Werror -std=c11 -c jacobi.c -o jacobi.o
+cc -O2 -fopenmp -Wall -Wextra -Werror -std=c11 test_jacobi.c jacobi.o -o test_jacobi -lm
+cc -O2 -fopenmp -Wall -Wextra -Werror -std=c11 bench.c jacobi.o -o bench -lm
+OMP_NUM_THREADS=1 ./test_jacobi
+=== jacobi unit tests ===
+13 checks, 0 failed
+OMP_NUM_THREADS=$(nproc) ./test_jacobi
+=== jacobi unit tests ===
+13 checks, 0 failed
+./bench 1024 > bench.csv
+SPEEDUP_FLOOR=1.25 python3 check_bench.py bench.csv
+bench stats OK (6 threads points; best speedup 1.69)
+GATE PASS (runs/jacobi/openmp/claude-sonnet-4.6/basic)
+>>> basic: GATE PASS
+
+======== pydantic (claude-sonnet-4.6 jacobi/openmp, agent 801d0971) ========
+jacobi.c
+test_jacobi.c
+[gate] build + unit test + benchmark-stats validation (-Werror)
+cc -O2 -fopenmp -Wall -Wextra -Werror -std=c11 -c jacobi.c -o jacobi.o
+cc -O2 -fopenmp -Wall -Wextra -Werror -std=c11 test_jacobi.c jacobi.o -o test_jacobi -lm
+cc -O2 -fopenmp -Wall -Wextra -Werror -std=c11 bench.c jacobi.o -o bench -lm
+OMP_NUM_THREADS=1 ./test_jacobi
+=== jacobi unit tests ===
+8 checks, 0 failed
+OMP_NUM_THREADS=$(nproc) ./test_jacobi
+=== jacobi unit tests ===
+8 checks, 0 failed
+./bench 1024 > bench.csv
+SPEEDUP_FLOOR=1.25 python3 check_bench.py bench.csv
+bench stats OK (6 threads points; best speedup 1.67)
+GATE PASS (runs/jacobi/openmp/claude-sonnet-4.6/pydantic)
+>>> pydantic: GATE PASS
+
+======== langgraph (claude-sonnet-4.6 jacobi/openmp, agent 8e610f5a) ========
+jacobi.c
+test_jacobi.c
+[gate] build + unit test + benchmark-stats validation (-Werror)
+cc -O2 -fopenmp -Wall -Wextra -Werror -std=c11 -c jacobi.c -o jacobi.o
+cc -O2 -fopenmp -Wall -Wextra -Werror -std=c11 test_jacobi.c jacobi.o -o test_jacobi -lm
+cc -O2 -fopenmp -Wall -Wextra -Werror -std=c11 bench.c jacobi.o -o bench -lm
+OMP_NUM_THREADS=1 ./test_jacobi
+=== test_jacobi ===
+72 checks, 0 failed
+OMP_NUM_THREADS=$(nproc) ./test_jacobi
+=== test_jacobi ===
+72 checks, 0 failed
+./bench 1024 > bench.csv
+SPEEDUP_FLOOR=1.25 python3 check_bench.py bench.csv
+bench stats OK (6 threads points; best speedup 4.00)
+GATE PASS (runs/jacobi/openmp/claude-sonnet-4.6/langgraph)
+>>> langgraph: GATE PASS
+
+DONE

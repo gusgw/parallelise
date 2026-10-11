@@ -1,0 +1,60 @@
+======== basic (gemma-31b scan/mpi, agent 28d6e352) ========
+scan.c
+test_scan.c
+[gate] build + unit test + benchmark-stats validation (-Werror)
+mpicc -O2 -Wall -Wextra -Werror -std=c11 -c scan.c -o scan.o
+mpicc -O2 -Wall -Wextra -Werror -std=c11 test_scan.c scan.o -o test_scan -lm
+mpicc -O2 -Wall -Wextra -Werror -std=c11 bench.c scan.o -o bench -lm
+mpirun --oversubscribe -np 1 ./test_scan
+Actual checksum: 3178464.288823
+Reference checksum: 3178464.288823
+PASS
+mpirun --oversubscribe -np 4 ./test_scan
+Actual checksum: 3178464.288822
+Reference checksum: 3178464.288823
+PASS
+bash bench_sweep.sh 33554432 > bench.csv
+SPEEDUP_FLOOR=1.25 python3 check_bench.py bench.csv
+bench stats OK (4 ranks points; best speedup 3.06)
+GATE PASS (runs/scan/mpi/gemma-31b/basic)
+>>> basic: GATE PASS
+
+======== pydantic (gemma-31b scan/mpi, agent 0dc8429e) ========
+scan.c
+test_scan.c
+[gate] build + unit test + benchmark-stats validation (-Werror)
+mpicc -O2 -Wall -Wextra -Werror -std=c11 -c scan.c -o scan.o
+mpicc -O2 -Wall -Wextra -Werror -std=c11 test_scan.c scan.o -o test_scan -lm
+mpicc -O2 -Wall -Wextra -Werror -std=c11 bench.c scan.o -o bench -lm
+mpirun --oversubscribe -np 1 ./test_scan
+Checksum: 3178464.288823, Expected: 3178464.288823, Diff: 0.000000
+PASS
+mpirun --oversubscribe -np 4 ./test_scan
+Checksum: 3178464.288822, Expected: 3178464.288823, Diff: 0.000001
+PASS
+bash bench_sweep.sh 33554432 > bench.csv
+SPEEDUP_FLOOR=1.25 python3 check_bench.py bench.csv
+bench stats OK (4 ranks points; best speedup 3.48)
+GATE PASS (runs/scan/mpi/gemma-31b/pydantic)
+>>> pydantic: GATE PASS
+
+======== langgraph (gemma-31b scan/mpi, agent 74c1e67e) ========
+scan.c
+test_scan.c
+[gate] build + unit test + benchmark-stats validation (-Werror)
+mpicc -O2 -Wall -Wextra -Werror -std=c11 -c scan.c -o scan.o
+mpicc -O2 -Wall -Wextra -Werror -std=c11 test_scan.c scan.o -o test_scan -lm
+mpicc -O2 -Wall -Wextra -Werror -std=c11 bench.c scan.o -o bench -lm
+mpirun --oversubscribe -np 1 ./test_scan
+Checksum: 3178464.288823 (Expected: 3178464.288823)
+PASSED
+mpirun --oversubscribe -np 4 ./test_scan
+Checksum: 3178464.288822 (Expected: 3178464.288823)
+PASSED
+bash bench_sweep.sh 33554432 > bench.csv
+SPEEDUP_FLOOR=1.25 python3 check_bench.py bench.csv
+bench stats OK (4 ranks points; best speedup 3.63)
+GATE PASS (runs/scan/mpi/gemma-31b/langgraph)
+>>> langgraph: GATE PASS
+
+DONE

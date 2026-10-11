@@ -1,0 +1,38 @@
+#include "jacobi.h"
+#include <stdlib.h>
+#include <string.h>
+#include <omp.h>
+
+void jacobi(double *u, long n, int iters) {
+    double *u_new = (double *)malloc(n * n * sizeof(double));
+    if (!u_new) return;
+
+    // Initialize u_new with the same boundaries as u
+    memcpy(u_new, u, n * n * sizeof(double));
+
+    double *src = u;
+    double *dst = u_new;
+
+    for (int iter = 0; iter < iters; iter++) {
+        #pragma omp parallel for
+        for (long i = 1; i < n - 1; i++) {
+            for (long j = 1; j < n - 1; j++) {
+                dst[i * n + j] = 0.25 * (src[(i - 1) * n + j] + 
+                                         src[(i + 1) * n + j] + 
+                                         src[i * n + (j - 1)] + 
+                                         src[i * n + (j + 1)]);
+            }
+        }
+        // Swap pointers
+        double *tmp = src;
+        src = dst;
+        dst = tmp;
+    }
+
+    // Ensure the final result is in the original pointer u
+    if (src != u) {
+        memcpy(u, src, n * n * sizeof(double));
+    }
+
+    free(u_new);
+}

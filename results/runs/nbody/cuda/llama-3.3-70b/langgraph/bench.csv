@@ -1,0 +1,1 @@
+BENCH CHECK FAIL: gpu result differs from the trusted serial result at n=32768 (worst acceleration difference 0.36418)

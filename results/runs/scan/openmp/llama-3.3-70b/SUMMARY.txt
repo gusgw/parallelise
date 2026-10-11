@@ -1,0 +1,41 @@
+======== basic (llama-3.3-70b scan/openmp, agent 28d6e352) ========
+scan.c
+test_scan.c
+[gate] build + unit test + benchmark-stats validation (-Werror)
+cc -O2 -fopenmp -Wall -Wextra -Werror -std=c11 -c scan.c -o scan.o
+cc -O2 -fopenmp -Wall -Wextra -Werror -std=c11 test_scan.c scan.o -o test_scan -lm
+cc -O2 -fopenmp -Wall -Wextra -Werror -std=c11 bench.c scan.o -o bench -lm
+OMP_NUM_THREADS=1 ./test_scan
+checksum = 2956637.925288
+ERROR: checksum mismatch
+make: *** [Makefile:24: check] Error 1
+>>> basic: GATE FAIL
+
+======== pydantic (llama-3.3-70b scan/openmp, agent 0dc8429e) ========
+scan.c
+test_scan.c
+[gate] build + unit test + benchmark-stats validation (-Werror)
+cc -O2 -fopenmp -Wall -Wextra -Werror -std=c11 -c scan.c -o scan.o
+cc -O2 -fopenmp -Wall -Wextra -Werror -std=c11 test_scan.c scan.o -o test_scan -lm
+cc -O2 -fopenmp -Wall -Wextra -Werror -std=c11 bench.c scan.o -o bench -lm
+OMP_NUM_THREADS=1 ./test_scan
+SUCCESS
+OMP_NUM_THREADS=$(nproc) ./test_scan
+SUCCESS
+./bench 134217728 > bench.csv
+make: *** [Makefile:26: check] Terminated
+>>> pydantic: GATE FAIL
+
+======== langgraph (llama-3.3-70b scan/openmp, agent 74c1e67e) ========
+scan.c
+test_scan.c
+[gate] build + unit test + benchmark-stats validation (-Werror)
+cc -O2 -fopenmp -Wall -Wextra -Werror -std=c11 -c scan.c -o scan.o
+cc -O2 -fopenmp -Wall -Wextra -Werror -std=c11 test_scan.c scan.o -o test_scan -lm
+cc -O2 -fopenmp -Wall -Wextra -Werror -std=c11 bench.c scan.o -o bench -lm
+OMP_NUM_THREADS=1 ./test_scan
+Checksum mismatch: 319238567690149426023014484634579195522898198528.000000 != 3178464.288823
+make: *** [Makefile:24: check] Error 1
+>>> langgraph: GATE FAIL
+
+DONE

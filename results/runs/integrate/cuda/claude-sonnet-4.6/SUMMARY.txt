@@ -1,0 +1,46 @@
+======== basic (claude-sonnet-4.6 integrate/cuda, agent 28d6e352) ========
+integrate.cu
+test_integrate.c
+[gate] build + unit test + benchmark-stats validation (-Werror)
+/opt/cuda/bin/nvcc -O2 -Xcompiler -Wall,-Wextra,-Werror -c integrate.cu -o integrate.o
+/opt/cuda/bin/nvcc -O2 -Xcompiler -Wall,-Wextra,-Werror test_integrate.c integrate.o -o test_integrate -lm
+/opt/cuda/bin/nvcc -O2 -Xcompiler -Wall,-Wextra,-Werror bench.c integrate.o -o bench -lm
+./test_integrate
+5 checks, 0 failed
+./bench 200000000 > bench.csv
+SPEEDUP_FLOOR=3 python3 check_bench_cuda.py bench.csv
+bench stats OK (gpu 4.6x over one CPU core)
+GATE PASS (runs/integrate/cuda/claude-sonnet-4.6/basic)
+>>> basic: GATE PASS
+
+======== pydantic (claude-sonnet-4.6 integrate/cuda, agent 0dc8429e) ========
+integrate.cu
+test_integrate.c
+[gate] build + unit test + benchmark-stats validation (-Werror)
+/opt/cuda/bin/nvcc -O2 -Xcompiler -Wall,-Wextra,-Werror -c integrate.cu -o integrate.o
+/opt/cuda/bin/nvcc -O2 -Xcompiler -Wall,-Wextra,-Werror test_integrate.c integrate.o -o test_integrate -lm
+/opt/cuda/bin/nvcc -O2 -Xcompiler -Wall,-Wextra,-Werror bench.c integrate.o -o bench -lm
+./test_integrate
+5 checks, 0 failed
+./bench 200000000 > bench.csv
+SPEEDUP_FLOOR=3 python3 check_bench_cuda.py bench.csv
+bench stats OK (gpu 4.7x over one CPU core)
+GATE PASS (runs/integrate/cuda/claude-sonnet-4.6/pydantic)
+>>> pydantic: GATE PASS
+
+======== langgraph (claude-sonnet-4.6 integrate/cuda, agent 74c1e67e) ========
+integrate.cu
+test_integrate.c
+[gate] build + unit test + benchmark-stats validation (-Werror)
+/opt/cuda/bin/nvcc -O2 -Xcompiler -Wall,-Wextra,-Werror -c integrate.cu -o integrate.o
+/opt/cuda/bin/nvcc -O2 -Xcompiler -Wall,-Wextra,-Werror test_integrate.c integrate.o -o test_integrate -lm
+/opt/cuda/bin/nvcc -O2 -Xcompiler -Wall,-Wextra,-Werror bench.c integrate.o -o bench -lm
+./test_integrate
+6 checks, 0 failed
+./bench 200000000 > bench.csv
+SPEEDUP_FLOOR=3 python3 check_bench_cuda.py bench.csv
+bench stats OK (gpu 4.8x over one CPU core)
+GATE PASS (runs/integrate/cuda/claude-sonnet-4.6/langgraph)
+>>> langgraph: GATE PASS
+
+DONE

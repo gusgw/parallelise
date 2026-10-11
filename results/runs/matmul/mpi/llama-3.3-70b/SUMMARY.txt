@@ -1,0 +1,91 @@
+======== basic (llama-3.3-70b matmul/mpi, agent d9cbc526) ========
+matmul.c
+test_matmul.c
+[gate] build + unit test + benchmark-stats validation (-Werror)
+mpicc -O2 -Wall -Wextra -Werror -std=c11 -c matmul.c -o matmul.o
+mpicc -O2 -Wall -Wextra -Werror -std=c11 test_matmul.c matmul.o -o test_matmul -lm
+mpicc -O2 -Wall -Wextra -Werror -std=c11 bench.c matmul.o -o bench -lm
+mpirun --oversubscribe -np 1 ./test_matmul
+test_matmul: test_matmul.c:35: main: Assertion `fabs(checksum - REF_CHECKSUM) <= REF_TOL' failed.
+[host:2643304] *** Process received signal ***
+[host:2643304] Signal: Aborted (6)
+[host:2643304] Signal code:  (-6)
+[host:2643304] [ 0] /usr/lib/libc.so.6(+0x3e8f0) [0x7f682e83e8f0]
+[host:2643304] [ 1] /usr/lib/libc.so.6(+0x9a29c) [0x7f682e89a29c]
+[host:2643304] [ 2] /usr/lib/libc.so.6(gsignal+0x20) [0x7f682e83e7d0]
+[host:2643304] [ 3] /usr/lib/libc.so.6(abort+0x26) [0x7f682e825681]
+[host:2643304] [ 4] /usr/lib/libc.so.6(+0x26700) [0x7f682e826700]
+[host:2643304] [ 5] /usr/lib/libc.so.6(__assert_fail+0xc2) [0x7f682e836532]
+[host:2643304] [ 6] ./test_matmul(+0x10ff) [0x5583452ab0ff]
+[host:2643304] [ 7] /usr/lib/libc.so.6(+0x27741) [0x7f682e827741]
+[host:2643304] [ 8] /usr/lib/libc.so.6(__libc_start_main+0x89) [0x7f682e827879]
+[host:2643304] [ 9] ./test_matmul(+0x1315) [0x5583452ab315]
+[host:2643304] *** End of error message ***
+--------------------------------------------------------------------------
+prterun noticed that process rank 0 with PID 2643304 on node host exited on
+signal 6 (Aborted).
+--------------------------------------------------------------------------
+make: *** [Makefile:22: check] Error 134
+>>> basic: GATE FAIL
+
+======== pydantic (llama-3.3-70b matmul/mpi, agent 801d0971) ========
+matmul.c
+test_matmul.c
+[gate] build + unit test + benchmark-stats validation (-Werror)
+mpicc -O2 -Wall -Wextra -Werror -std=c11 -c matmul.c -o matmul.o
+mpicc -O2 -Wall -Wextra -Werror -std=c11 test_matmul.c matmul.o -o test_matmul -lm
+mpicc -O2 -Wall -Wextra -Werror -std=c11 bench.c matmul.o -o bench -lm
+mpirun --oversubscribe -np 1 ./test_matmul
+test_matmul: test_matmul.c:35: main: Assertion `fabs(checksum - REF_CHECKSUM) < REF_TOL' failed.
+[host:2643353] *** Process received signal ***
+[host:2643353] Signal: Aborted (6)
+[host:2643353] Signal code:  (-6)
+[host:2643353] [ 0] /usr/lib/libc.so.6(+0x3e8f0) [0x7f7a8fe3e8f0]
+[host:2643353] [ 1] /usr/lib/libc.so.6(+0x9a29c) [0x7f7a8fe9a29c]
+[host:2643353] [ 2] /usr/lib/libc.so.6(gsignal+0x20) [0x7f7a8fe3e7d0]
+[host:2643353] [ 3] /usr/lib/libc.so.6(abort+0x26) [0x7f7a8fe25681]
+[host:2643353] [ 4] /usr/lib/libc.so.6(+0x26700) [0x7f7a8fe26700]
+[host:2643353] [ 5] /usr/lib/libc.so.6(__assert_fail+0xc2) [0x7f7a8fe36532]
+[host:2643353] [ 6] ./test_matmul(+0x10ff) [0x5604fa28f0ff]
+[host:2643353] [ 7] /usr/lib/libc.so.6(+0x27741) [0x7f7a8fe27741]
+[host:2643353] [ 8] /usr/lib/libc.so.6(__libc_start_main+0x89) [0x7f7a8fe27879]
+[host:2643353] [ 9] ./test_matmul(+0x1315) [0x5604fa28f315]
+[host:2643353] *** End of error message ***
+--------------------------------------------------------------------------
+prterun noticed that process rank 0 with PID 2643353 on node host exited on
+signal 6 (Aborted).
+--------------------------------------------------------------------------
+make: *** [Makefile:22: check] Error 134
+>>> pydantic: GATE FAIL
+
+======== langgraph (llama-3.3-70b matmul/mpi, agent 8e610f5a) ========
+matmul.c
+test_matmul.c
+[gate] build + unit test + benchmark-stats validation (-Werror)
+mpicc -O2 -Wall -Wextra -Werror -std=c11 -c matmul.c -o matmul.o
+mpicc -O2 -Wall -Wextra -Werror -std=c11 test_matmul.c matmul.o -o test_matmul -lm
+mpicc -O2 -Wall -Wextra -Werror -std=c11 bench.c matmul.o -o bench -lm
+mpirun --oversubscribe -np 1 ./test_matmul
+test_matmul: test_matmul.c:35: main: Assertion `fabs(checksum - REF_CHECKSUM) <= REF_TOL' failed.
+[host:2643396] *** Process received signal ***
+[host:2643396] Signal: Aborted (6)
+[host:2643396] Signal code:  (-6)
+[host:2643396] [ 0] /usr/lib/libc.so.6(+0x3e8f0) [0x7f857723e8f0]
+[host:2643396] [ 1] /usr/lib/libc.so.6(+0x9a29c) [0x7f857729a29c]
+[host:2643396] [ 2] /usr/lib/libc.so.6(gsignal+0x20) [0x7f857723e7d0]
+[host:2643396] [ 3] /usr/lib/libc.so.6(abort+0x26) [0x7f8577225681]
+[host:2643396] [ 4] /usr/lib/libc.so.6(+0x26700) [0x7f8577226700]
+[host:2643396] [ 5] /usr/lib/libc.so.6(__assert_fail+0xc2) [0x7f8577236532]
+[host:2643396] [ 6] ./test_matmul(+0x10ff) [0x55c4345d70ff]
+[host:2643396] [ 7] /usr/lib/libc.so.6(+0x27741) [0x7f8577227741]
+[host:2643396] [ 8] /usr/lib/libc.so.6(__libc_start_main+0x89) [0x7f8577227879]
+[host:2643396] [ 9] ./test_matmul(+0x1315) [0x55c4345d7315]
+[host:2643396] *** End of error message ***
+--------------------------------------------------------------------------
+prterun noticed that process rank 0 with PID 2643396 on node host exited on
+signal 6 (Aborted).
+--------------------------------------------------------------------------
+make: *** [Makefile:22: check] Error 134
+>>> langgraph: GATE FAIL
+
+DONE

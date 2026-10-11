@@ -1,0 +1,52 @@
+======== basic (kimi-k2.5 cg/mpi, agent 28d6e352) ========
+cg.c
+test_cg.c
+[gate] build + unit test + benchmark-stats validation (-Werror)
+mpicc -O2 -Wall -Wextra -Werror -std=c11 -c cg.c -o cg.o
+mpicc -O2 -Wall -Wextra -Werror -std=c11 test_cg.c cg.o -o test_cg -lm
+mpicc -O2 -Wall -Wextra -Werror -std=c11 bench.c cg.o -o bench -lm
+mpirun --oversubscribe -np 1 ./test_cg
+1 checks, 0 failed
+mpirun --oversubscribe -np 4 ./test_cg
+1 checks, 0 failed
+bash bench_sweep.sh 1024 > bench.csv
+SPEEDUP_FLOOR=1.25 python3 check_bench.py bench.csv
+bench stats OK (6 ranks points; best speedup 3.91)
+GATE PASS (runs/cg/mpi/kimi-k2.5/basic)
+>>> basic: GATE PASS
+
+======== pydantic (kimi-k2.5 cg/mpi, agent 0dc8429e) ========
+cg.c
+test_cg.c
+[gate] build + unit test + benchmark-stats validation (-Werror)
+mpicc -O2 -Wall -Wextra -Werror -std=c11 -c cg.c -o cg.o
+mpicc -O2 -Wall -Wextra -Werror -std=c11 test_cg.c cg.o -o test_cg -lm
+mpicc -O2 -Wall -Wextra -Werror -std=c11 bench.c cg.o -o bench -lm
+mpirun --oversubscribe -np 1 ./test_cg
+PASS: checksum = 311942.898686685308, expected = 311942.898686684610, error = 0.000000000698
+mpirun --oversubscribe -np 4 ./test_cg
+PASS: checksum = 311942.898686682398, expected = 311942.898686684610, error = 0.000000002212
+bash bench_sweep.sh 1024 > bench.csv
+SPEEDUP_FLOOR=1.25 python3 check_bench.py bench.csv
+bench stats OK (6 ranks points; best speedup 4.06)
+GATE PASS (runs/cg/mpi/kimi-k2.5/pydantic)
+>>> pydantic: GATE PASS
+
+======== langgraph (kimi-k2.5 cg/mpi, agent 74c1e67e) ========
+cg.c
+test_cg.c
+[gate] build + unit test + benchmark-stats validation (-Werror)
+mpicc -O2 -Wall -Wextra -Werror -std=c11 -c cg.c -o cg.o
+mpicc -O2 -Wall -Wextra -Werror -std=c11 test_cg.c cg.o -o test_cg -lm
+mpicc -O2 -Wall -Wextra -Werror -std=c11 bench.c cg.o -o bench -lm
+mpirun --oversubscribe -np 1 ./test_cg
+1 checks, 0 failed
+mpirun --oversubscribe -np 4 ./test_cg
+1 checks, 0 failed
+bash bench_sweep.sh 1024 > bench.csv
+SPEEDUP_FLOOR=1.25 python3 check_bench.py bench.csv
+bench stats OK (6 ranks points; best speedup 3.36)
+GATE PASS (runs/cg/mpi/kimi-k2.5/langgraph)
+>>> langgraph: GATE PASS
+
+DONE

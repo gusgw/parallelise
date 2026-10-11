@@ -1,0 +1,27 @@
+{
+  "requests": 3322,
+  "prompt_tokens": 51827746,
+  "completion_tokens": 628083,
+  "by_model": {
+    "claude-sonnet-4.6": {
+      "requests": 355,
+      "prompt_tokens": 2358784,
+      "completion_tokens": 114973
+    },
+    "kimi-k2.5": {
+      "requests": 260,
+      "prompt_tokens": 1053500,
+      "completion_tokens": 66790
+    },
+    "llama-3.3-70b": {
+      "requests": 1944,
+      "prompt_tokens": 39574086,
+      "completion_tokens": 358291
+    },
+    "gemma-31b": {
+      "requests": 763,
+      "prompt_tokens": 8841376,
+      "completion_tokens": 88029
+    }
+  }
+}

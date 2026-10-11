@@ -1,0 +1,53 @@
+======== basic (kimi-k2.5 integrate/cuda, agent 28d6e352) ========
+integrate.cu
+test_integrate.c
+[gate] build + unit test + benchmark-stats validation (-Werror)
+/opt/cuda/bin/nvcc -O2 -Xcompiler -Wall,-Wextra,-Werror -c integrate.cu -o integrate.o
+/opt/cuda/bin/nvcc -O2 -Xcompiler -Wall,-Wextra,-Werror test_integrate.c integrate.o -o test_integrate -lm
+/opt/cuda/bin/nvcc -O2 -Xcompiler -Wall,-Wextra,-Werror bench.c integrate.o -o bench -lm
+./test_integrate
+integrate(0, 1, 10000000) = 3.14159265359
+expected = 3.14159265359
+tol = 1e-06
+1 checks, 0 failed
+./bench 200000000 > bench.csv
+SPEEDUP_FLOOR=3 python3 check_bench_cuda.py bench.csv
+bench stats OK (gpu 4.5x over one CPU core)
+GATE PASS (runs/integrate/cuda/kimi-k2.5/basic)
+>>> basic: GATE PASS
+
+======== pydantic (kimi-k2.5 integrate/cuda, agent 0dc8429e) ========
+integrate.cu
+test_integrate.c
+[gate] build + unit test + benchmark-stats validation (-Werror)
+/opt/cuda/bin/nvcc -O2 -Xcompiler -Wall,-Wextra,-Werror -c integrate.cu -o integrate.o
+/opt/cuda/bin/nvcc -O2 -Xcompiler -Wall,-Wextra,-Werror test_integrate.c integrate.o -o test_integrate -lm
+/opt/cuda/bin/nvcc -O2 -Xcompiler -Wall,-Wextra,-Werror bench.c integrate.o -o bench -lm
+./test_integrate
+integrate(0, 1, 10000000) = 3.141592653589792
+Expected: 3.141592653589794
+Error: 1.776356839400250e-15
+Tolerance: 1.000000000000000e-06
+TEST PASSED
+./bench 200000000 > bench.csv
+SPEEDUP_FLOOR=3 python3 check_bench_cuda.py bench.csv
+bench stats OK (gpu 4.5x over one CPU core)
+GATE PASS (runs/integrate/cuda/kimi-k2.5/pydantic)
+>>> pydantic: GATE PASS
+
+======== langgraph (kimi-k2.5 integrate/cuda, agent 74c1e67e) ========
+integrate.cu
+test_integrate.c
+[gate] build + unit test + benchmark-stats validation (-Werror)
+/opt/cuda/bin/nvcc -O2 -Xcompiler -Wall,-Wextra,-Werror -c integrate.cu -o integrate.o
+/opt/cuda/bin/nvcc -O2 -Xcompiler -Wall,-Wextra,-Werror test_integrate.c integrate.o -o test_integrate -lm
+/opt/cuda/bin/nvcc -O2 -Xcompiler -Wall,-Wextra,-Werror bench.c integrate.o -o bench -lm
+./test_integrate
+1 checks, 0 failed
+./bench 200000000 > bench.csv
+SPEEDUP_FLOOR=3 python3 check_bench_cuda.py bench.csv
+bench stats OK (gpu 4.5x over one CPU core)
+GATE PASS (runs/integrate/cuda/kimi-k2.5/langgraph)
+>>> langgraph: GATE PASS
+
+DONE

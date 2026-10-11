@@ -1,0 +1,69 @@
+======== basic (gemma-31b cg/mpi, agent 28d6e352) ========
+cg.c
+test_cg.c
+[gate] build + unit test + benchmark-stats validation (-Werror)
+mpicc -O2 -Wall -Wextra -Werror -std=c11 -c cg.c -o cg.o
+mpicc -O2 -Wall -Wextra -Werror -std=c11 test_cg.c cg.o -o test_cg -lm
+mpicc -O2 -Wall -Wextra -Werror -std=c11 bench.c cg.o -o bench -lm
+mpirun --oversubscribe -np 1 ./test_cg
+Checksum: 311942.898687
+PASS
+mpirun --oversubscribe -np 4 ./test_cg
+Checksum: 311942.898687
+PASS
+bash bench_sweep.sh 1024 > bench.csv
+SPEEDUP_FLOOR=1.25 python3 check_bench.py bench.csv
+bench stats OK (6 ranks points; best speedup 4.36)
+GATE PASS (runs/cg/mpi/gemma-31b/basic)
+>>> basic: GATE PASS
+
+======== pydantic (gemma-31b cg/mpi, agent 0dc8429e) ========
+cg.c
+test_cg.c
+[gate] build + unit test + benchmark-stats validation (-Werror)
+mpicc -O2 -Wall -Wextra -Werror -std=c11 -c cg.c -o cg.o
+cg.c: In function 'cgsolve':
+cg.c:113:57: error: passing argument 5 of 'MPI_Allgatherv' from incompatible pointer type [-Wincompatible-pointer-types]
+  113 |     MPI_Allgatherv(local_x, my_rows * m, MPI_DOUBLE, x, counts, displs, MPI_DOUBLE, MPI_COMM_WORLD);
+      |                                                         ^~~~~~
+      |                                                         |
+      |                                                         long int *
+In file included from cg.c:1:
+/usr/include/mpi.h:1398:60: note: expected 'const int *' but argument is of type 'long int *'
+ 1398 |                                   void *recvbuf, const int recvcounts[], const int displs[], MPI_Datatype recvtype,
+      |                                                  ~~~~~~~~~~^~~~~~~~~~~~
+cg.c:113:65: error: passing argument 6 of 'MPI_Allgatherv' from incompatible pointer type [-Wincompatible-pointer-types]
+  113 |     MPI_Allgatherv(local_x, my_rows * m, MPI_DOUBLE, x, counts, displs, MPI_DOUBLE, MPI_COMM_WORLD);
+      |                                                                 ^~~~~~
+      |                                                                 |
+      |                                                                 long int *
+/usr/include/mpi.h:1398:84: note: expected 'const int *' but argument is of type 'long int *'
+ 1398 |                                   void *recvbuf, const int recvcounts[], const int displs[], MPI_Datatype recvtype,
+      |                                                                          ~~~~~~~~~~^~~~~~~~
+cg.c:18:10: error: unused variable 'my_hi' [-Werror=unused-variable]
+   18 |     long my_hi = my_lo + my_rows;
+      |          ^~~~~
+cg.c:12:10: error: unused variable 'lo' [-Werror=unused-variable]
+   12 |     long lo = (n / m) * rank / size; // This is wrong, should be m * rank / size
+      |          ^~
+cc1: all warnings being treated as errors
+make: *** [Makefile:11: cg.o] Error 1
+>>> pydantic: GATE FAIL
+
+======== langgraph (gemma-31b cg/mpi, agent 74c1e67e) ========
+cg.c
+test_cg.c
+[gate] build + unit test + benchmark-stats validation (-Werror)
+mpicc -O2 -Wall -Wextra -Werror -std=c11 -c cg.c -o cg.o
+mpicc -O2 -Wall -Wextra -Werror -std=c11 test_cg.c cg.o -o test_cg -lm
+mpicc -O2 -Wall -Wextra -Werror -std=c11 bench.c cg.o -o bench -lm
+mpirun --oversubscribe -np 1 ./test_cg
+Checksum: 311942.898687, Reference: 311942.898687, Diff: 0.000000
+Test passed!
+mpirun --oversubscribe -np 4 ./test_cg
+Abort is in progress...hit ctrl-c again to forcibly terminate
+
+>>> langgraph: GATE FAIL
+
+DONE
+make: *** [Makefile:25: check] Error 1

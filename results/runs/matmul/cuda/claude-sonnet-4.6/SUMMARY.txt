@@ -1,0 +1,47 @@
+======== basic (claude-sonnet-4.6 matmul/cuda, agent 28d6e352) ========
+matmul.cu
+test_matmul.c
+[gate] build + unit test + benchmark-stats validation (-Werror)
+/opt/cuda/bin/nvcc -O2 -Xcompiler -Wall,-Wextra,-Werror -c matmul.cu -o matmul.o
+/opt/cuda/bin/nvcc -O2 -Xcompiler -Wall,-Wextra,-Werror test_matmul.c matmul.o -o test_matmul -lm
+/opt/cuda/bin/nvcc -O2 -Xcompiler -Wall,-Wextra,-Werror bench.c matmul.o -o bench -lm
+./test_matmul
+1 checks, 0 failed
+./bench 1024 > bench.csv
+SPEEDUP_FLOOR=3 python3 check_bench_cuda.py bench.csv
+bench stats OK (gpu 12.9x over one CPU core)
+GATE PASS (runs/matmul/cuda/claude-sonnet-4.6/basic)
+>>> basic: GATE PASS
+
+======== pydantic (claude-sonnet-4.6 matmul/cuda, agent 0dc8429e) ========
+matmul.cu
+test_matmul.c
+[gate] build + unit test + benchmark-stats validation (-Werror)
+/opt/cuda/bin/nvcc -O2 -Xcompiler -Wall,-Wextra,-Werror -c matmul.cu -o matmul.o
+/opt/cuda/bin/nvcc -O2 -Xcompiler -Wall,-Wextra,-Werror test_matmul.c matmul.o -o test_matmul -lm
+/opt/cuda/bin/nvcc -O2 -Xcompiler -Wall,-Wextra,-Werror bench.c matmul.o -o bench -lm
+./test_matmul
+1 checks, 0 failed
+./bench 1024 > bench.csv
+SPEEDUP_FLOOR=3 python3 check_bench_cuda.py bench.csv
+bench stats OK (gpu 12.9x over one CPU core)
+GATE PASS (runs/matmul/cuda/claude-sonnet-4.6/pydantic)
+>>> pydantic: GATE PASS
+
+======== langgraph (claude-sonnet-4.6 matmul/cuda, agent 74c1e67e) ========
+matmul.cu
+test_matmul.c
+[gate] build + unit test + benchmark-stats validation (-Werror)
+/opt/cuda/bin/nvcc -O2 -Xcompiler -Wall,-Wextra,-Werror -c matmul.cu -o matmul.o
+/opt/cuda/bin/nvcc -O2 -Xcompiler -Wall,-Wextra,-Werror test_matmul.c matmul.o -o test_matmul -lm
+/opt/cuda/bin/nvcc -O2 -Xcompiler -Wall,-Wextra,-Werror bench.c matmul.o -o bench -lm
+./test_matmul
+checksum = 704626403  (expected 704626403)
+1 checks, 0 failed
+./bench 1024 > bench.csv
+SPEEDUP_FLOOR=3 python3 check_bench_cuda.py bench.csv
+bench stats OK (gpu 12.7x over one CPU core)
+GATE PASS (runs/matmul/cuda/claude-sonnet-4.6/langgraph)
+>>> langgraph: GATE PASS
+
+DONE

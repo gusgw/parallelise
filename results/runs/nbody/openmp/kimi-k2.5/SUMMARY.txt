@@ -1,0 +1,68 @@
+======== basic (kimi-k2.5 nbody/openmp, agent 28d6e352) ========
+nbody.c
+test_nbody.c
+[gate] build + unit test + benchmark-stats validation (-Werror)
+cc -O2 -fopenmp -Wall -Wextra -Werror -std=c11 -c nbody.c -o nbody.o
+cc -O2 -fopenmp -Wall -Wextra -Werror -std=c11 test_nbody.c nbody.o -o test_nbody -lm
+cc -O2 -fopenmp -Wall -Wextra -Werror -std=c11 bench.c nbody.o -o bench -lm
+OMP_NUM_THREADS=1 ./test_nbody
+1 checks, 0 failed
+OMP_NUM_THREADS=$(nproc) ./test_nbody
+1 checks, 0 failed
+./bench 32768 > bench.csv
+python3 check_bench.py bench.csv
+bench stats OK (6 threads points; best speedup 6.28)
+GATE PASS (runs/nbody/openmp/kimi-k2.5/basic)
+>>> basic: GATE PASS
+
+======== pydantic (kimi-k2.5 nbody/openmp, agent 0dc8429e) ========
+nbody.c
+test_nbody.c
+[gate] build + unit test + benchmark-stats validation (-Werror)
+cc -O2 -fopenmp -Wall -Wextra -Werror -std=c11 -c nbody.c -o nbody.o
+cc -O2 -fopenmp -Wall -Wextra -Werror -std=c11 test_nbody.c nbody.o -o test_nbody -lm
+cc -O2 -fopenmp -Wall -Wextra -Werror -std=c11 bench.c nbody.o -o bench -lm
+OMP_NUM_THREADS=1 ./test_nbody
+checksum = 1.0533954952812879e+06
+expected = 1.0533954952812886e+06
+error    = 6.9849193096160889e-10
+tol      = 9.9999999999999995e-07
+PASS
+OMP_NUM_THREADS=$(nproc) ./test_nbody
+checksum = 1.0533954952812879e+06
+expected = 1.0533954952812886e+06
+error    = 6.9849193096160889e-10
+tol      = 9.9999999999999995e-07
+PASS
+./bench 32768 > bench.csv
+python3 check_bench.py bench.csv
+bench stats OK (6 threads points; best speedup 6.20)
+GATE PASS (runs/nbody/openmp/kimi-k2.5/pydantic)
+>>> pydantic: GATE PASS
+
+======== langgraph (kimi-k2.5 nbody/openmp, agent 74c1e67e) ========
+nbody.c
+test_nbody.c
+[gate] build + unit test + benchmark-stats validation (-Werror)
+cc -O2 -fopenmp -Wall -Wextra -Werror -std=c11 -c nbody.c -o nbody.o
+cc -O2 -fopenmp -Wall -Wextra -Werror -std=c11 test_nbody.c nbody.o -o test_nbody -lm
+cc -O2 -fopenmp -Wall -Wextra -Werror -std=c11 bench.c nbody.o -o bench -lm
+OMP_NUM_THREADS=1 ./test_nbody
+checksum = 1053395.4952812879346311
+expected = 1053395.4952812886331230
+error    = 6.9849193096160889e-10
+tol      = 9.9999999999999995e-07
+PASS
+OMP_NUM_THREADS=$(nproc) ./test_nbody
+checksum = 1053395.4952812879346311
+expected = 1053395.4952812886331230
+error    = 6.9849193096160889e-10
+tol      = 9.9999999999999995e-07
+PASS
+./bench 32768 > bench.csv
+python3 check_bench.py bench.csv
+bench stats OK (6 threads points; best speedup 6.14)
+GATE PASS (runs/nbody/openmp/kimi-k2.5/langgraph)
+>>> langgraph: GATE PASS
+
+DONE

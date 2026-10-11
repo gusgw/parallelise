@@ -1,0 +1,112 @@
+======== basic (llama-3.3-70b integrate/mpi, agent d9cbc526) ========
+integrate.c
+test_integrate.c
+[gate] build + unit test + benchmark-stats validation (-Werror)
+mpicc -O2 -Wall -Wextra -Werror -std=c11 -c integrate.c -o integrate.o
+mpicc -O2 -Wall -Wextra -Werror -std=c11 test_integrate.c integrate.o -o test_integrate -lm
+mpicc -O2 -Wall -Wextra -Werror -std=c11 bench.c integrate.o -o bench -lm
+mpirun --oversubscribe -np 1 ./test_integrate
+approx = 3.141593
+approx = 3.141593
+approx = 3.141593
+approx = 3.141593
+approx = 3.141593
+approx = 3.141593
+approx = 3.141593
+approx = 3.141593
+approx = 3.141593
+approx = 3.141593
+mpirun --oversubscribe -np 4 ./test_integrate
+approx = 3.141593
+approx = 3.141593
+approx = 3.141593
+approx = 3.141593
+approx = 3.141593
+approx = 3.141593
+approx = 3.141593
+approx = 3.141593
+approx = 3.141593
+approx = 3.141593
+bash bench_sweep.sh 50000000 > bench.csv
+python3 check_bench.py bench.csv
+bench stats OK (6 ranks points; best speedup 4.73)
+GATE PASS (runs/integrate/mpi/llama-3.3-70b/basic)
+>>> basic: GATE PASS
+
+======== pydantic (llama-3.3-70b integrate/mpi, agent 801d0971) ========
+integrate.c
+test_integrate.c
+[gate] build + unit test + benchmark-stats validation (-Werror)
+mpicc -O2 -Wall -Wextra -Werror -std=c11 -c integrate.c -o integrate.o
+mpicc -O2 -Wall -Wextra -Werror -std=c11 test_integrate.c integrate.o -o test_integrate -lm
+mpicc -O2 -Wall -Wextra -Werror -std=c11 bench.c integrate.o -o bench -lm
+mpirun --oversubscribe -np 1 ./test_integrate
+result = 3.141593
+result = 3.141593
+result = 3.141593
+result = 3.141593
+result = 3.141593
+result = 3.141593
+result = 3.141593
+result = 3.141593
+result = 3.141593
+result = 3.141593
+mpirun --oversubscribe -np 4 ./test_integrate
+test_integrate: test_integrate.c:14: main: Assertion `fabs(result - REF_EXPECTED) < REF_TOL' failed.
+[host:2634491] *** Process received signal ***
+[host:2634491] Signal: Aborted (6)
+[host:2634491] Signal code:  (-6)
+[host:2634491] [ 0] /usr/lib/libc.so.6(+0x3e8f0) [0x7ff14f03e8f0]
+[host:2634491] [ 1] /usr/lib/libc.so.6(+0x9a29c) [0x7ff14f09a29c]
+[host:2634491] [ 2] /usr/lib/libc.so.6(gsignal+0x20) [0x7ff14f03e7d0]
+[host:2634491] [ 3] /usr/lib/libc.so.6(abort+0x26) [0x7ff14f025681]
+[host:2634491] [ 4] /usr/lib/libc.so.6(+0x26700) [0x7ff14f026700]
+[host:2634491] [ 5] /usr/lib/libc.so.6(__assert_fail+0xc2) [0x7ff14f036532]
+[host:2634491] [ 6] ./test_integrate(+0x10df) [0x55736582c0df]
+[host:2634491] [ 7] /usr/lib/libc.so.6(+0x27741) [0x7ff14f027741]
+[host:2634491] [ 8] /usr/lib/libc.so.6(__libc_start_main+0x89) [0x7ff14f027879]
+[host:2634491] [ 9] ./test_integrate(+0x11c5) [0x55736582c1c5]
+[host:2634491] *** End of error message ***
+--------------------------------------------------------------------------
+prterun noticed that process rank 0 with PID 2634491 on node host exited on
+signal 6 (Aborted).
+--------------------------------------------------------------------------
+make: *** [Makefile:23: check] Error 134
+>>> pydantic: GATE FAIL
+
+======== langgraph (llama-3.3-70b integrate/mpi, agent 8e610f5a) ========
+integrate.c
+test_integrate.c
+[gate] build + unit test + benchmark-stats validation (-Werror)
+mpicc -O2 -Wall -Wextra -Werror -std=c11 -c integrate.c -o integrate.o
+mpicc -O2 -Wall -Wextra -Werror -std=c11 test_integrate.c integrate.o -o test_integrate -lm
+mpicc -O2 -Wall -Wextra -Werror -std=c11 bench.c integrate.o -o bench -lm
+mpirun --oversubscribe -np 1 ./test_integrate
+result = 3.141593
+result = 3.141593
+result = 3.141593
+result = 3.141593
+result = 3.141593
+result = 3.141593
+result = 3.141593
+result = 3.141593
+result = 3.141593
+result = 3.141593
+mpirun --oversubscribe -np 4 ./test_integrate
+result = 3.141593
+result = 3.141593
+result = 3.141593
+result = 3.141593
+result = 3.141593
+result = 3.141593
+result = 3.141593
+result = 3.141593
+result = 3.141593
+result = 3.141593
+bash bench_sweep.sh 50000000 > bench.csv
+python3 check_bench.py bench.csv
+bench stats OK (6 ranks points; best speedup 4.42)
+GATE PASS (runs/integrate/mpi/llama-3.3-70b/langgraph)
+>>> langgraph: GATE PASS
+
+DONE

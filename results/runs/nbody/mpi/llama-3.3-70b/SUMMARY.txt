@@ -1,0 +1,60 @@
+======== basic (llama-3.3-70b nbody/mpi, agent 28d6e352) ========
+nbody.c
+test_nbody.c
+[gate] build + unit test + benchmark-stats validation (-Werror)
+mpicc -O2 -Wall -Wextra -Werror -std=c11 -c nbody.c -o nbody.o
+mpicc -O2 -Wall -Wextra -Werror -std=c11 test_nbody.c nbody.o -o test_nbody -lm
+mpicc -O2 -Wall -Wextra -Werror -std=c11 bench.c nbody.o -o bench -lm
+mpirun --oversubscribe -np 1 ./test_nbody
+checksum = 1053395.495281
+OK
+mpirun --oversubscribe -np 4 ./test_nbody
+checksum = 1053395.495281
+OK
+bash bench_sweep.sh 32768 > bench.csv
+python3 check_bench.py bench.csv
+BENCH CHECK FAIL: no CSV header line starting with 'threads' or 'ranks'
+make: *** [Makefile:25: check] Error 1
+>>> basic: GATE FAIL
+
+======== pydantic (llama-3.3-70b nbody/mpi, agent 0dc8429e) ========
+nbody.c
+test_nbody.c
+[gate] build + unit test + benchmark-stats validation (-Werror)
+mpicc -O2 -Wall -Wextra -Werror -std=c11 -c nbody.c -o nbody.o
+mpicc -O2 -Wall -Wextra -Werror -std=c11 test_nbody.c nbody.o -o test_nbody -lm
+mpicc -O2 -Wall -Wextra -Werror -std=c11 bench.c nbody.o -o bench -lm
+mpirun --oversubscribe -np 1 ./test_nbody
+checksum = 1053395.495281
+PASSED
+mpirun --oversubscribe -np 4 ./test_nbody
+checksum = 276745.992700
+ERROR: checksum mismatch
+bash bench_sweep.sh 32768 > bench.csv
+Traceback (most recent call last):
+  File "<stdin>", line 2, in <module>
+ValueError: could not convert string to float: 'checksum = 1053395.495281\nPASSED'
+make: *** [Makefile:24: check] Error 1
+>>> pydantic: GATE FAIL
+
+======== langgraph (llama-3.3-70b nbody/mpi, agent 74c1e67e) ========
+nbody.c
+test_nbody.c
+[gate] build + unit test + benchmark-stats validation (-Werror)
+mpicc -O2 -Wall -Wextra -Werror -std=c11 -c nbody.c -o nbody.o
+mpicc -O2 -Wall -Wextra -Werror -std=c11 test_nbody.c nbody.o -o test_nbody -lm
+mpicc -O2 -Wall -Wextra -Werror -std=c11 bench.c nbody.o -o bench -lm
+mpirun --oversubscribe -np 1 ./test_nbody
+OK
+mpirun --oversubscribe -np 4 ./test_nbody
+Error: checksum mismatch
+Error: checksum mismatch
+Error: checksum mismatch
+Error: checksum mismatch
+bash bench_sweep.sh 32768 > bench.csv
+python3 check_bench.py bench.csv
+bench stats OK (6 ranks points; best speedup 6.08)
+GATE PASS (runs/nbody/mpi/llama-3.3-70b/langgraph)
+>>> langgraph: GATE PASS
+
+DONE
