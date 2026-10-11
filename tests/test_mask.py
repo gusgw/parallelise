@@ -7,6 +7,7 @@ import subprocess
 from pathlib import Path
 
 import pytest
+from tests.small_machine import skip_if_only_speedup_failed
 
 from parallelise.assemble import assemble_work_dir
 from parallelise.gate import run_gate
@@ -170,4 +171,5 @@ def test_masked_reference_builds_and_passes(masked, tmp_path):
         pytest.skip("gcc has no OpenMP")
     work = assemble_work_dir(dest, "openmp", tmp_path / "w", include_reference=True)
     result = run_gate(work, "openmp", timeout_s=240)
+    skip_if_only_speedup_failed(result, work, "the masked fixture reference")
     assert result.passed, result.log

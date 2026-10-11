@@ -5,14 +5,13 @@ backend present in the repository it assembles a work folder containing the know
 solution and expects the gate to pass. Tests skip only when the needed compiler is absent.
 """
 
-import os
 import shutil
 from pathlib import Path
 
 import pytest
+from tests.small_machine import skip_if_only_speedup_failed
 
 from parallelise.assemble import assemble_work_dir
-from parallelise.bench_check import check_bench_csv
 from parallelise.gate import run_gate
 
 PROBLEMS = Path(__file__).resolve().parent.parent / "problems"
@@ -20,12 +19,6 @@ PROBLEMS = Path(__file__).resolve().parent.parent / "problems"
 # Problems whose speed-up depends strongly on the memory system of the test machine.
 MEMORY_BOUND = {"cg"}
 
-# Hosted continuous-integration runners have two to four shared cores, so a genuinely
-# parallel kernel may show no speed-up there. When this variable is set, a reference
-# solution that passes every correctness stage and fails only the speed-up floor is
-# reported as skipped rather than failed; the speed-up requirement is then checked on a
-# multi-core host instead.
-SPEEDUP_UNRELIABLE = os.environ.get("PARALLELISE_SPEEDUP_UNRELIABLE") == "1"
 
 
 def cases() -> list:
@@ -58,25 +51,5 @@ def test_reference_solution_passes_gate(problem, backend, tmp_path):
         # Speed-up figures vary with whatever else the machine is doing, so a missed
         # floor gets one second attempt. A genuinely slow solution fails both times.
         result = run_gate(work, backend, timeout_s=600)
-    if (
-        not result.passed
-        and result.failure_stage == "benchmark"
-        and (SPEEDUP_UNRELIABLE or problem in MEMORY_BOUND)
-    ):
-        # Build and both unit tests have passed by this point. Re-check the benchmark
-        # table with no floor: if it is otherwise sound, the only complaint was the
-        # speed-up, which this machine cannot be expected to show.
-        bench_csv = work / "bench.csv"
-        verdict = check_bench_csv(bench_csv, floor=0.0) if bench_csv.is_file() else None
-        # With no cores to spare the timings are flat, which also trips the checker's
-        # rule against invented tables; on a declared small machine that is genuine.
-        only_flat = verdict is not None and all(
-            r.startswith("throughput is essentially constant") for r in verdict.reasons
-        )
-        if verdict is not None and (verdict.ok or (SPEEDUP_UNRELIABLE and only_flat)):
-            pytest.skip(
-                f"{problem}/{backend} is correct but shows speed-up {result.speedup_best} "
-                f"on this {os.cpu_count()}-core machine; the speed-up requirement is "
-                "checked on a multi-core host"
-            )
+    skip_if_only_speedup_failed(result, work, f"{problem}/{backend}", always=problem in MEMORY_BOUND)
     assert result.passed, f"{problem}/{backend} failed at {result.failure_stage}:\n{result.log}"
