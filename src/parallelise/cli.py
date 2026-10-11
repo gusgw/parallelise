@@ -236,10 +236,14 @@ def cmd_report(args: argparse.Namespace) -> int:
             "first, or point --results at a results file."
         )
     report = _lazy("report", "Install it with: pip install 'parallelise[report]'.")
-    print(report.build_tables(records))
+    prices = report.load_prices(args.prices) if args.prices else None
+    print(report.build_tables(records, prices=prices))
     if args.chart:
         report.build_chart(records, Path(args.chart))
         print(f"Chart written to {args.chart}.")
+    if args.masked_chart:
+        report.build_comparison_chart(records, Path(args.masked_chart))
+        print(f"Masked-against-unmasked chart written to {args.masked_chart}.")
     return 0
 
 
@@ -418,8 +422,13 @@ def build_parser() -> argparse.ArgumentParser:
     p.set_defaults(func=cmd_bench_check)
 
     p = sub.add_parser("report", parents=[common], help="print results tables")
-    p.add_argument("--results", help="results file (PARALLELISE_RESULTS)")
+    p.add_argument("--results", "--store", dest="results",
+                   help="results file, also called the store (PARALLELISE_RESULTS)")
+    p.add_argument("--prices",
+                   help="JSON price table, US dollars per million tokens, for the cost column")
     p.add_argument("--chart", help="also write the pass-rate chart to this SVG file")
+    p.add_argument("--masked-chart",
+                   help="also write the masked-against-unmasked chart to this SVG file")
     p.set_defaults(func=cmd_report)
     return parser
 
