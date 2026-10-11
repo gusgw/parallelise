@@ -274,6 +274,8 @@ in `results/runs.jsonl` is masked. Latency measurement is also still to be done.
 repeated runs, to put error bars on single-run differences, and a sweep of the sampling
 temperature. [docs/DESIGN.md](docs/DESIGN.md) lists the limitations that motivate them.
 
+On 11 October 2026 every reference solution, on OpenMP, MPI and CUDA, and a masked MPI reference, passed the gate on a 12-core host with a 16 GB NVIDIA graphics card; see [results/reference-gates-gpu-host.md](results/reference-gates-gpu-host.md).
+
 <!-- statement on the use of AI tools: to be added by the author -->
 
 ## Licence and author

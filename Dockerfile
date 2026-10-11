@@ -56,6 +56,9 @@ RUN pip install --no-cache-dir ".[dev,report,agents]" \
 USER parallelise
 ENV PARALLELISE_WORK_ROOT=/work \
     PARALLELISE_RESULTS=/app/results/runs.jsonl \
-    OMPI_MCA_rmaps_base_oversubscribe=1
+    OMPI_MCA_rmaps_base_oversubscribe=1 \
+    NVCC=/usr/local/cuda/bin/nvcc
+# The CUDA Makefiles default to the compiler path used on the author's workstation; the
+# line above points them at the compiler in this image instead.
 ENTRYPOINT ["parallelise"]
 CMD ["--help"]

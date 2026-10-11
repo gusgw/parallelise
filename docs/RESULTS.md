@@ -262,6 +262,8 @@ benchmark form.
 A serial kernel measured about 1.0 on the benchmarks with the warm-up run and failed the
 floor, as intended.
 
+A later run on a 12-core host with a 16 GB NVIDIA graphics card passed every reference solution on OpenMP, MPI and CUDA, and a masked MPI reference; the speed-ups are in [results/reference-gates-gpu-host.md](../results/reference-gates-gpu-host.md).
+
 ## 8. Calling a finished kernel from Python
 
 Demonstrations in `bindings/`, using nanobind wrappers around passing kernels. Source: my
