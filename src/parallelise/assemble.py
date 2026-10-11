@@ -8,6 +8,8 @@ signature to implement, the benchmark the agent cannot change, and the Makefile.
 
 from __future__ import annotations
 
+import hashlib
+import json
 import logging
 import shutil
 import stat
@@ -19,6 +21,15 @@ BACKENDS = ("openmp", "mpi", "cuda")
 DATA_DIR = Path(__file__).resolve().parent / "data"
 DATA_FILES = ("testing.h", "bench_sweep.sh")
 PROBLEM_LEVEL_FILES = ("reference.h", "reference.json", "problem.h")
+
+#: Name of the file in the work folder that records the digests of the trusted files.
+TRUSTED_MANIFEST = ".trusted.json"
+#: Files the agent must not change. The gate checks them against ``TRUSTED_MANIFEST``.
+#: The kernel header ``<name>.h`` is added to this list for each problem.
+TRUSTED_FILES = (
+    "bench.c", "Makefile", "testing.h", "bench_sweep.sh", "check_bench.py",
+    "check_bench_cuda.py", "reference.h", "problem.h",
+)  # fmt: skip
 
 _SHIM = '''"""Calls the benchmark checker in the parallelise package, so there is one copy of it."""
 import sys
@@ -57,6 +68,28 @@ def _write_shims(dest: Path) -> None:
         (dest / filename).write_text(
             _SHIM.format(package_parent=package_parent, cuda=cuda), encoding="utf-8"
         )
+
+
+def file_digest(path: Path) -> str:
+    """Return the SHA-256 digest of a file as hexadecimal text."""
+    return hashlib.sha256(path.read_bytes()).hexdigest()
+
+
+def trusted_file_names(name: str) -> tuple[str, ...]:
+    """Return the names of the trusted files for a kernel called ``name``."""
+    return (*TRUSTED_FILES, f"{name}.h")
+
+
+def _write_trusted_manifest(dest: Path, name: str) -> None:
+    """Record the digest of every trusted file that is present in the work folder."""
+    digests = {
+        filename: file_digest(dest / filename)
+        for filename in trusted_file_names(name)
+        if (dest / filename).is_file()
+    }
+    (dest / TRUSTED_MANIFEST).write_text(
+        json.dumps({"sha256": digests}, indent=2, sort_keys=True) + "\n", encoding="utf-8"
+    )
 
 
 def assemble_work_dir(
@@ -102,5 +135,6 @@ def assemble_work_dir(
             if not source.is_file():
                 raise AssembleError(f"missing reference file {source}")
             shutil.copy2(source, dest / filename)
+    _write_trusted_manifest(dest, name)
     log.info("assembled %s/%s into %s", name, backend, dest)
     return dest

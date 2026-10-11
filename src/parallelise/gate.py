@@ -1,14 +1,15 @@
 """The gate: an independent judgement of a finished work folder.
 
-A work folder passes only if it compiles with warnings treated as errors, its unit test
-passes at one worker and at several, its benchmark runs, and the benchmark's speed-up
-figures survive the checks in ``bench_check``. The gate never trusts what the agent says
-about its own work; it rebuilds from scratch and reads only what the trusted benchmark
-wrote.
+A work folder passes only if its trusted files are unchanged since assembly, it compiles
+with warnings treated as errors, its unit test passes at one worker and at several, its
+benchmark runs, and the benchmark's speed-up figures survive the checks in ``bench_check``.
+The gate never trusts what the agent says about its own work; it rebuilds from
+scratch and reads only what the trusted benchmark wrote.
 """
 
 from __future__ import annotations
 
+import json
 import logging
 import os
 import re
@@ -19,7 +20,7 @@ import time
 from dataclasses import dataclass
 from pathlib import Path
 
-from parallelise.assemble import kernel_filename
+from parallelise.assemble import TRUSTED_MANIFEST, file_digest, kernel_filename
 from parallelise.bench_check import (
     DEFAULT_CUDA_FLOOR,
     DEFAULT_FLOOR,
@@ -34,6 +35,7 @@ log = logging.getLogger("parallelise.gate")
 FAILURE_STAGES = (
     "none",
     "no-files",
+    "tampered",
     "build",
     "test-one-worker",
     "test-many-workers",
@@ -120,6 +122,30 @@ def _classify_check_failure(work_dir: Path, output: str) -> str:
     return "benchmark"
 
 
+def _tampered_files(work_dir: Path) -> list[str]:
+    """Return a description of each trusted file that changed since the folder was built.
+
+    The list is empty when every file matches the digests in ``TRUSTED_MANIFEST``. A missing
+    or unreadable manifest is reported as a problem, because without it nothing can be
+    checked.
+    """
+    manifest = work_dir / TRUSTED_MANIFEST
+    try:
+        expected = json.loads(manifest.read_text(encoding="utf-8"))["sha256"]
+        if not isinstance(expected, dict) or not expected:
+            raise ValueError("no digests recorded")
+    except (OSError, ValueError, KeyError, TypeError) as exc:
+        return [f"{TRUSTED_MANIFEST} is missing or unreadable ({exc})"]
+    problems = []
+    for filename, digest in sorted(expected.items()):
+        path = work_dir / filename
+        if not path.is_file():
+            problems.append(f"{filename} has been removed")
+        elif file_digest(path) != digest:
+            problems.append(f"{filename} has been changed")
+    return problems
+
+
 def _run(command: list[str], cwd: Path, env: dict[str, str], deadline: float) -> tuple[int, str]:
     """Run a command, merging its output, and kill it and its children at the deadline."""
     remaining = deadline - time.monotonic()
@@ -166,6 +192,12 @@ def run_gate(
         passed = stage == "none"
         record.append(f"GATE {'PASS' if passed else 'FAIL'} ({stage}) {work_dir}")
         return GateResult(passed, stage, best, "\n".join(record))
+
+    changed = _tampered_files(work_dir)
+    if changed:
+        record.append("[gate] trusted files do not match the digests written at assembly:")
+        record.extend(f"[gate]   {line}" for line in changed)
+        return result("tampered")
 
     name = _find_kernel_name(work_dir)
     if name is None or not (work_dir / "Makefile").is_file():

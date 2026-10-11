@@ -1,13 +1,20 @@
-# One conversion cell as a Kubernetes Job. Change the problem and the backend in "args"
-# and the name of the Job, then apply the three objects with:
+# One conversion cell as a Kubernetes Job. Before applying it:
+#   1. Set "gateway-url" and "model" in the ConfigMap, and the same host and port in the
+#      NetworkPolicy at the end of this file.
+#   2. Change the problem and the backend in "args", and the name of the Job.
+# Then apply the objects with:
 #   kubectl apply -f k8s/job.yaml
+# The NetworkPolicy only takes effect if the cluster's network plugin enforces policies.
+# The check "kubectl apply --dry-run=client -f k8s/job.yaml" should succeed unchanged.
 apiVersion: v1
 kind: ConfigMap
 metadata:
   name: parallelise-config
 data:
-  gateway-url: "http://localhost:4000/v1"
-  model: "local"
+  # Replace with the in-cluster address of your model gateway (a Service name).
+  gateway-url: "http://model-gateway.llm.svc.cluster.local:4000/v1"
+  # Replace with the model name the gateway serves.
+  model: "replace-with-model-name"
 ---
 # Optional. Leave the key empty when the gateway needs none.
 apiVersion: v1
@@ -40,6 +47,36 @@ spec:
         fsGroup: 10001
         seccompProfile:
           type: RuntimeDefault
+      initContainers:
+        # Stop early, before any work is done, if the gateway cannot be reached.
+        - name: health
+          image: parallelise:cpu
+          imagePullPolicy: IfNotPresent
+          args: ["health"]
+          env:
+            - name: PARALLELISE_GATEWAY_URL
+              valueFrom:
+                configMapKeyRef:
+                  name: parallelise-config
+                  key: gateway-url
+            - name: PARALLELISE_MODEL
+              valueFrom:
+                configMapKeyRef:
+                  name: parallelise-config
+                  key: model
+            - name: PARALLELISE_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: parallelise-secret
+                  key: api-key
+                  optional: true
+            - name: HOME
+              value: /tmp
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
       containers:
         - name: parallelise
           image: parallelise:cpu
@@ -89,3 +126,36 @@ spec:
         - name: work
           emptyDir:
             sizeLimit: 2Gi
+---
+# Generated code runs inside the pod and could otherwise use the network. This allows the
+# pod to reach only the model gateway (and the cluster's name service) and nothing else.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: parallelise-egress-gateway-only
+spec:
+  podSelector:
+    matchLabels:
+      app: parallelise
+  policyTypes: ["Egress", "Ingress"]
+  ingress: []
+  egress:
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: llm
+          podSelector:
+            matchLabels:
+              app: model-gateway
+      ports:
+        - protocol: TCP
+          port: 4000
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
+      ports:
+        - protocol: UDP
+          port: 53
+        - protocol: TCP
+          port: 53

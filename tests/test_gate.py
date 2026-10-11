@@ -1,5 +1,6 @@
 """Tests for the gate, using the synthetic OpenMP fixture and deliberately broken kernels."""
 
+import json
 import shutil
 import subprocess
 from pathlib import Path
@@ -7,7 +8,7 @@ from pathlib import Path
 import pytest
 
 from parallelise.assemble import assemble_work_dir
-from parallelise.gate import FAILURE_STAGES, run_gate
+from parallelise.gate import FAILURE_STAGES, _tampered_files, run_gate
 
 FIXTURE = Path(__file__).parent / "fixtures" / "midpoint"
 
@@ -42,8 +43,8 @@ HEADER = '#include <math.h>\n#include <omp.h>\n#include "midpoint.h"\n'
 
 def test_failure_stage_names_match_the_contract():
     assert set(FAILURE_STAGES) == {
-        "none", "no-files", "build", "test-one-worker", "test-many-workers", "benchmark",
-        "timeout",
+        "none", "no-files", "tampered", "build", "test-one-worker", "test-many-workers",
+        "benchmark", "timeout",
     }  # fmt: skip
 
 
@@ -106,3 +107,44 @@ def test_hanging_test_is_a_timeout(tmp_path):
         "{ (void)a; (void)b; (void)n; for (;;) {} return 0.0; }\n"  # fmt: skip
     result = run_gate(folder(tmp_path, source), "openmp", timeout_s=5)
     assert result.failure_stage == "timeout", result.log
+
+
+def test_clean_folder_has_matching_digests(tmp_path):
+    work = folder(tmp_path)
+    manifest = json.loads((work / ".trusted.json").read_text())["sha256"]
+    for name in ("Makefile", "bench.c", "testing.h", "midpoint.h", "check_bench.py"):
+        assert name in manifest
+    assert "midpoint.c" not in manifest
+    assert _tampered_files(work) == []
+
+
+@pytest.mark.parametrize("victim", ["bench.c", "Makefile", "testing.h", "midpoint.h"])
+def test_edited_trusted_file_is_tampered(tmp_path, victim):
+    work = folder(tmp_path)
+    with (work / victim).open("a") as handle:
+        handle.write("\n/* edited */\n")
+    result = run_gate(work, "openmp", timeout_s=60)
+    assert (result.passed, result.failure_stage) == (False, "tampered")
+    assert f"{victim} has been changed" in result.log
+
+
+def test_removed_trusted_file_is_tampered(tmp_path):
+    work = folder(tmp_path)
+    (work / "bench_sweep.sh").unlink()
+    assert run_gate(work, "openmp", timeout_s=60).failure_stage == "tampered"
+
+
+def test_missing_manifest_is_tampered(tmp_path):
+    work = folder(tmp_path)
+    (work / ".trusted.json").unlink()
+    result = run_gate(work, "openmp", timeout_s=60)
+    assert result.failure_stage == "tampered"
+
+
+def test_agent_tool_can_still_write_the_kernel(tmp_path):
+    from parallelise.agents.tools import write_file
+
+    work = folder(tmp_path)
+    write_file(work, "midpoint.c", HEADER + "double midpoint(double a, double b, long n)\n"
+              "{ (void)a; (void)b; (void)n; return 1.0; }\n")  # fmt: skip
+    assert _tampered_files(work) == []

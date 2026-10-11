@@ -12,7 +12,7 @@ def test_work_folder_without_reference(tmp_path):
     names = {p.name for p in dest.iterdir()}
     assert names == {
         "testing.h", "bench_sweep.sh", "check_bench.py", "check_bench_cuda.py",
-        "midpoint.ipynb", "reference.h", "midpoint.h", "bench.c", "Makefile",
+        "midpoint.ipynb", "reference.h", "midpoint.h", "bench.c", "Makefile", ".trusted.json",
     }  # fmt: skip
     assert (dest / "bench_sweep.sh").stat().st_mode & 0o100
 

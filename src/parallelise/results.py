@@ -20,6 +20,7 @@ log = logging.getLogger("parallelise.results")
 FAILURE_STAGES = (
     "none",
     "no-files",
+    "tampered",
     "build",
     "test-one-worker",
     "test-many-workers",

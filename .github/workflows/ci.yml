@@ -20,6 +20,10 @@ jobs:
         run: pip install ".[dev,report,agents]"
       - name: Lint
         run: ruff check .
+      - name: Type check
+        # Not yet confirmed to pass cleanly, so it reports without failing the build.
+        continue-on-error: true
+        run: mypy src/parallelise
       - name: Test (the CUDA tests skip themselves without a graphics card)
         env:
           OMPI_MCA_rmaps_base_oversubscribe: "1"
@@ -27,6 +31,15 @@ jobs:
           # correctness here and treat a missed speed-up floor as a skip, not a failure.
           PARALLELISE_SPEEDUP_UNRELIABLE: "1"
         run: pytest -q -rs
+
+  manifest:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate the Kubernetes manifest
+        run: |
+          curl -sSL https://github.com/yannh/kubeconform/releases/download/v0.6.7/kubeconform-linux-amd64.tar.gz | tar xz kubeconform
+          ./kubeconform -strict -summary k8s/job.yaml
 
   image:
     runs-on: ubuntu-latest
@@ -37,3 +50,5 @@ jobs:
         run: docker build --target cpu -t parallelise:cpu .
       - name: Check that the command starts
         run: docker run --rm parallelise:cpu --help
+      - name: Build the CUDA image (build only; no graphics card is available to run it)
+        run: docker build --target cuda -t parallelise:cuda .

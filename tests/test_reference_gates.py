@@ -54,6 +54,10 @@ def test_reference_solution_passes_gate(problem, backend, tmp_path):
         pytest.skip(f"{tool} is not installed")
     work = assemble_work_dir(PROBLEMS / problem, backend, tmp_path / "w", include_reference=True)
     result = run_gate(work, backend, timeout_s=600)
+    if not result.passed and result.failure_stage == "benchmark":
+        # Speed-up figures vary with whatever else the machine is doing, so a missed
+        # floor gets one second attempt. A genuinely slow solution fails both times.
+        result = run_gate(work, backend, timeout_s=600)
     if (
         not result.passed
         and result.failure_stage == "benchmark"

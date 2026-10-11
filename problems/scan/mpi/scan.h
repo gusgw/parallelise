@@ -15,8 +15,9 @@
  *
  * The naive loop is inherently sequential (each out[i] depends on out[i-1]), so use
  * the classic block-scan decomposition: each rank scans its own block of in locally;
- * an MPI_Exscan (MPI_SUM) of the block totals gives each rank's starting offset
- * (rank 0's offset is 0); add the offset to the local block. */
+ * a collective call that shares the block totals (for example an all-gather of one
+ * double per rank) lets each rank sum the totals of all lower ranks to get its starting
+ * offset (rank 0's offset is 0); add the offset to the local block. */
 void scan(const double *in, double *out, long n);
 
 #endif /* SCAN_H */
