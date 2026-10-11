@@ -1,0 +1,15 @@
+__pycache__/
+*.pyc
+*.o
+*.so
+.venv/
+.pytest_cache/
+.ruff_cache/
+dist/
+build/
+*.egg-info/
+# agent work folders made by `parallelise run`
+work/
+# build products inside problem folders
+problems/**/bench
+problems/**/bench.csv
