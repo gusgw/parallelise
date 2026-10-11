@@ -1,0 +1,22 @@
+[project]
+name = "eval-harness"
+version = "0.1.0"
+description = "Run the agent harnesses over fixed pipeline tasks and score them"
+requires-python = ">=3.10"
+dependencies = ["harness-common"]
+
+[project.optional-dependencies]
+dev = ["pytest"]
+
+[tool.pytest.ini_options]
+pythonpath = ["src"]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/eval_harness"]
+
+[tool.uv.sources]
+harness-common = { path = "../common", editable = true }

@@ -1,0 +1,4 @@
+# Pinned to the versions the working agent was built and tested against.
+pydantic-ai==1.106.0
+openai==2.41.0
+pytest==9.0.3
