@@ -117,3 +117,16 @@ For stronger isolation use a cluster network policy that allows only the gateway
   image. Use the `cuda` stage on a machine with a driver and the NVIDIA container toolkit.
 - **`make check-references` fails.** A known-good solution no longer passes its gate. Run
   the failing test alone with `pytest -q -k <problem>` and read the gate log.
+
+## What continuous integration does and does not prove
+
+The GitHub Actions workflow runs the linter, the unit tests, every reference gate for
+OpenMP and MPI, and a build of the CPU container image on every push. The hosted runner
+has only a few shared processor cores, so a genuinely parallel kernel often shows no
+speed-up there. The reference gates on the runner therefore prove correctness: the code
+builds with warnings treated as errors and gives the right answer at one worker and at
+several. A reference that is correct but misses the speed-up floor is reported as skipped,
+with the measured speed-up in the message, because the environment variable
+`PARALLELISE_SPEEDUP_UNRELIABLE=1` is set in the workflow. The speed-up requirement is
+checked on a multi-core host, where that variable is left unset and a missed floor is a
+failure. CUDA gates skip wherever there is no graphics card.

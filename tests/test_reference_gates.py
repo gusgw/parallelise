@@ -5,18 +5,27 @@ backend present in the repository it assembles a work folder containing the know
 solution and expects the gate to pass. Tests skip only when the needed compiler is absent.
 """
 
+import os
 import shutil
 from pathlib import Path
 
 import pytest
 
 from parallelise.assemble import assemble_work_dir
+from parallelise.bench_check import check_bench_csv
 from parallelise.gate import run_gate
 
 PROBLEMS = Path(__file__).resolve().parent.parent / "problems"
 
 # Problems whose speed-up depends strongly on the memory system of the test machine.
 MEMORY_BOUND = {"cg"}
+
+# Hosted continuous-integration runners have two to four shared cores, so a genuinely
+# parallel kernel may show no speed-up there. When this variable is set, a reference
+# solution that passes every correctness stage and fails only the speed-up floor is
+# reported as skipped rather than failed; the speed-up requirement is then checked on a
+# multi-core host instead.
+SPEEDUP_UNRELIABLE = os.environ.get("PARALLELISE_SPEEDUP_UNRELIABLE") == "1"
 
 
 def cases() -> list:
@@ -45,9 +54,19 @@ def test_reference_solution_passes_gate(problem, backend, tmp_path):
         pytest.skip(f"{tool} is not installed")
     work = assemble_work_dir(PROBLEMS / problem, backend, tmp_path / "w", include_reference=True)
     result = run_gate(work, backend, timeout_s=600)
-    if not result.passed and problem in MEMORY_BOUND and result.failure_stage == "benchmark":
-        # The conjugate gradient solver is limited by memory bandwidth, so on a small
-        # machine the speed-up can honestly fall below the floor. Correctness stages
-        # (build and both unit tests) have already passed at this point.
-        pytest.skip(f"{problem} is memory-bound; this machine shows speed-up {result.speedup_best}")
+    if (
+        not result.passed
+        and result.failure_stage == "benchmark"
+        and (SPEEDUP_UNRELIABLE or problem in MEMORY_BOUND)
+    ):
+        # Build and both unit tests have passed by this point. Re-check the benchmark
+        # table with no floor: if it is otherwise sound, the only complaint was the
+        # speed-up, which this machine cannot be expected to show.
+        bench_csv = work / "bench.csv"
+        if bench_csv.is_file() and check_bench_csv(bench_csv, floor=0.0).ok:
+            pytest.skip(
+                f"{problem}/{backend} is correct but shows speed-up {result.speedup_best} "
+                f"on this {os.cpu_count()}-core machine; the speed-up requirement is "
+                "checked on a multi-core host"
+            )
     assert result.passed, f"{problem}/{backend} failed at {result.failure_stage}:\n{result.log}"
