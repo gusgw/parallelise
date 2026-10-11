@@ -51,5 +51,7 @@ def test_reference_solution_passes_gate(problem, backend, tmp_path):
         # Speed-up figures vary with whatever else the machine is doing, so a missed
         # floor gets one second attempt. A genuinely slow solution fails both times.
         result = run_gate(work, backend, timeout_s=600)
-    skip_if_only_speedup_failed(result, work, f"{problem}/{backend}", always=problem in MEMORY_BOUND)
+    skip_if_only_speedup_failed(
+        result, work, f"{problem}/{backend}", always=problem in MEMORY_BOUND
+    )
     assert result.passed, f"{problem}/{backend} failed at {result.failure_stage}:\n{result.log}"
