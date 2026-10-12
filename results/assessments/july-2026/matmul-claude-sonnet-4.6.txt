@@ -1,0 +1,69 @@
+========================================================================
+backend assessment (claude-sonnet-4.6) for matmul.ipynb:
+========================================================================
+# Analysis of Dense Matrix Multiply `C = A @ B`
+
+## 1. Dependency Structure
+
+The triple-loop computes `C[i][j] = Σ_k A[i][k] * B[k][j]`.
+
+- **Outer loops (i, j):** Completely independent — each `C[i][j]` element reads from a distinct row of A and column of B, and writes to a unique output location. **Embarrassingly parallel** across (i,j) pairs.
+- **Inner loop (k):** A scalar reduction over `k` into a local accumulator `s`. No cross-iteration writes; the accumulator is private per (i,j) thread. This is a **local reduction**, not a global one — it collapses entirely within a single thread's work unit.
+- **No stencil, no neighbour dependencies, no loop-carried dependencies** across the outer loops.
+- The entire algorithm is a textbook **level-3 BLAS DGEMM**, the most studied parallel primitive in HPC.
+
+## 2. Arithmetic Intensity
+
+For an N×N matrix multiply:
+
+| Quantity | Value (N=256) | Value (large N) |
+|---|---|---|
+| Floating-point ops | 2·N³ | 2·N³ |
+| Bytes read (A, B, C) | 3·N²·8 bytes | 3·N²·8 bytes |
+| Arithmetic intensity | 2N³ / (3·8·N²) = **N/12** | grows with N |
+
+At N=256: intensity ≈ **21 FLOP/byte** — solidly **compute-bound** on any modern processor (roofline crossover is typically 5–15 FLOP/byte on CPUs, ~10–20 on GPUs).
+
+**Implications:**
+- **Shared-memory CPU (OpenMP):** Scales near-linearly with core count; cache-blocking (tiling) is critical to keep data in L2/L3. At N=256 the matrices fit in ~1.5 MB each — comfortably in L3, so even naive code benefits from threading.
+- **Distributed CPU (MPI):** Communication volume is O(N²) per process per step (broadcast rows/columns), computation is O(N³/P). The computation-to-communication ratio grows as N/√P (Cannon's algorithm), so MPI is worthwhile only at very large N or many nodes. At N=256 the overhead dominates.
+- **GPU (CUDA):** Peak throughput is 10–100× CPU; at 21 FLOP/byte the kernel is compute-bound and maps perfectly to tensor cores / WMMA. cuBLAS achieves >90% of peak. However, at N=256 the GPU launch overhead and PCIe transfer (~1.5 MB × 3 = ~4.5 MB) may dominate; GPUs shine at N ≥ 1024.
+
+## 3. Communication (Distributed)
+
+If split across P processes (e.g., 2D process grid √P × √P, Cannon's algorithm):
+
+- Each process owns an N/√P × N/√P tile of A, B, and C.
+- Each superstep: shift A tiles left, shift B tiles up — **O(N²/P) words exchanged per step**, **√P steps total**.
+- Total communication: **O(N²/√P)** words — grows with N² but shrinks with more processes.
+- At N=256, P=16: ~256 KB exchanged per process — latency-dominated on any real network. **MPI is a poor fit at this problem size.**
+
+## 4. Separable Parts
+
+| Part | Character | Parallelism |
+|---|---|---|
+| Matrix fill (A_of, B_of) | Embarrassingly parallel, O(N²), trivial compute | Parallel but negligible cost |
+| Triple-loop DGEMM | Compute-bound, embarrassingly parallel over (i,j), local reduction over k | Primary target |
+| Checksum reduction | Global sum over N² elements, O(N²) | Parallel reduction; negligible vs. DGEMM |
+
+---
+
+## Recommendation
+
+**Primary: OpenMP** (shared-memory threads with loop tiling)
+
+**Rationale:**
+1. The (i,j) outer loops are trivially parallelised with `#pragma omp parallel for collapse(2)`.
+2. At N=256 the problem fits in L3 cache; a cache-blocked OpenMP implementation will achieve near-linear scaling on a multicore CPU with zero communication overhead.
+3. For production use, **delegate to a tuned BLAS** (OpenBLAS, MKL, BLIS) which already implements OpenMP + SIMD + cache-blocking internally — this is the single highest-leverage action.
+
+**CUDA** is suitable if N is scaled up (N ≥ 1024) and a GPU is available; at N=256 PCIe transfer cost likely exceeds compute savings.
+
+**MPI** is a poor fit: at N=256 the matrices are tiny (~0.5 MB each), and any inter-process communication will dominate the ~33M FLOPs of useful work. Even at larger N, MPI only pays on multi-node clusters where shared memory is unavailable.
+
+**Serial + compiler optimisation** (`-O3 -march=native`) with auto-vectorisation is a reasonable baseline and may outperform naive OpenMP at N=256 due to SIMD width, but will not scale beyond one core.
+
+```
+{"primary": "openmp", "also_suitable": ["cuda", "serial"], "poor_fit": ["mpi"], "expected_speedup": "near-linear with core count (4–16×) on multicore CPU; 50–200× via cuBLAS on GPU at larger N", "justification": "The (i,j) output elements are fully independent, making the kernel embarrassingly parallel with zero inter-thread communication; OpenMP collapse(2) over the outer loops plus cache-blocking delivers near-linear CPU scaling at N=256. MPI is a poor fit because inter-process communication cost exceeds the ~33M-FLOP workload at this problem size. For maximum performance, delegating to a tuned BLAS (MKL/OpenBLAS) is preferred over hand-written parallelism."}
+```
+verdict written to assess/results/matmul-claude-sonnet-4.6.json

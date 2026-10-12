@@ -1,0 +1,62 @@
+========================================================================
+backend assessment (kimi-k2.5) for integrate.ipynb:
+========================================================================
+I'll analyze this numerical integration algorithm for parallelization.
+
+## 1. Dependency Structure
+
+The core loop in `integrate()` computes:
+- `s += 4.0 / (1.0 + x * x)` — a **reduction** (sum accumulation)
+
+Each iteration is **independent in computation** (no neighbor dependencies, not a stencil), but the summation creates a dependency chain. This is **not embarrassingly parallel** due to the reduction, though the per-iteration work is trivially parallelizable with a proper reduction implementation.
+
+The loop can be parallelized using:
+- Parallel reduction (OpenMP `#pragma omp parallel for reduction(+:s)`)
+- Tree-based reduction patterns
+- Chunking with local accumulators followed by final sum
+
+## 2. Arithmetic Intensity
+
+Per iteration:
+- **Memory**: Reads `a, h` (constants), writes nothing until final return
+- **Computation**: ~6 FLOPs (1 add, 2 muls, 1 add, 1 div, 1 add for reduction)
+- **Data movement**: Effectively zero — the working set fits in registers/L1
+
+This is **extremely compute-light** — roughly 6 FLOPs with no meaningful memory traffic. The algorithm is **latency-bound** on the reduction dependency chain, not compute-bound or memory-bandwidth-bound. At realistic sizes (10⁷), the sequential version is already memory-cold (fits in cache) and bound by instruction latency and the serial reduction.
+
+## 3. Communication (Distributed Case)
+
+If split across MPI processes:
+- Each process computes a partial sum over its chunk
+- **One** `MPI_Reduce` or `MPI_Allreduce` at the end to combine partial sums
+- Communication volume: O(1) per process (one double)
+- Frequency: Once, after all local work completes
+
+This is **embarrassingly parallel with a trivial reduction** — excellent for distributed memory.
+
+## 4. Separable Parts
+
+| Part | Character | Notes |
+|------|-----------|-------|
+| Term generation | Embarrassingly parallel | Independent per `i` |
+| Summation | Reduction | Needs coordination |
+| Final scaling (`* h`) | Trivial | Sequential, negligible |
+
+---
+
+## Recommendations
+
+| Backend | Assessment |
+|---------|-----------|
+| **OpenMP** | **Excellent fit**. The reduction is built-in (`reduction(+:s)`), near-zero overhead, perfect for this latency-bound kernel. Static scheduling with chunking handles load balance. |
+| **MPI** | **Good fit** for multi-node, but overkill for single-node. The tiny communication cost is amortized, but process startup dominates at moderate `N`. |
+| **CUDA** | **Poor fit**. Kernel launch overhead >> computation time. 6 FLOPs/thread is far below GPU efficiency threshold. Memory transfer costs dwarf computation. |
+| **Serial + compiler** | **Viable baseline**. With `-O3 -ffast-math`, auto-vectorization helps, but the reduction serializes. Good for validation, not performance target. |
+
+**Critical analysis**: This kernel is **fundamentally limited by reduction latency**, not throughput. Parallel speedup is capped by Amdahl's law on the final sum. For `N=10⁷`, expect modest gains (2-4× on CPU, not 10×+). GPU is disastrous — the kernel is 1000× too small.
+
+---
+
+```json
+{"primary": "openmp", "also_suitable": ["mpi"], "poor_fit": ["cuda"], "expected_speedup": "modest (2-4× on multicore)", "justification": "The reduction dependency limits parallelism; OpenMP's built-in reduction handles this with minimal overhead, while GPU launch overhead dwarfs the nanoseconds of actual computation per thread."}
+```

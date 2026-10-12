@@ -1,0 +1,15 @@
+{
+  "model": "kimi-k2.5",
+  "notebook": "jacobi.ipynb",
+  "verdict": {
+    "primary": "openmp",
+    "also_suitable": [
+      "cuda"
+    ],
+    "poor_fit": [
+      "mpi"
+    ],
+    "expected_speedup": "2-8x on multicore CPU, limited by memory bandwidth; near-linear with thread count for compute-heavy variants",
+    "justification": "The Jacobi stencil is embarrassingly parallel within sweeps but memory-bandwidth-bound, making OpenMP ideal for shared-memory parallelism without communication overhead. MPI's halo exchange is prohibitive at this scale, while CUDA's kernel launch overhead exceeds work for N=128."
+  }
+}

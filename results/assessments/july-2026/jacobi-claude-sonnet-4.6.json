@@ -1,0 +1,16 @@
+{
+  "model": "claude-sonnet-4.6",
+  "notebook": "jacobi.ipynb",
+  "verdict": {
+    "primary": "openmp",
+    "also_suitable": [
+      "cuda",
+      "serial"
+    ],
+    "poor_fit": [
+      "mpi"
+    ],
+    "expected_speedup": "4\u20138\u00d7 on 8-core CPU at N=128; 50\u2013200\u00d7 on GPU at N\u22652048",
+    "justification": "The double-buffered stencil is embarrassingly parallel within each sweep, making OpenMP collapse(2) a natural and low-overhead fit; at N=128 the grid fits in L2 cache so shared-memory threading avoids DRAM bandwidth limits entirely. CUDA becomes superior only at larger N where the working set exceeds the LLC and GPU memory bandwidth dominates. MPI is a poor fit because the 2 KB per-sweep halo exchange cost vastly exceeds the per-rank compute at this problem size."
+  }
+}

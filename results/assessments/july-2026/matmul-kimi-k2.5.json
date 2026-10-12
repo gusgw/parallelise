@@ -1,0 +1,16 @@
+{
+  "model": "kimi-k2.5",
+  "notebook": "matmul.ipynb",
+  "verdict": {
+    "primary": "cuda",
+    "also_suitable": [
+      "openmp",
+      "mpi"
+    ],
+    "poor_fit": [
+      "serial"
+    ],
+    "expected_speedup": "50-100x vs naive Python, 10-50x vs optimized CPU",
+    "justification": "Dense matrix multiply is GPU-native with regular memory access and high arithmetic intensity; cuBLAS or custom CUDA kernels achieve near-peak FLOPs. OpenMP works well for CPU portability but cannot match GPU throughput."
+  }
+}

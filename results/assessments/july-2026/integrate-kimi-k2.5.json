@@ -1,0 +1,15 @@
+{
+  "model": "kimi-k2.5",
+  "notebook": "integrate.ipynb",
+  "verdict": {
+    "primary": "openmp",
+    "also_suitable": [
+      "mpi"
+    ],
+    "poor_fit": [
+      "cuda"
+    ],
+    "expected_speedup": "modest (2-4\u00d7 on multicore)",
+    "justification": "The reduction dependency limits parallelism; OpenMP's built-in reduction handles this with minimal overhead, while GPU launch overhead dwarfs the nanoseconds of actual computation per thread."
+  }
+}

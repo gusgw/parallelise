@@ -1,0 +1,81 @@
+========================================================================
+backend assessment (claude-sonnet-4.6) for integrate.ipynb:
+========================================================================
+# Analysis
+
+## 1. Dependency Structure
+
+The loop is **embarrassingly parallel**. Each iteration `i` computes an independent term `4/(1 + x_i²) * h` where `x_i = (i + 0.5) * h`. There are **no loop-carried dependencies** on the iteration variable itself — the only coupling is the accumulation into `s`, which is a **scalar reduction** (sum). This is the simplest possible parallel pattern: independent work items feeding a single commutative, associative reduction.
+
+## 2. Arithmetic Intensity
+
+**Per iteration:**
+- Reads: one integer `i` (or computed from loop counter — no array read at all)
+- Writes: nothing to memory mid-loop; one scalar accumulator updated
+- FLOPs: `i+0.5` (1 add), `*h` (1 mul), `x*x` (1 mul), `1+x*x` (1 add), `4/...` (1 div) → **~5 FLOPs per iteration**, touching essentially **0 bytes of external memory** (no input array, no output array mid-loop)
+
+This is an **extremely compute-bound kernel** — arithmetic intensity is effectively infinite because there is no array to load from memory. The working set is two scalars (`h`, `s`) plus the loop counter. Everything fits in registers.
+
+**Implications:**
+| Platform | Assessment |
+|---|---|
+| Shared-memory CPU (OpenMP) | Near-linear scaling with core count; no memory bandwidth bottleneck |
+| Distributed CPU (MPI) | Communication overhead is negligible (one `MPI_Reduce` of a single double at the end); scales well but latency dominates at small N |
+| GPU (CUDA) | Kernel launch + reduction overhead is non-trivial relative to the work per thread; no memory traffic to hide, so the GPU's bandwidth advantage is irrelevant; compute throughput advantage is real but the reduction tree adds overhead |
+
+## 3. Communication (Distributed)
+
+If split across P processes, each process owns a contiguous sub-range `[i_start, i_end)`. They need to exchange **exactly one `double`** at the end via a global sum reduction (`MPI_Allreduce` or `MPI_Reduce`). There is **zero inter-process communication during the computation**. This is about as communication-friendly as any algorithm can be.
+
+## 4. Separable Parts
+
+| Part | Character |
+|---|---|
+| **Term computation** | Embarrassingly parallel, compute-bound, register-resident |
+| **Scalar reduction** | Parallel reduction (tree or atomic); trivially cheap |
+| **Final multiply by h** | Serial, O(1), irrelevant |
+
+---
+
+# Recommendation
+
+## Primary: OpenMP (shared-memory threads)
+
+This is the **ideal OpenMP use case**:
+
+```c
+double s = 0.0;
+#pragma omp parallel for reduction(+:s) schedule(static)
+for (long i = 0; i < n; i++) {
+    double x = a + (i + 0.5) * h;
+    s += 4.0 / (1.0 + x * x);
+}
+return s * h;
+```
+
+One pragma, zero data movement, near-perfect load balance (all iterations are identical cost), and the compiler handles the reduction tree. Expected speedup on a 16-core machine: **~14–15×** (limited only by reduction overhead and thread launch latency, not memory).
+
+## Also Suitable: MPI
+
+For very large N (>10⁹) or cluster deployment, MPI scales trivially — each rank computes its sub-sum independently, then one `MPI_Reduce`. The communication cost is a single double. However, for the reference size (10⁷), MPI process startup cost likely exceeds the computation time.
+
+## Also Suitable: CUDA
+
+Technically feasible — launch N threads, each computing one term, then a parallel reduction. But this is a **poor fit in practice** for this specific kernel because:
+- There is no memory bandwidth to exploit (no arrays)
+- The kernel is so short that PCIe transfer of the result and kernel launch overhead dominate
+- A CPU with AVX-512 and OpenMP will likely match or beat a GPU here
+
+## Poor Fits
+
+**MPI alone** (without OpenMP): process-spawn overhead is disproportionate for a single-function, sub-second computation. Fine for HPC scale-out but overkill here.
+
+**CUDA alone**: no memory-bandwidth bottleneck to hide, no large data structure to keep on-device, and the reduction overhead is a significant fraction of total work at N=10⁷.
+
+**Serial with compiler optimisation**: a modern compiler with `-O3 -march=native` will auto-vectorise this loop (4 or 8 iterations per SIMD lane), giving a free 4–8× speedup with zero code changes — this should be the **baseline** before any parallelism is added, and is worth doing regardless.
+
+---
+
+```json
+{"primary": "openmp", "also_suitable": ["mpi", "serial"], "poor_fit": ["cuda"], "expected_speedup": "near-linear with core count, ~12–15× on a 16-core CPU", "justification": "The loop is embarrassingly parallel with a trivial scalar reduction and zero memory traffic, making it a textbook OpenMP reduction target with no bandwidth bottleneck. CUDA is a poor fit because there is no array to stream through memory, so the GPU's bandwidth advantage is irrelevant and kernel-launch plus reduction overhead dominate at N=10^7. Serial with AVX-512 auto-vectorisation should be the baseline, as it gives a free 4–8× before any threading."}
+```

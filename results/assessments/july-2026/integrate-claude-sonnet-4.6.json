@@ -1,0 +1,16 @@
+{
+  "model": "claude-sonnet-4.6",
+  "notebook": "integrate.ipynb",
+  "verdict": {
+    "primary": "openmp",
+    "also_suitable": [
+      "mpi",
+      "serial"
+    ],
+    "poor_fit": [
+      "cuda"
+    ],
+    "expected_speedup": "near-linear with core count, ~12\u201315\u00d7 on a 16-core CPU",
+    "justification": "The loop is embarrassingly parallel with a trivial scalar reduction and zero memory traffic, making it a textbook OpenMP reduction target with no bandwidth bottleneck. CUDA is a poor fit because there is no array to stream through memory, so the GPU's bandwidth advantage is irrelevant and kernel-launch plus reduction overhead dominate at N=10^7. Serial with AVX-512 auto-vectorisation should be the baseline, as it gives a free 4\u20138\u00d7 before any threading."
+  }
+}

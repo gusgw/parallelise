@@ -1,0 +1,75 @@
+========================================================================
+backend assessment (kimi-k2.5) for jacobi.ipynb:
+========================================================================
+I'll analyze this 2D Jacobi heat stencil algorithm for parallelization.
+
+## 1. Dependency Structure
+
+The algorithm uses **double-buffering** (`u` and `un`), which is crucial: each iteration reads from `u` and writes to `un`. This makes all interior cell updates **independent within a single sweep** — no read-after-write dependencies. However, there is a **sweep-to-sweep dependency**: iteration `t+1` needs the complete result from iteration `t`.
+
+Within a sweep: **embarrassingly parallel** — each interior point can be computed simultaneously.
+
+Across sweeps: **inherently sequential** — must complete all of sweep `t` before starting `t+1`.
+
+The boundary conditions are fixed (Dirichlet), so no communication of boundary values between sweeps.
+
+## 2. Arithmetic Intensity
+
+Per interior cell per sweep:
+- **Memory traffic**: Read 4 neighbors + write 1 result = 5 doubles × 8 bytes = 40 bytes (naive), but with cache effects, roughly 2× for capacity misses ≈ 80 bytes
+- **Computation**: 4 loads, 3 adds, 1 multiply = ~8 FLOPs
+
+**Arithmetic intensity**: ~0.1 FLOPs/byte — **severely memory-bandwidth-bound**.
+
+At N=128, the grid fits in L2/L3 cache, so actual intensity is higher due to temporal reuse. But at realistic sizes (N=1024+), it's cache-resident per sweep but still memory-bound for the copy operation. The `un = [row[:] for row in u]` copy is pure memory bandwidth.
+
+Implications:
+- **Shared-memory CPU**: Limited by memory bandwidth; expect modest speedup (2-8× on typical 2-socket systems)
+- **Distributed CPU**: Poor — communication overhead dominates for such low computation per point
+- **GPU**: Good fit for the stencil kernel, but PCIe transfer and small problem size hurt; need N >> 128
+
+## 3. Communication (Distributed)
+
+If split across processes:
+- Each process needs **halo exchange**: 1 row/column of ghost cells from neighbors per sweep
+- Communication volume: O(N) per sweep × ITERS sweeps = O(N × ITERS)
+- Computation: O(N² × ITERS)
+- Ratio: O(1/N) — communication/computation ratio is poor for small N, improves with larger N
+
+For N=128, this is terrible. For N=8192+, acceptable.
+
+## 4. Separable Parts
+
+| Part | Character | Best Backend |
+|------|-----------|------------|
+| Stencil kernel (`un[i][j] = ...`) | Embarrassingly parallel, memory-bound | OpenMP, CUDA |
+| Buffer copy (`un = [row[:]...]`) | Pure memory bandwidth, parallelizable | OpenMP (or eliminate via pointer swap) |
+| Final reduction (checksum) | Reduction | OpenMP reduction, or serial |
+
+The copy can be eliminated entirely in optimized code by swapping pointers/arrays instead of deep copying.
+
+## Recommendations
+
+**OpenMP (shared-memory threads)** is the clear winner:
+- Perfect fit: parallelize the `i` loop with `collapse(2)` or `parallel for`
+- No communication needed — shared memory handles halo implicitly
+- Low overhead for this fine-grained parallelism
+- Easy to implement, portable
+
+**CUDA** is viable but:
+- N=128 is tiny for GPU (kernel launch overhead dominates)
+- Need N=2048+ to amortize transfer and launch costs
+- Excellent for production workloads, overkill for this research prototype
+
+**MPI** is a poor fit:
+- N=128 means subdomains are tiny; halo overhead kills performance
+- Only viable for N >> 1000 on clusters
+
+**Serial with optimization**:
+- Actually competitive for N=128! The problem is tiny.
+- Compiler vectorization + `-O3` may achieve near-peak memory bandwidth with a single thread.
+
+Critical optimization: **eliminate the copy** via double-buffer pointer swap. This halves memory traffic.
+
+{"primary": "openmp", "also_suitable": ["cuda"], "poor_fit": ["mpi"], "expected_speedup": "2-8x on multicore CPU, limited by memory bandwidth; near-linear with thread count for compute-heavy variants", "justification": "The Jacobi stencil is embarrassingly parallel within sweeps but memory-bandwidth-bound, making OpenMP ideal for shared-memory parallelism without communication overhead. MPI's halo exchange is prohibitive at this scale, while CUDA's kernel launch overhead exceeds work for N=128."}
+verdict written to assess/results/jacobi-kimi-k2.5.json

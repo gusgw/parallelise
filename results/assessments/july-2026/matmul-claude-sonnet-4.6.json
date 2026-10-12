@@ -1,0 +1,16 @@
+{
+  "model": "claude-sonnet-4.6",
+  "notebook": "matmul.ipynb",
+  "verdict": {
+    "primary": "openmp",
+    "also_suitable": [
+      "cuda",
+      "serial"
+    ],
+    "poor_fit": [
+      "mpi"
+    ],
+    "expected_speedup": "near-linear with core count (4\u201316\u00d7) on multicore CPU; 50\u2013200\u00d7 via cuBLAS on GPU at larger N",
+    "justification": "The (i,j) output elements are fully independent, making the kernel embarrassingly parallel with zero inter-thread communication; OpenMP collapse(2) over the outer loops plus cache-blocking delivers near-linear CPU scaling at N=256. MPI is a poor fit because inter-process communication cost exceeds the ~33M-FLOP workload at this problem size. For maximum performance, delegating to a tuned BLAS (MKL/OpenBLAS) is preferred over hand-written parallelism."
+  }
+}

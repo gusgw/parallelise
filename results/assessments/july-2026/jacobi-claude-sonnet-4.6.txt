@@ -1,0 +1,79 @@
+========================================================================
+backend assessment (claude-sonnet-4.6) for jacobi.ipynb:
+========================================================================
+# Analysis of the 2D Jacobi Heat Stencil
+
+## 1. Dependency Structure
+
+**Within a single sweep:** Every interior cell `un[i][j]` depends only on the *previous* sweep's values `u[i±1][j]`, `u[i][j±1]`. Because the algorithm is double-buffered (reads from `u`, writes to `un`), **all `(N-2)²` interior updates within one sweep are fully independent of each other**. This is a classic **stencil pattern** — embarrassingly parallel within each sweep.
+
+**Across sweeps:** Sweep `k+1` cannot begin until sweep `k` is complete. This is an **inherently sequential dependency** across iterations. With 200 iterations, this creates a chain of 200 global synchronisation barriers that cannot be eliminated without changing the algorithm (e.g., wavefront or pipeline approaches).
+
+**Boundary cells:** Fixed (Dirichlet) boundaries are never updated — no dependency management needed.
+
+## 2. Arithmetic Intensity
+
+For each interior cell update:
+- **Reads:** 4 neighbours + 1 centre (for copy) = 5 floats = 40 bytes (doubles)
+- **Writes:** 1 cell = 8 bytes
+- **FLOPs:** 4 additions + 1 multiply = 5 FLOPs
+
+**Arithmetic intensity ≈ 5 FLOPs / 48 bytes ≈ 0.10 FLOPs/byte**
+
+This is **extremely memory-bandwidth-bound**. For reference:
+- A modern CPU has ~50–100 GB/s bandwidth → ceiling ~5–10 GFLOP/s on this kernel
+- A modern GPU has ~1–2 TB/s bandwidth → ceiling ~100–200 GFLOP/s
+
+At N=128, the entire grid is **128×128×8 bytes = 131 KB**, which fits comfortably in **L2 cache** on virtually any modern CPU. This dramatically changes the picture: the effective bandwidth seen by the kernel is cache bandwidth (~1–4 TB/s equivalent on modern CPUs), not DRAM bandwidth. At this size, the kernel is likely **latency- and overhead-bound** rather than bandwidth-bound.
+
+At larger N (e.g., N=4096, ~128 MB), the working set spills to DRAM and the kernel becomes genuinely bandwidth-bound.
+
+| Platform | Fit | Reason |
+|---|---|---|
+| Shared-memory CPU (OpenMP) | ✅ Good | Cache-friendly, low overhead, 200 barriers are cheap |
+| GPU (CUDA) | ⚠️ Marginal at N=128, good at N≥1024 | Kernel launch overhead dominates at small N; excellent at large N |
+| Distributed MPI | ❌ Poor at N=128 | Halo exchange cost >> compute; only viable at very large N |
+
+## 3. Communication (Distributed Case)
+
+If rows are partitioned across MPI ranks (the natural decomposition):
+- Each rank owns a horizontal slab of rows
+- **Every sweep** requires exchanging one row of ghost cells (the "halo") with the rank above and below
+- **Halo size:** 2 × N doubles = 2 × 128 × 8 = 2 KB per rank per sweep
+- **Frequency:** 200 sweeps × 2 messages = 400 point-to-point exchanges per rank
+- **Compute-to-communication ratio:** At N=128 with P ranks, each rank does ~(128/P)×126×5 FLOPs vs. 2×128 doubles exchanged. This ratio is very low — MPI latency will dominate entirely at this problem size.
+
+At N=128, MPI is essentially never justified. At N=8192+ with many ranks, the ratio improves but the 200-barrier chain still limits strong scaling.
+
+## 4. Separable Parts
+
+| Part | Character | Parallelism |
+|---|---|---|
+| **Stencil sweep** (inner double loop) | 5-point stencil, double-buffered, all cells independent | Embarrassingly parallel in 2D |
+| **Buffer copy** (`un = [row[:] for row in u]`) | Embarrassingly parallel memcpy | Trivially parallelisable; in C/CUDA, eliminated by pointer swap |
+| **Checksum reduction** (final sum) | Classic parallel reduction | O(log P) depth; negligible cost |
+| **Outer iteration loop** | Sequential dependency chain | Cannot be parallelised without algorithm change |
+
+**Key optimisation note:** The Python `row[:]` copy is unnecessary in a compiled implementation. Double-buffering via pointer/array swapping costs O(1) and eliminates the copy entirely.
+
+---
+
+## Recommendation
+
+**Primary: OpenMP** (shared-memory threads on CPU)
+
+**Rationale:**
+1. The inner double loop is trivially parallelised with `#pragma omp parallel for collapse(2)` — no data races due to double buffering.
+2. At N=128, the working set fits in cache; OpenMP thread overhead is low and the 200 barriers (`#pragma omp barrier` or implicit at loop end) are fast on-chip synchronisations.
+3. A compiled C/Fortran implementation with OpenMP and `-O3 -march=native` will achieve near-peak cache bandwidth utilisation.
+
+**CUDA** becomes the better choice if N is scaled to ≥1024 (working set exceeds LLC, GPU bandwidth advantage materialises, and kernel launch overhead amortises). At N=128, CUDA launch overhead (~5–10 µs per kernel × 200 iterations = ~1–2 ms overhead alone) likely exceeds total compute time.
+
+**MPI** is a poor fit at this problem size: the halo exchange latency per sweep dominates the tiny per-rank compute, and the 200-barrier chain prevents pipelining.
+
+**Serial with compiler optimisation** is worth benchmarking as a baseline — at N=128, a single-threaded C implementation with `-O3` and auto-vectorisation may outperform a poorly-tuned OpenMP version due to thread spawn/sync overhead.
+
+```
+{"primary": "openmp", "also_suitable": ["cuda", "serial"], "poor_fit": ["mpi"], "expected_speedup": "4–8× on 8-core CPU at N=128; 50–200× on GPU at N≥2048", "justification": "The double-buffered stencil is embarrassingly parallel within each sweep, making OpenMP collapse(2) a natural and low-overhead fit; at N=128 the grid fits in L2 cache so shared-memory threading avoids DRAM bandwidth limits entirely. CUDA becomes superior only at larger N where the working set exceeds the LLC and GPU memory bandwidth dominates. MPI is a poor fit because the 2 KB per-sweep halo exchange cost vastly exceeds the per-rank compute at this problem size."}
+```
+verdict written to assess/results/jacobi-claude-sonnet-4.6.json

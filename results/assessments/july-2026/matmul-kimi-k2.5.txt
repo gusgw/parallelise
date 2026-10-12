@@ -1,0 +1,62 @@
+========================================================================
+backend assessment (kimi-k2.5) for matmul.ipynb:
+========================================================================
+I'll analyze this dense matrix multiplication algorithm for parallelization.
+
+## 1. Dependency Structure
+
+The naive triple-loop implementation has **embarrassingly parallel outer loops** with a **reduction in the inner loop**:
+
+- The `i` and `j` loops are **fully independent**: each `C[i][j]` can be computed without any data dependencies on other `C[i'][j']` entries
+- The `k` loop is a **reduction** (summation) that must be sequential for numerical stability, though can be parallelized with care
+
+This is **embarrassingly parallel at the outer level**: we can assign different `(i,j)` pairs to different workers with zero communication between them during computation.
+
+## 2. Arithmetic Intensity
+
+For `n × n` matrices:
+- **Data touched**: `3n²` elements (read A, read B, write C) ≈ `24n²` bytes in double precision
+- **Operations**: `2n³` multiply-adds (FMAs)
+
+**Arithmetic intensity**: `2n³ / (24n²) = n/12` FLOPs/byte
+
+For `N = 256`: ~21 FLOPs/byte — **compute-bound** on modern CPUs (need ~10+ FLOPs/byte to saturate memory bandwidth)
+
+For larger realistic sizes (e.g., `N = 4096`): ~341 FLOPs/byte — **strongly compute-bound**
+
+This implies:
+- **Shared-memory CPU**: Good speedup possible with proper blocking/tiling
+- **Distributed CPU**: Viable but needs careful data distribution (A and B replication vs. 2D decomposition)
+- **GPU**: Excellent fit — matrix multiply is the canonical GPU workload
+
+## 3. Communication (Distributed Case)
+
+If split across distributed processes:
+- **Option A (replication)**: Each process gets full A and B, computes subset of C — **zero communication** during compute, `O(n²)` broadcast at start
+- **Option B (2D decomposition)**: Each process owns sub-blocks — requires **all-to-all communication** (SUMMA algorithm) with `O(n²/√p)` per step × `√p` steps = `O(n²)` total communication
+
+For this naive algorithm, replication is simpler and communication is minimal.
+
+## 4. Algorithm Parts
+
+Single homogeneous kernel — no separable parts with different characteristics.
+
+---
+
+## Recommendations
+
+| Backend | Assessment |
+|--------|-----------|
+| **CUDA** | **Best fit**: Matrix multiply is GPU's native language. cuBLAS achieves near-peak FLOPs. The regular memory access pattern, high arithmetic intensity, and massive parallelism map perfectly to GPU warps. |
+| **OpenMP** | Good fit for CPU: collapse(2) on i,j loops + simd on k, with blocking for cache efficiency. Easy to implement, decent speedup (4-16× on typical multicore). |
+| **MPI** | Viable for very large N across nodes, but overkill for single-node. 2D decomposition adds complexity; replication approach simpler but memory-limited. |
+| **Serial+compiler** | Poor: leaving 10-100× performance on table for this classic parallel workload. |
+
+**Poor fits explained**: Pure MPI on single node (unnecessary process overhead vs. threads); serial (massively underutilizes hardware for this compute-bound problem).
+
+---
+
+```json
+{"primary": "cuda", "also_suitable": ["openmp", "mpi"], "poor_fit": ["serial"], "expected_speedup": "50-100x vs naive Python, 10-50x vs optimized CPU", "justification": "Dense matrix multiply is GPU-native with regular memory access and high arithmetic intensity; cuBLAS or custom CUDA kernels achieve near-peak FLOPs. OpenMP works well for CPU portability but cannot match GPU throughput."}
+```
+verdict written to assess/results/matmul-kimi-k2.5.json

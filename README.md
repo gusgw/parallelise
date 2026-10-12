@@ -1,12 +1,25 @@
 # parallelise
 
-This system integrates several large language models, reached through one
-OpenAI-compatible gateway, into a code-generation and verification pipeline. Given a serial
-research notebook, an agent driven by a language model writes a parallel C program, and an
-independent gate then checks that the program is correct and genuinely faster. Four models
-are compared: Claude Sonnet 4.6 (`claude-sonnet-4.6`), Kimi K2.5 (`kimi-k2.5`), Llama 3.3
-70B (`llama-3.3-70b`) and Gemma 31B (`gemma-31b`). Three ways of building the agent, and
-three kinds of parallel hardware, are compared as well.
+This repository implements a custom agent that converts numerical algorithms from
+simple serial Python into parallel C or CUDA: OpenMP using threads, message passing with
+MPI (the Message Passing Interface), or GPU acceleration with CUDA, as appropriate to the
+problem. Given a research notebook and a target backend, the agent decides the
+parallelisation strategy, for example how to decompose the work, which reduction or
+exchange pattern to use, and how to keep the result independent of the number of
+workers, and then writes, builds and tests the program until an independent gate
+accepts it as correct and genuinely faster. The goal is an agent that also chooses among
+these methods for each algorithm, or recommends well-optimised serial code when the
+algorithm resists parallelisation. A first version of that assessment stage is included:
+`parallelise assess` returns a model's reasoned verdict on a notebook, and `parallelise run`
+can act on it (see "Choosing the backend" below). Its verdicts are not yet validated
+against the measured results at scale, which is the next experiment. The agent is driven by a large language
+model reached through one OpenAI-compatible gateway, so several models can be
+integrated into the same system and compared. Systematic measurements of the
+performance of different agent harnesses and different models are reported below: four
+models (Claude Sonnet, Kimi K2.5, Llama 3.3 70B and Gemma 31B in the first study; Claude
+Sonnet 4.5, Kimi K2.5, gpt-oss-120b and Llama 3.3 70B in the second), three ways of
+building the agent, three parallel backends, nine algorithms, and a study of how much of
+the measured competence is recall of textbook kernels rather than derivation.
 
 This repository contains my own work.
 
@@ -41,6 +54,21 @@ threads inside one computer. MPI (the Message Passing Interface) uses several co
 processes that exchange messages. CUDA (NVIDIA's system for programming graphics
 processors) uses a graphics processing unit, abbreviated GPU. Every graded run is stored as
 one structured record, so that the models and agent designs can be compared afterwards.
+
+### Choosing the backend
+
+Before any code is written, `parallelise assess <notebook>` gives the whole notebook to a
+model and asks for a critical analysis: which loop iterations are independent, whether the
+work is limited by arithmetic or by memory, what a distributed version would have to
+communicate, and which of OpenMP, MPI, CUDA, a combination of them (each part with its own
+backend) or well-optimised serial code suits the algorithm. It prints the analysis and the
+recommendation, and `--out verdict.json` saves the verdict as JSON. Running
+`parallelise run <problem> auto` makes the same assessment first and then uses the
+recommended backend, provided the problem has a folder for it. If the recommendation is
+serial code, or names a backend the problem lacks, the command stops with a plain message
+and exit status 1 and writes no run record. Otherwise the verdict is saved as
+`assessment.json` in the work folder and mentioned in the run's notes. The July 2026
+verdicts are in `results/assessments/july-2026/`.
 
 The study asks three questions. Which model writes the best parallel code? Does the way
 the agent is built matter? And how much of a strong model's success is memory of famous
@@ -289,12 +317,15 @@ latencies through a gateway to a shared cloud service on one day, not properties
 
 ## Security
 
-Code written by a model is untrusted. Four layers limit the harm it can do. The agent can
-run only build commands from a short allow-list, as argument lists with no shell. The gate checks the trusted files (the benchmark, headers and Makefile)
-against digests (fingerprints) taken when the work folder was made, and fails the run if the
-agent changed any of them. Every
-subprocess, whether a build, a test, a benchmark or a notebook run, has a timeout, and so
-does every model request. The container runs as an ordinary user, and under Kubernetes it
+Code written by a model is untrusted. Four layers limit the harm it can do, and none of
+them is a sandbox. The agent can run only commands from a short allow-list, as argument
+lists with no shell; the list currently includes the Python interpreter, so a determined
+agent is not confined to the work folder, and the container, not the allow-list, is the
+boundary that matters. The gate checks the trusted files (the benchmark, headers and
+Makefile) against digests (fingerprints) taken when the work folder was made, and fails
+the run if the agent changed any of them; the digests live in the work folder, so this
+catches careless edits rather than deliberate ones. Every subprocess, whether a build, a
+test, a benchmark or a notebook run, has a timeout, and so does every model request. The container runs as an ordinary user, and under Kubernetes it
 drops all capabilities, has a read-only file system, and has processor and memory limits
 and a hard deadline. These limits contain mistakes and runaway programs. They are not a full
 sandbox, and the code could use the network unless you forbid it, for example with a
