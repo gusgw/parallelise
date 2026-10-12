@@ -1,94 +1,92 @@
 # parallelise
 
-This repository implements a custom agent that converts numerical algorithms from
-simple serial Python into parallel C or CUDA: OpenMP using threads, message passing with
-MPI (the Message Passing Interface), or GPU acceleration with CUDA, as appropriate to the
-problem. Given a research notebook and a target backend, the agent decides the
-parallelisation strategy, for example how to decompose the work, which reduction or
-exchange pattern to use, and how to keep the result independent of the number of
-workers, and then writes, builds and tests the program until an independent gate
-accepts it as correct and genuinely faster. The goal is an agent that also chooses among
-these methods for each algorithm, or recommends well-optimised serial code when the
-algorithm resists parallelisation. A first version of that assessment stage is included:
-`parallelise assess` returns a model's reasoned verdict on a notebook, and `parallelise run`
-can act on it (see "Choosing the backend" below). Its verdicts are not yet validated
-against the measured results at scale, which is the next experiment. The agent is driven by a large language
-model reached through one OpenAI-compatible gateway, so several models can be
-integrated into the same system and compared. Systematic measurements of the
-performance of different agent harnesses and different models are reported below: four
-models (Claude Sonnet, Kimi K2.5, Llama 3.3 70B and Gemma 31B in the first study; Claude
-Sonnet 4.5, Kimi K2.5, gpt-oss-120b and Llama 3.3 70B in the second), three ways of
-building the agent, three parallel backends, nine algorithms, and a study of how much of
-the measured competence is recall of textbook kernels rather than derivation.
+This repository holds an agent that turns a numerical algorithm written in plain, serial
+Python into parallel C or CUDA. It uses OpenMP for threads within one computer, MPI (the
+Message Passing Interface) for processes that exchange messages, or CUDA for a graphics
+processor, whichever suits the problem. Given a research notebook and a backend, the agent
+decides how to parallelise the work: how to split it, which pattern of reduction or
+exchange to use, and how to keep the answer the same however many workers run. It then
+writes, builds and tests the program until an independent gate accepts the result as
+correct and faster. The goal is an agent that also chooses the method for each algorithm,
+or recommends well-written serial code when an algorithm resists parallelisation. A first
+version of that choice exists: `parallelise assess` asks a model for a reasoned verdict on
+a notebook, and `parallelise run` can act on the verdict. These verdicts have not yet been
+tested against measured results at scale; that is the next experiment. A large language
+model drives the agent through one OpenAI-compatible gateway, so several models can be
+plugged into the same system and compared. The results below measure how well different
+models and different agent harnesses do the job: four models in each of two studies,
+three ways of building the agent, three backends, nine algorithms, and a test of how much
+of a model's success is memory of textbook kernels rather than reasoning.
 
-This repository contains my own work.
+This repository holds my own work. It is a public version: material that belongs in
+private repositories was removed before publication, and the history begins at
+publication.
 
 ## What it does and why
 
-Terms used below: the *kernel* is the C function that does the computation; a *cell* is one
-problem on one backend for one model; the *oracle* is the correct answer recorded by the
-notebook; and a *work folder* is the directory the agent writes into.
+A few words recur below. The kernel is the C function that does the computation. A cell is
+one problem on one backend for one model. The oracle is the correct answer, recorded by the
+notebook itself. A work folder is the directory the agent writes into.
 
-Researchers often have an algorithm that works in a Jupyter notebook (an interactive
-document that mixes text and Python) but runs slowly because it is serial. Rewriting it in
-parallel C is skilled work, and a language model can draft it. The difficulty is trust: a
-model can produce code that compiles, looks plausible, and is wrong or not actually
-parallel. This project therefore treats the model as an untrusted author and builds the
-checking around it.
+Researchers often have an algorithm that works in a Jupyter notebook, an interactive
+document that mixes text and Python, but runs slowly because it runs on one core.
+Rewriting it in parallel C takes skill, and a language model can draft it. The difficulty
+is trust. A model can produce code that compiles, looks plausible, and is wrong, or is not
+parallel at all. This project therefore treats the model as an untrusted author and builds
+the checking around it.
 
-A problem is a notebook whose last cell records its own answer, called the oracle, with a
-tolerance. The agent receives a work folder containing the notebook, the oracle in C form,
-a header with the exact function signature to implement, and a benchmark that it cannot
-change. It writes the kernel (the C function that does the computation) and a unit test, and it must make `make check` pass. The gate
-then judges the work on its own, in three parts:
+A problem is a notebook whose last cell records its own answer, with a tolerance. The agent
+receives a work folder holding the notebook, the oracle in C form, a header giving the
+exact function to implement, and a benchmark that it cannot change. It writes the kernel
+and a unit test, and it must make `make check` pass. The gate then judges the work on its
+own, in three parts:
 
 1. The code must compile with every warning treated as an error.
-2. The unit test must match the notebook's answer within the tolerance, both with one worker
-   and with several. The answer must not depend on the number of workers, which is how a
-   broken parallelisation is caught.
-3. The benchmark must show a real speed-up, and the figures are validated so that they
-   cannot have been invented.
+2. The unit test must match the notebook's answer within the tolerance, with one worker and
+   with several. The answer must not depend on the number of workers; that is how a broken
+   parallelisation shows itself.
+3. The benchmark must show a real speed-up, and the figures are checked so that they cannot
+   have been invented.
 
-The target hardware is one of three backends. OpenMP (Open Multi-Processing) uses several
-threads inside one computer. MPI (the Message Passing Interface) uses several cooperating
-processes that exchange messages. CUDA (NVIDIA's system for programming graphics
-processors) uses a graphics processing unit, abbreviated GPU. Every graded run is stored as
-one structured record, so that the models and agent designs can be compared afterwards.
+The target is one of three backends. OpenMP runs several threads inside one computer. MPI
+runs several processes that exchange messages. CUDA, NVIDIA's system for programming
+graphics processors, runs the work on a graphics processing unit (GPU). Every graded run
+becomes one structured record, so that models and agent designs can be compared afterwards.
 
 ### Choosing the backend
 
 Before any code is written, `parallelise assess <notebook>` gives the whole notebook to a
-model and asks for a critical analysis: which loop iterations are independent, whether the
-work is limited by arithmetic or by memory, what a distributed version would have to
-communicate, and which of OpenMP, MPI, CUDA, a combination of them (each part with its own
-backend) or well-optimised serial code suits the algorithm. It prints the analysis and the
-recommendation, and `--out verdict.json` saves the verdict as JSON. Running
-`parallelise run <problem> auto` makes the same assessment first and then uses the
-recommended backend, provided the problem has a folder for it. If the recommendation is
-serial code, or names a backend the problem lacks, the command stops with a plain message
-and exit status 1 and writes no run record. Otherwise the verdict is saved as
-`assessment.json` in the work folder and mentioned in the run's notes. The July 2026
-verdicts are in `results/assessments/july-2026/`.
+model and asks for a critical analysis: which loop iterations are independent, whether
+arithmetic or memory limits the work, what a distributed version would have to
+communicate, and which of OpenMP, MPI, CUDA, a combination of them with a backend for each
+part, or well-written serial code suits the algorithm. The command prints the analysis and
+the recommendation, and `--out verdict.json` saves the verdict. The command
+`parallelise run <problem> auto` makes the same assessment first and then runs the
+recommended backend, provided the problem has a folder for it. If the verdict is serial
+code, or names a backend the problem lacks, the command stops with a plain message and
+exit status 1, and writes no run record. Otherwise it saves the verdict as
+`assessment.json` in the work folder and mentions it in the run's notes. The verdicts from
+July 2026 are in `results/assessments/july-2026/`.
 
-The study asks three questions. Which model writes the best parallel code? Does the way
-the agent is built matter? And how much of a strong model's success is memory of famous
+The study asks three questions. Which model writes the best parallel code? Does the way the
+agent is built matter? And how much of a strong model's success is memory of famous
 textbook algorithms rather than reasoning? The last question is why two problems were built
-to resist recall, and why a masking tool renames the familiar problems.
+to resist recall, and why a masking tool renames the familiar ones.
 
 ## Results
 
-All numbers below are single runs, not averages. Full tables, with the file each came from,
-are in [docs/RESULTS.md](docs/RESULTS.md). The sources are the run manifests in `results/`.
-In this document a cell means one problem on one backend for one model, scored by how
-many of the three agent designs passed it. Single runs carry no error bars, so a
-difference of one run between two cells is within the noise.
+Every number below comes from a single run, not an average. The full tables, each with the
+file it came from, are in [docs/RESULTS.md](docs/RESULTS.md); the sources are the run
+manifests in `results/`. Here a cell means one problem on one backend for one model, scored
+by how many of the three agent designs passed it. Single runs carry no error bars, so a
+difference of one run between two cells lies within the noise.
 
 ### The seven well-known problems
 
-There are seven problems, all well known: numerical integration, matrix multiply, a heat stencil
-(the Jacobi method), N-body forces, conjugate gradient, prefix sum and histogram. Each was
-attempted by each model with each of three agent designs, on every backend that suits it
-(CUDA was not built for prefix sum or histogram). The table counts passing runs.
+The seven problems are all well known: numerical integration, matrix multiply, a heat
+stencil (the Jacobi method), N-body forces, conjugate gradient, prefix sum and histogram.
+Each model attempted each of them with each of three agent designs, on every backend that
+suits it; CUDA was not built for prefix sum or histogram. The table counts passing runs.
 
 | model | OpenMP (of 21) | MPI (of 21) | CUDA (of 15) | all (of 57) |
 |---|---|---|---|---|
@@ -100,21 +98,21 @@ attempted by each model with each of three agent designs, on every backend that 
 A chart of the same data is in [docs/figures/pass-rates.svg](docs/figures/pass-rates.svg).
 
 Two things stand out. The two strongest models pass almost everything, so these problems
-cannot tell them apart. And the difficulty lies almost entirely in MPI, where processes
-must exchange boundary data correctly; every model except the weakest does well with
-OpenMP threads. My project log reports that a later uniform re-grade did not
-confirm the one pass of Llama on prefix sum with MPI. That re-grade is not in the run
-records, so the table counts the pass (see [docs/RESULTS.md](docs/RESULTS.md)).
+cannot tell them apart. And the difficulty lies almost wholly in MPI, where processes must
+exchange boundary data correctly; every model but the weakest does well with OpenMP
+threads. My project log says that a later uniform re-grade did not confirm Llama's one pass
+on prefix sum with MPI. That re-grade is not in the run records, so the table counts the
+pass; see [docs/RESULTS.md](docs/RESULTS.md).
 
 ### The recall-resistant problems
 
-The seven problems above are famous, so a strong model may be recalling a known answer.
-Two further problems have no standard parallel recipe. `decay` is a running score in which
-each step takes the largest of three quantities, so it combines terms with maximum and
-addition instead of the usual multiply and add. `reservoir` is a tank level that cannot
-overflow or run empty, for which the tempting shortcut of adding everything up and clamping
-at the end gives the wrong answer. Both run on OpenMP and MPI. Each entry below counts
-passing runs out of six: three agent designs on each of the two backends.
+The seven problems above are famous, so a strong model may be remembering a known answer.
+Two further problems have no standard parallel recipe. In `decay`, each step takes the
+largest of three quantities, so the terms combine by maximum and addition instead of the
+usual multiply and add. In `reservoir`, a tank level can neither overflow nor run empty, so
+the tempting shortcut of adding everything up and clamping at the end gives the wrong
+answer. Both run on OpenMP and MPI. Each entry below counts passing runs out of six: three
+agent designs on each of two backends.
 
 | model | decay | reservoir | total (of 12) |
 |---|---|---|---|
@@ -123,20 +121,20 @@ passing runs out of six: three agent designs on each of the two backends.
 | kimi-k2.5 | 4 | 4 | 8 |
 | llama-3.3-70b | 0 | 0 | 0 |
 
-**Unverified: these numbers are from my project log, not from run records.** The run files
-for these two problems were not kept, so the table cannot be checked against records. If
-the log is right, the problems spread the models across the whole range, which the
-textbook problems could not; I regard that conclusion as tentative. Gemma scoring above Kimi should not be read as Gemma being the better
-model: Kimi's four failures were near-misses, correct with one worker and slightly wrong at
-the boundaries between the blocks given to different workers.
+**These numbers come from my project log, not from run records, and cannot be checked.**
+The run files for these two problems were not kept. If the log is right, these problems
+spread the models across the whole range, which the textbook problems could not; I hold
+that conclusion loosely. Gemma's score above Kimi's does not make Gemma the better model:
+Kimi's four failures were near misses, correct with one worker and slightly wrong at the
+seams between the blocks given to different workers.
 
 ### Does the agent design matter?
 
-The three designs give the model the same tools. They differ in how strictly they insist
-that the checks pass before the model may finish. The plain agent (`basic`) is a short loop
-that runs the checks itself when the model stops, and feeds failures back. The LangGraph
-agent does the same in whole attempts. The Pydantic AI agent (`pydantic`) uses an output
-validator that refuses to accept the model's final answer until the checks pass.
+The three designs give the model the same tools. They differ in how firmly they insist that
+the checks pass before the model may finish. The plain agent, `basic`, is a short loop that
+runs the checks itself when the model stops and feeds the failures back. The LangGraph
+agent does the same in whole attempts. The Pydantic AI agent, `pydantic`, uses an output
+validator that refuses the model's final answer until the checks pass.
 
 | agent design | strong models (Sonnet, Kimi), of 38 | weak models (Gemma, Llama), of 38 |
 |---|---|---|
@@ -144,21 +142,21 @@ validator that refuses to accept the model's final answer until the checks pass.
 | langgraph | 38 | 25 |
 | pydantic | 38 | 24 |
 
-In these single runs, the differences between models are far larger than the differences
-between agent designs. The designs suggest a pattern: strictness probably helps a capable
-model that makes careless first attempts, and probably hurts a model that cannot solve the
-problem, because it then retries until its request budget is spent. On the
-recall-resistant problems the strict agent passed all four of Kimi's runs where the other
-two passed two of four each. This is a lean seen in single runs, not an established
-effect. The reasoning is in [docs/DESIGN.md](docs/DESIGN.md).
+In these single runs the differences between models dwarf the differences between designs.
+The designs hint at a pattern: strictness probably helps a capable model that makes careless
+first attempts, and probably hurts a model that cannot solve the problem, because that model
+then retries until its budget runs out. On the recall-resistant problems the strict agent
+passed all four of Kimi's runs where the other two passed two of four each. That is a lean
+seen in single runs, not an established effect. The reasoning is in
+[docs/DESIGN.md](docs/DESIGN.md).
 
 ### Masked against unmasked (October 2026)
 
 To measure recall directly, a second campaign ran integrate, jacobi, scan and conjugate
-gradient on OpenMP and MPI, once as they are and once after the masking tool had hidden
-every name that reveals the algorithm. It used four models (Claude Sonnet 4.5, Kimi K2.5,
-gpt-oss-120b and Llama 3.3 70B) and three agent designs, one run per cell, 192 runs in all.
-Passes out of 24 runs per model:
+gradient on OpenMP and MPI, once as they stand and once after the masking tool had hidden
+every name that gives the algorithm away. It used four models (Claude Sonnet 4.5, Kimi
+K2.5, gpt-oss-120b and Llama 3.3 70B) and three agent designs, one run per cell, 192 runs
+in all. The table gives passes out of 24 runs per model.
 
 | model | unmasked | masked |
 |---|---|---|
@@ -168,19 +166,19 @@ Passes out of 24 runs per model:
 | llama-3.3-70b | 7 | 9 |
 | all models (of 96) | 76 | 70 |
 
-For the three capable models together the pass rate fell from 96% to 85% when the names were
-hidden, a modest fall that is concentrated in prefix sum and in jacobi under MPI and that
-single runs cannot separate from chance. The new gate also rejected four runs in which an
+For the three capable models together, the pass rate fell from 96% to 85% when the names
+were hidden. The fall is modest, it falls mostly on prefix sum and on jacobi under MPI, and
+single runs cannot tell it from chance. The new gate also rejected four runs in which an
 agent had rewritten files it must not touch, which the July gate could not have caught. The
-method, all the tables, the latency and cost figures and the limitations are in
+method, every table, the latency and cost figures and the limitations are in
 [docs/CAMPAIGN-2026-10.md](docs/CAMPAIGN-2026-10.md); the chart is
 [docs/figures/masked-vs-unmasked.svg](docs/figures/masked-vs-unmasked.svg).
 
 ### Measured token costs
 
-Tokens were counted exactly by a proxy placed between the agents and the gateway, and
-priced at list prices. This campaign covered ten problem and backend combinations, each
-attempted by three agent designs (source: `results/tokens-new-problems-july-2026.json`).
+A proxy between the agents and the gateway counted every token, and the counts were priced
+at list prices. This campaign covered ten combinations of problem and backend, each
+attempted by three agent designs; the source is `results/tokens-new-problems-july-2026.json`.
 
 | model | requests | tokens sent plus received | cost |
 |---|---|---|---|
@@ -189,17 +187,17 @@ attempted by three agent designs (source: `results/tokens-new-problems-july-2026
 | gemma-31b | 763 | 8.93 million | about $5 to $6 of rented instance time |
 | llama-3.3-70b | 1,944 | 39.9 million | about $28.75 |
 
-The weakest model was the most expensive. It probably kept retrying problems it could not
-solve, and each retry sends the whole growing conversation again. A weak model is not
-necessarily a cheap model. Costs per agent design were not recorded, so this explanation
-rests on the failure records and not on billing data.
+The weakest model cost the most. It probably kept retrying problems it could not solve, and
+each retry sends the whole growing conversation again. A weak model is not a cheap model.
+Costs per agent design were not recorded, so this explanation rests on the failure records
+and not on billing data.
 
 ## How to run it
 
 You need Python 3.11 or later, a C compiler (`gcc`), `make`, and Open MPI (`mpicc` and
 `mpirun`; on Debian or Ubuntu the packages are `openmpi-bin` and `libopenmpi-dev`). CUDA
-needs `nvcc` and a graphics card, and its tests skip themselves when they are absent. You
-also need an OpenAI-compatible gateway; LiteLLM is one way to provide it.
+needs `nvcc` and a graphics card, and its tests skip themselves when either is absent. You
+also need an OpenAI-compatible gateway; LiteLLM is one way to provide one.
 
 1. Install the package. The plain agent needs only `httpx`; the extras add the two
    framework agents, the chart and the development tools.
@@ -208,15 +206,15 @@ also need an OpenAI-compatible gateway; LiteLLM is one way to provide it.
         python3 -m venv .venv && . .venv/bin/activate
         make install
 
-2. Point it at your gateway and check that it works.
+2. Point it at your gateway and check that it answers.
 
         export PARALLELISE_GATEWAY_URL=http://localhost:4000/v1
         export PARALLELISE_MODEL=kimi-k2.5
         export PARALLELISE_API_KEY=...        # only if your gateway needs one
         parallelise health
 
-   This lists the models on the gateway, confirms yours is among them and makes one tiny
-   request. It exits with status 1 and a plain message if something is wrong.
+   This lists the models on the gateway, confirms that yours is among them, and makes one
+   tiny request. If anything is wrong it exits with status 1 and a plain message.
 
 3. Check the machinery without any model. This builds the known-good solution of every
    problem and runs the full gate on it.
@@ -224,8 +222,8 @@ also need an OpenAI-compatible gateway; LiteLLM is one way to provide it.
         make check-references
 
 4. Run one conversion: one problem, one backend, one agent. The run writes a work folder
-   (under `work/` unless `PARALLELISE_WORK_ROOT` says otherwise), grades it with the gate
-   and appends a record to `results/runs.jsonl`.
+   under `work/`, or wherever `PARALLELISE_WORK_ROOT` points, grades it with the gate, and
+   appends a record to `results/runs.jsonl`.
 
         parallelise run integrate openmp --agent basic --model kimi-k2.5
 
@@ -238,17 +236,17 @@ also need an OpenAI-compatible gateway; LiteLLM is one way to provide it.
 
         parallelise mask scan kernel_a masked/kernel_a
 
-7. Print the result tables, and draw the chart, from the stored records.
+7. Print the result tables and draw the chart from the stored records.
 
         parallelise report --store results/campaign-2026-10/runs.jsonl \
           --prices results/campaign-2026-10/prices.json \
           --masked-chart docs/figures/masked-vs-unmasked.svg
 
    Without a store it reads `results/runs.jsonl`. When the store holds masked and unmasked
-   runs the report adds the comparison tables, and when it holds request counts it adds a
+   runs, the report adds the comparison tables; when it holds request counts, it adds a
    serving table, with cost if you pass a price file.
 
-With Docker, the image contains the compilers and Open MPI and runs as an ordinary user:
+With Docker, the image holds the compilers and Open MPI and runs as an ordinary user:
 
     make image
     docker run --rm parallelise:cpu health
@@ -258,93 +256,98 @@ With Docker, the image contains the compilers and Open MPI and runs as an ordina
       parallelise:cpu run integrate openmp --agent basic
 
 A Kubernetes job for one conversion is in `k8s/job.yaml`. Deployment, logs and
-troubleshooting are in [docs/OPERATIONS.md](docs/OPERATIONS.md).
+troubleshooting are described in [docs/OPERATIONS.md](docs/OPERATIONS.md).
 
 ## The design, for the specialist
 
-[docs/DESIGN.md](docs/DESIGN.md) sets out the experimental design: the three controlled
-axes (model, agent design, backend), the frozen agent versions recorded per run, the
-three-part gate and why each part exists, the checks that stop an agent from inventing its
-speed-ups (and the incident that motivated them), the requirement that the answer not
-depend on the worker count, the benchmark warm-up fix, the recall-resistant problems and the
-masking study, the finding about strict agents on strong and weak models, costs and
-limitations. [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) is the map of the code.
+[docs/DESIGN.md](docs/DESIGN.md) sets out the experiment: the three controlled axes of
+model, agent design and backend; the frozen agent versions recorded with every run; the
+three-part gate and why each part exists; the checks that stop an agent inventing its
+speed-ups, and the incident that prompted them; the rule that the answer must not depend on
+the worker count; the benchmark warm-up fix; the recall-resistant problems and the masking
+study; the finding about strict agents on strong and weak models; and the costs and
+limitations. [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) maps the code.
 
 ## What is open source and what is my own
 
-Used from others:
+I used these from others:
 
-- The models: Claude Sonnet 4.6 (a proprietary model, used through a service) and the
-  open-weight models Kimi K2.5, Llama 3.3 70B and Gemma 31B, each under its own licence.
-- The agent frameworks: Pydantic AI and LangGraph, with LangChain beneath LangGraph.
-- LiteLLM, which provides the gateway; vLLM, which serves a model on a GPU; and Amazon
-  Bedrock, a commercial service that hosts several of the models.
-- Standard tools: `gcc`, Open MPI, OpenMP, CUDA, nanobind and httpx.
+- The models. Claude Sonnet 4.6 is proprietary and was used through a service. Kimi K2.5,
+  Llama 3.3 70B and Gemma 31B have open weights, each under its own licence.
+- The agent frameworks Pydantic AI and LangGraph, with LangChain beneath LangGraph.
+- LiteLLM, which provides the gateway; vLLM, which serves a model on a graphics card; and
+  Amazon Bedrock, a commercial service that hosts several of the models.
+- The standard tools `gcc`, Open MPI, OpenMP, CUDA, nanobind and httpx.
 
-My own work, all in this repository:
+I wrote these, and they are all in this repository:
 
-- The harness: the oracle extractor, work-folder assembly, the gate, the model client and
-  the results store.
+- The harness: the oracle extractor, the assembly of work folders, the gate, the model
+  client and the results store.
 - The nine problems: notebooks, oracles, kernel headers, trusted benchmarks, Makefiles and
   known-good reference solutions.
 - The benchmark checker that rejects invented speed-ups.
 - The masking tool that makes recall-resistant copies of problems.
-- The three agents, including the plain agent written directly against `httpx`.
-- The nanobind wrappers that call a finished kernel from Python, and the experimental
-  design and its analysis.
+- The three agents, including the plain agent written directly on `httpx`.
+- The nanobind wrappers that call a finished kernel from Python, and the design of the
+  experiments and their analysis.
 
 ## How the models were served
 
-The four models of the July study were reached through one LiteLLM gateway. The October
-campaign swapped two of them: it used Claude Sonnet 4.5 and gpt-oss-120b, which Amazon
-Bedrock served, in place of Sonnet 4.6 and Gemma 31B.
+One LiteLLM gateway stood between the agents and the four models of the July study. The
+October campaign replaced two of them: Claude Sonnet 4.5 and gpt-oss-120b, both served by
+Amazon Bedrock, took the places of Sonnet 4.6 and Gemma 31B.
 
-- `claude-sonnet-4.6`, `kimi-k2.5` and `llama-3.3-70b` were served by Amazon Bedrock. The
-  provider does not disclose the numerical precision, so the quantisation is recorded as
-  "not disclosed".
-- `gemma-31b` was served by vLLM on one NVIDIA L40S graphics card with 48 GB of memory. The
-  checkpoint and the quantisation were not recorded at the time, so they are unknown.
+- Amazon Bedrock served `claude-sonnet-4.6`, `kimi-k2.5` and `llama-3.3-70b`. The provider
+  does not disclose the numerical precision, so the quantisation is recorded as "not
+  disclosed".
+- vLLM served `gemma-31b` on one NVIDIA L40S graphics card with 48 GB of memory. The
+  checkpoint and the quantisation were not written down at the time, so they are unknown.
 
-Run records hold "not recorded" or "not disclosed" in these fields where the information
-does not exist. Results should not be compared with other work on the assumption of full
-precision. The July runs did not record wall-clock time per run or latency: the fields
-(`wall_time_s`, `latency_mean_s`, `tokens_per_second`) are empty in all 237 July records.
-The October campaign filled them in for every one of its 192 runs. The medians over runs
-were 1.1 to 3.8 seconds per call and 58 to 207 completion tokens per second, with
-claude-sonnet-4.5 the slowest and gpt-oss-120b the fastest; the table, with request and token
-totals and cost, is in [docs/CAMPAIGN-2026-10.md](docs/CAMPAIGN-2026-10.md). These are
-latencies through a gateway to a shared cloud service on one day, not properties of the models.
+Where the information does not exist, the run records say "not recorded" or "not
+disclosed". Nobody should compare these results with other work on the assumption of full
+precision. The July runs did not record wall-clock time or latency; those fields
+(`wall_time_s`, `latency_mean_s` and `tokens_per_second`) are empty in all 237 July records.
+The October campaign filled them for every one of its 192 runs. The medians over runs were
+1.1 to 3.8 seconds per call and 58 to 207 completion tokens per second, with
+claude-sonnet-4.5 the slowest and gpt-oss-120b the fastest. The table, with request and
+token totals and cost, is in [docs/CAMPAIGN-2026-10.md](docs/CAMPAIGN-2026-10.md). These
+are latencies through a gateway to a shared cloud service on one day, not properties of the
+models.
 
 ## Security
 
 Code written by a model is untrusted. Four layers limit the harm it can do, and none of
 them is a sandbox. The agent can run only commands from a short allow-list, as argument
-lists with no shell; the list currently includes the Python interpreter, so a determined
-agent is not confined to the work folder, and the container, not the allow-list, is the
-boundary that matters. The gate checks the trusted files (the benchmark, headers and
-Makefile) against digests (fingerprints) taken when the work folder was made, and fails
-the run if the agent changed any of them; the digests live in the work folder, so this
-catches careless edits rather than deliberate ones. Every subprocess, whether a build, a
-test, a benchmark or a notebook run, has a timeout, and so does every model request. The container runs as an ordinary user, and under Kubernetes it
-drops all capabilities, has a read-only file system, and has processor and memory limits
-and a hard deadline. These limits contain mistakes and runaway programs. They are not a full
-sandbox, and the code could use the network unless you forbid it, for example with a
-network policy; see [docs/OPERATIONS.md](docs/OPERATIONS.md).
+lists with no shell; but the list includes the Python interpreter, so a determined agent
+can leave the work folder, and the container, not the allow-list, is the boundary that
+matters. The gate compares the trusted files, which are the benchmark, the headers and the
+Makefile, against digests taken when the work folder was made, and fails the run if the
+agent changed any of them; the digests live in the work folder, so this catches careless
+edits rather than deliberate ones. Every subprocess, whether a build, a test, a benchmark
+or a notebook run, has a timeout, and so does every model request. The container runs as
+an ordinary user; under Kubernetes it drops all capabilities, has a read-only file system,
+and runs under processor and memory limits and a hard deadline. These limits contain
+mistakes and runaway programs. They do not make a sandbox, and the code could use the
+network unless you forbid it, for example with a network policy; see
+[docs/OPERATIONS.md](docs/OPERATIONS.md).
 
 ## Status and next steps
 
 The comparison of four models, three agent designs and three backends on seven problems is
-complete, as is the first run on the two recall-resistant problems. The masked-against-unmasked
-campaign of October 2026 is also done: its 192 records are in
-`results/campaign-2026-10/runs.jsonl` (the 237 July records in `results/runs.jsonl` contain no
-masked run), and it also supplied the first measured latency and speed. Still to do are repeated
-runs, to put error bars on single-run differences, and a sweep of the sampling temperature.
-[docs/DESIGN.md](docs/DESIGN.md) lists the limitations that motivate them.
+complete, and so is the first run on the two recall-resistant problems. The
+masked-against-unmasked campaign of October 2026 is also done: its 192 records are in
+`results/campaign-2026-10/runs.jsonl`, the 237 July records in `results/runs.jsonl` hold no
+masked run, and the campaign gave the first measured latency and speed. Repeated runs, which
+would put error bars on single-run differences, and a sweep of the sampling temperature
+remain to be done. [docs/DESIGN.md](docs/DESIGN.md) lists the limitations that call for
+them.
 
-On 11 October 2026 every reference solution, on OpenMP, MPI and CUDA, and a masked MPI reference, passed the gate on a 12-core host with a 16 GB NVIDIA graphics card; see [results/reference-gates-gpu-host.md](results/reference-gates-gpu-host.md).
+On 11 October 2026 every reference solution on OpenMP, MPI and CUDA, and a masked MPI
+reference, passed the gate on a 12-core host with a 16 GB NVIDIA graphics card; see
+[results/reference-gates-gpu-host.md](results/reference-gates-gpu-host.md).
 
 <!-- statement on the use of AI tools: to be added by the author -->
 
 ## Licence and author
 
-MIT licence; see [LICENSE](LICENSE). Written by Angus Gray-Weale.
+The MIT licence applies; see [LICENSE](LICENSE). Angus Gray-Weale wrote this.
