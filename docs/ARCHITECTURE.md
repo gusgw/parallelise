@@ -128,9 +128,21 @@ a timeout. No module reads the network except `model.py`.
   `build_comparison_chart(records, dest_svg)` (pass rate by model, unmasked beside masked),
   both drawn with matplotlib. `parallelise report` takes `--store`, `--prices`, `--chart` and
   `--masked-chart`.
+- `assess.py` — `assess_notebook(notebook: Path, client: ModelClient) -> Verdict` gives the
+  whole notebook to the model and asks for an analysis of the dependency structure, the
+  arithmetic intensity, the communication a distributed version would need, and a
+  recommendation. `Verdict` holds `backend` (`openmp`, `mpi`, `cuda`, `serial` or
+  `combination`), `parts` (for a combination, a list of `Part(part, backend)`), the reasoning
+  fields, the raw `analysis` text, the `model` name and the call's tokens and latency. The
+  JSON object at the end of the reply is found even when wrapped in prose or a code fence;
+  if none is usable, `ParalleliseError` is raised. `Verdict.chosen_backend` is the single
+  backend to run (for a combination, the first part that is not serial).
 - `cli.py` — `main(argv=None)` using argparse with subcommands: `health`, `oracle
-  <notebook>`, `assemble <problem> <backend> <dest>`, `run <problem> <backend>
-  --agent --model`, `grade <work_dir> --backend`, `mask <problem> <alias> <dest>`,
+  <notebook>`, `assemble <problem> <backend> <dest>`, `assess <notebook> [--out verdict.json]`,
+  `run <problem> <backend>
+  --agent --model` (the backend may be `auto`, which runs the assessment first, stops
+  with exit status 1 and no record if the verdict is serial or the problem lacks that
+  backend, and otherwise saves `assessment.json` in the work folder), `grade <work_dir> --backend`, `mask <problem> <alias> <dest>`,
   `bench-check <csv>`, `report`. Exit status 0 on success, 1 on a failed gate or a
   reported error, 2 on bad arguments. Every error message says what to do next.
 

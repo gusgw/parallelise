@@ -125,9 +125,24 @@ def _resolve_problem(problem: str, problems_dir: str) -> Path:
     )
 
 
-def _check_backend(backend: str) -> None:
-    if backend not in BACKENDS:
-        raise ParalleliseError(f"The backend {backend!r} is not one of {', '.join(BACKENDS)}.")
+def _check_backend(backend: str, allow_auto: bool = False) -> None:
+    allowed = BACKENDS + (("auto",) if allow_auto else ())
+    if backend not in allowed:
+        raise ParalleliseError(f"The backend {backend!r} is not one of {', '.join(allowed)}.")
+
+
+def _problem_notebook(problem_dir: Path) -> Path:
+    """Return the notebook of a problem folder."""
+    named = problem_dir / f"{problem_dir.name}.ipynb"
+    if named.is_file():
+        return named
+    found = sorted(problem_dir.glob("*.ipynb"))
+    if len(found) == 1:
+        return found[0]
+    raise ParalleliseError(
+        f"The problem folder {problem_dir} has no single notebook to assess. "
+        "Add one named after the folder."
+    )
 
 
 def _settings(args: argparse.Namespace) -> Settings:
@@ -247,9 +262,55 @@ def cmd_report(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_assess(args: argparse.Namespace) -> int:
+    """Ask the model which backend suits a notebook; print the analysis and the verdict."""
+    assess = _lazy("assess")
+    notebook = Path(args.notebook)
+    settings = _settings(args)
+    with ModelClient(settings) as client:
+        verdict = assess.assess_notebook(notebook, client)
+    print(verdict.analysis)
+    print()
+    print(f"{verdict.summary_line()} (model {verdict.model}).")
+    if args.out:
+        assess.write_verdict(verdict, Path(args.out))
+        print(f"Verdict written to {args.out}.")
+    return 0
+
+
+def _choose_backend(problem_dir: Path, settings: Settings) -> tuple[str, Any]:
+    """Assess the problem's notebook and return the backend to run with the verdict.
+
+    Raises ParalleliseError, which the command line reports with exit status 1, when the
+    recommendation is serial code or names a backend the problem does not have.
+    """
+    assess = _lazy("assess")
+    with ModelClient(settings) as client:
+        verdict = assess.assess_notebook(_problem_notebook(problem_dir), client)
+    chosen = verdict.chosen_backend
+    print(f"Assessment: {verdict.summary_line()}")
+    if chosen == "serial":
+        raise ParalleliseError(
+            f"The assessment recommends well-optimised serial code for {problem_dir.name}, "
+            "so no parallel run was made and no record was written. To run a backend anyway, "
+            "name it instead of 'auto'. Justification: " + (verdict.justification or "none given")
+        )
+    if not (problem_dir / chosen).is_dir():
+        have = ", ".join(b for b in BACKENDS if (problem_dir / b).is_dir()) or "none"
+        raise ParalleliseError(
+            f"The assessment recommends {chosen} for {problem_dir.name}, but the problem has "
+            f"no {chosen} folder (it has: {have}), so no run was made and no record was "
+            "written. Name one of those backends instead of 'auto'."
+        )
+    return chosen, verdict
+
+
 def cmd_run(args: argparse.Namespace) -> int:
-    """Assemble a work folder, run an agent in it, grade the result and record the run."""
-    _check_backend(args.backend)
+    """Assemble a work folder, run an agent in it, grade the result and record the run.
+
+    With the backend "auto" the model is first asked which backend suits the notebook.
+    """
+    _check_backend(args.backend, allow_auto=True)
     settings = _settings(args)
     assemble = _lazy("assemble")
     gate = _lazy("gate")
@@ -268,13 +329,18 @@ def cmd_run(args: argparse.Namespace) -> int:
         mask.mask_problem(problem_dir, masked_dir, args.masked)
         problem_dir, name = masked_dir, args.masked
 
+    backend = args.backend
+    verdict = None
+    if backend == "auto":
+        backend, verdict = _choose_backend(problem_dir, settings)
+
     agent = agents.get_agent(args.agent)  # may raise AgentUnavailable with an install hint
-    work_dir = work_root / problem_name / args.backend / _safe(settings.model) / args.agent
+    work_dir = work_root / problem_name / backend / _safe(settings.model) / args.agent
     if work_dir.exists():
         shutil.rmtree(work_dir)
-    assemble.assemble_work_dir(problem_dir, args.backend, work_dir, include_reference=False)
+    assemble.assemble_work_dir(problem_dir, backend, work_dir, include_reference=False)
 
-    task = build_task(name, args.backend)
+    task = build_task(name, backend)
     started = time.perf_counter()
     result = None
     agent_error = ""
@@ -291,7 +357,7 @@ def cmd_run(args: argparse.Namespace) -> int:
     if agent_error:
         passed, stage, speedup, gate_log = False, "agent-error", None, ""
     else:
-        graded = gate.run_gate(work_dir, args.backend, timeout_s=int(args.gate_timeout))
+        graded = gate.run_gate(work_dir, backend, timeout_s=int(args.gate_timeout))
         passed, stage, speedup, gate_log = (
             graded.passed,
             "none" if graded.passed else graded.failure_stage,
@@ -304,6 +370,14 @@ def cmd_run(args: argparse.Namespace) -> int:
     notes: list[str] = []
     if args.notes:
         notes.append(args.notes)
+    if verdict is not None:
+        _lazy("assess").write_verdict(verdict, work_dir / "assessment.json")
+        notes.append(
+            f"The backend {backend} was chosen by the assessment ({verdict.model}); the "
+            "verdict is saved as assessment.json in the work folder, and its "
+            f"{verdict.prompt_tokens} prompt and {verdict.completion_tokens} completion tokens "
+            "are not counted in this record."
+        )
     if agent_error:
         reason = str(agent_error).rstrip(".")
         notes.append(f"The agent stopped with {reason}.")
@@ -323,7 +397,7 @@ def cmd_run(args: argparse.Namespace) -> int:
     waiting = sum(latencies) if latencies else 0.0
     record = RunRecord(
         problem=problem_name,
-        backend=args.backend,
+        backend=backend,
         model=settings.model,
         agent=args.agent,
         agent_version=_agent_version(agent),
@@ -343,7 +417,7 @@ def cmd_run(args: argparse.Namespace) -> int:
         notes=" ".join(notes),
     )
     ResultsStore(settings.results_path).append(record)
-    print(f"{record.result}: {problem_name} on {args.backend} with {args.agent} and "
+    print(f"{record.result}: {problem_name} on {backend} with {args.agent} and "
           f"{settings.model} (failure stage: {stage}). Record added to {settings.results_path}.")
     return 0 if passed else 1
 
@@ -389,7 +463,8 @@ def build_parser() -> argparse.ArgumentParser:
     p = sub.add_parser("run", parents=[common, endpoint, problems],
                        help="run an agent on a problem and record the graded result")
     p.add_argument("problem")
-    p.add_argument("backend", choices=BACKENDS)
+    p.add_argument("backend", choices=BACKENDS + ("auto",),
+                   help="a backend, or auto to ask the model first and use its recommendation")
     p.add_argument("--agent", choices=AGENTS, default="basic")
     p.add_argument("--masked", metavar="ALIAS",
                    help="hide the algorithm's name behind this neutral alias")
@@ -401,6 +476,12 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--quantisation", default="not disclosed", help="model precision, if known")
     p.add_argument("--notes", default="", help="free text stored with the record")
     p.set_defaults(func=cmd_run)
+
+    p = sub.add_parser("assess", parents=[common, endpoint],
+                       help="ask the model which backend suits a notebook")
+    p.add_argument("notebook")
+    p.add_argument("--out", help="write the verdict, as JSON, to this file")
+    p.set_defaults(func=cmd_assess)
 
     p = sub.add_parser("grade", parents=[common], help="run the gate on a work folder")
     p.add_argument("work_dir")
