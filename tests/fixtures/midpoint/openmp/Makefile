@@ -14,7 +14,7 @@ test_$(KERNEL): test_$(KERNEL).c $(KERNEL).o $(KERNEL).h reference.h testing.h
 bench: bench.c $(KERNEL).o $(KERNEL).h
 	$(CC) $(CFLAGS) bench.c $(KERNEL).o -o bench $(LDLIBS)
 
-# The full gate: the unit test at one thread and at many, then the benchmark check.
+# The full check: the unit test at one thread and at many, then the benchmark check.
 check: test_$(KERNEL) bench
 	OMP_NUM_THREADS=1 ./test_$(KERNEL)
 	OMP_NUM_THREADS=$$(nproc) ./test_$(KERNEL)

@@ -15,7 +15,7 @@ test_$(KERNEL): test_$(KERNEL).c $(KERNEL).o $(KERNEL).h reference.h testing.h
 bench: bench.c $(KERNEL).o $(KERNEL).h
 	$(CC) $(CFLAGS) bench.c $(KERNEL).o -o bench $(LDLIBS)
 
-# the full gate: build + unit test at 1 thread AND at many (the answer must not depend
+# the full check: build + unit test at 1 thread AND at many (the answer must not depend
 # on the thread count; explicit counts so an inherited OMP_NUM_THREADS cannot skip the
 # multithreaded check) + benchmark-stats validation. The stencil is memory-bandwidth-
 # bound, so its speed-up floor is lower than the compute-bound kernels'.

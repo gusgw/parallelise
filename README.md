@@ -6,7 +6,7 @@ Message Passing Interface) for processes that exchange messages, or CUDA for a g
 processor, whichever suits the problem. Given a research notebook and a backend, the agent
 decides how to parallelise the work: how to split it, which pattern of reduction or
 exchange to use, and how to keep the answer the same however many workers run. It then
-writes, builds and tests the program until an independent gate accepts the result as
+writes, builds and tests the program until an independent check accepts the result as
 correct and faster. The goal is an agent that also chooses the method for each algorithm,
 or recommends well-written serial code when an algorithm resists parallelisation. A first
 version of that choice exists: `parallelise assess` asks a model for a reasoned verdict on
@@ -38,7 +38,7 @@ the checking around it.
 A problem is a notebook whose last cell records its own answer, with a tolerance. The agent
 receives a work folder holding the notebook, the oracle in C form, a header giving the
 exact function to implement, and a benchmark that it cannot change. It writes the kernel
-and a unit test, and it must make `make check` pass. The gate then judges the work on its
+and a unit test, and it must make `make check` pass. The check then judges the work on its
 own, in three parts:
 
 1. The code must compile with every warning treated as an error.
@@ -168,8 +168,8 @@ in all. The table gives passes out of 24 runs per model.
 
 For the three capable models together, the pass rate fell from 96% to 85% when the names
 were hidden. The fall is modest, it falls mostly on prefix sum and on jacobi under MPI, and
-single runs cannot tell it from chance. The new gate also rejected four runs in which an
-agent had rewritten files it must not touch, which the July gate could not have caught. The
+single runs cannot tell it from chance. The new check also rejected four runs in which an
+agent had rewritten files it must not touch, which the July check could not have caught. The
 method, every table, the latency and cost figures and the limitations are in
 [docs/CAMPAIGN-2026-10.md](docs/CAMPAIGN-2026-10.md); the chart is
 [docs/figures/masked-vs-unmasked.svg](docs/figures/masked-vs-unmasked.svg).
@@ -217,12 +217,12 @@ also need an OpenAI-compatible gateway; LiteLLM is one way to provide one.
    tiny request. If anything is wrong it exits with status 1 and a plain message.
 
 3. Check the machinery without any model. This builds the known-good solution of every
-   problem and runs the full gate on it.
+   problem and runs the full check on it.
 
         make check-references
 
 4. Run one conversion: one problem, one backend, one agent. The run writes a work folder
-   under `work/`, or wherever `PARALLELISE_WORK_ROOT` points, grades it with the gate, and
+   under `work/`, or wherever `PARALLELISE_WORK_ROOT` points, grades it with the check, and
    appends a record to `results/runs.jsonl`.
 
         parallelise run integrate openmp --agent basic --model kimi-k2.5
@@ -262,7 +262,7 @@ troubleshooting are described in [docs/OPERATIONS.md](docs/OPERATIONS.md).
 
 [docs/DESIGN.md](docs/DESIGN.md) sets out the experiment: the three controlled axes of
 model, agent design and backend; the frozen agent versions recorded with every run; the
-three-part gate and why each part exists; the checks that stop an agent inventing its
+three-part check and why each part exists; the checks that stop an agent inventing its
 speed-ups, and the incident that prompted them; the rule that the answer must not depend on
 the worker count; the benchmark warm-up fix; the recall-resistant problems and the masking
 study; the finding about strict agents on strong and weak models; and the costs and
@@ -281,7 +281,7 @@ I used these from others:
 
 I wrote these, and they are all in this repository:
 
-- The harness: the oracle extractor, the assembly of work folders, the gate, the model
+- The harness: the oracle extractor, the assembly of work folders, the check, the model
   client and the results store.
 - The nine problems: notebooks, oracles, kernel headers, trusted benchmarks, Makefiles and
   known-good reference solutions.
@@ -320,7 +320,7 @@ Code written by a model is untrusted. Four layers limit the harm it can do, and 
 them is a sandbox. The agent can run only commands from a short allow-list, as argument
 lists with no shell; but the list includes the Python interpreter, so a determined agent
 can leave the work folder, and the container, not the allow-list, is the boundary that
-matters. The gate compares the trusted files, which are the benchmark, the headers and the
+matters. The check compares the trusted files, which are the benchmark, the headers and the
 Makefile, against digests taken when the work folder was made, and fails the run if the
 agent changed any of them; the digests live in the work folder, so this catches careless
 edits rather than deliberate ones. Every subprocess, whether a build, a test, a benchmark
@@ -343,8 +343,8 @@ remain to be done. [docs/DESIGN.md](docs/DESIGN.md) lists the limitations that c
 them.
 
 On 11 October 2026 every reference solution on OpenMP, MPI and CUDA, and a masked MPI
-reference, passed the gate on a 12-core host with a 16 GB NVIDIA graphics card; see
-[results/reference-gates-gpu-host.md](results/reference-gates-gpu-host.md).
+reference, passed the check on a 12-core host with a 16 GB NVIDIA graphics card; see
+[results/reference-checks-gpu-host.md](results/reference-checks-gpu-host.md).
 
 <!-- statement on the use of AI tools: to be added by the author -->
 

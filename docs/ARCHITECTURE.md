@@ -12,7 +12,7 @@ parameters, its own computed result and a tolerance. A backend is one of `openmp
 OpenAI-compatible endpoint, is given a work folder containing the notebook, the oracle
 in C form, a kernel header with the exact signature to implement, a benchmark it cannot
 change, and a Makefile. The agent writes the kernel and a unit test and must make
-`make check` pass. The gate then judges the work independently: it builds with warnings
+`make check` pass. The check then judges the work independently: it builds with warnings
 treated as errors, runs the unit test at one worker and at several, runs the benchmark,
 and validates the speed-up figures. Every run is recorded as one structured record.
 
@@ -25,7 +25,7 @@ pyproject.toml            package metadata, dependencies, pytest and ruff settin
 Makefile                  convenience targets: install, lint, test, check-references, image
 Dockerfile                CPU stage (gcc, OpenMPI, Python) and an optional CUDA stage
 k8s/job.yaml              run one conversion cell as a Kubernetes Job
-.github/workflows/ci.yml  lint, tests, reference gates, container build
+.github/workflows/ci.yml  lint, tests, reference checks, container build
 docs/ARCHITECTURE.md      this file
 docs/DESIGN.md            the experimental design and what was learned
 docs/RESULTS.md           every results table, with provenance
@@ -88,8 +88,8 @@ a timeout. No module reads the network except `model.py`.
   `problem.h` if present, the backend's header, `bench.c` and `Makefile`; with
   `include_reference=True` it also copies the known-good solution, which is how the
   machinery is tested without a model.
-- `gate.py` — `run_gate(work_dir, backend, timeout_s=300, speedup_floor=None) ->
-  GateResult(passed, failure_stage, speedup_best, log)`. Before anything else it checks the
+- `check.py` — `run_check(work_dir, backend, timeout_s=300, speedup_floor=None) ->
+  CheckResult(passed, failure_stage, speedup_best, log)`. Before anything else it checks the
   trusted files (the benchmark, headers and Makefile) against the digests written when the
   work folder was assembled, and fails at the stage `tampered` if any has changed. It then
   builds with the backend's
@@ -107,7 +107,7 @@ a timeout. No module reads the network except `model.py`.
   sentence; whose code comments are removed; and whose identifiers that name the
   algorithm are renamed from a word list kept in the module. Numbers, logic and the
   oracle values are unchanged, and the report lists every substitution made. A masked
-  problem must still pass its reference gate.
+  problem must still pass its reference check.
 - `agents/base.py` — `Agent` protocol: `run(work_dir: Path, task: str, settings:
   Settings, client: ModelClient, step_budget: int) -> AgentResult(finished,
   steps, notes)`. `agents/__init__.py` exposes `get_agent(name)` for `basic`,
@@ -143,7 +143,7 @@ a timeout. No module reads the network except `model.py`.
   --agent --model` (the backend may be `auto`, which runs the assessment first, stops
   with exit status 1 and no record if the verdict is serial or the problem lacks that
   backend, and otherwise saves `assessment.json` in the work folder), `grade <work_dir> --backend`, `mask <problem> <alias> <dest>`,
-  `bench-check <csv>`, `report`. Exit status 0 on success, 1 on a failed gate or a
+  `bench-check <csv>`, `report`. Exit status 0 on success, 1 on a failed check or a
   reported error, 2 on bad arguments. Every error message says what to do next.
 
 ## Problems

@@ -93,7 +93,7 @@ def test_report_with_no_records(tmp_path, capsys):
     assert "no run records" in capsys.readouterr().err
 
 
-# --- the run subcommand, with stand-in assemble, gate and agents --------------------------
+# --- the run subcommand, with stand-in assemble, check and agents --------------------------
 
 
 class FakeAgent:
@@ -112,7 +112,7 @@ class FakeAgent:
         )
 
 
-def install_fakes(monkeypatch, tmp_path, behaviour="ok", gate_pass=True):
+def install_fakes(monkeypatch, tmp_path, behaviour="ok", check_pass=True):
     problems = tmp_path / "problems" / "integrate"
     problems.mkdir(parents=True)
     calls = {}
@@ -121,17 +121,17 @@ def install_fakes(monkeypatch, tmp_path, behaviour="ok", gate_pass=True):
         calls["assembled"] = (Path(problem_dir).name, backend, Path(dest))
         Path(dest).mkdir(parents=True)
 
-    def run_gate(work_dir, backend, timeout_s=300, speedup_floor=None):
+    def run_check(work_dir, backend, timeout_s=300, speedup_floor=None):
         return SimpleNamespace(
-            passed=gate_pass,
-            failure_stage="none" if gate_pass else "benchmark",
-            speedup_best=3.2 if gate_pass else None,
-            log="gate log text",
+            passed=check_pass,
+            failure_stage="none" if check_pass else "benchmark",
+            speedup_best=3.2 if check_pass else None,
+            log="check log text",
         )
 
     fakes = {
         "assemble": SimpleNamespace(assemble_work_dir=assemble_work_dir),
-        "gate": SimpleNamespace(run_gate=run_gate),
+        "check": SimpleNamespace(run_check=run_check),
         "agents": SimpleNamespace(get_agent=lambda name: FakeAgent(behaviour)),
     }
     monkeypatch.setattr(cli, "_lazy", lambda name, hint="": fakes[name])
@@ -160,12 +160,12 @@ def test_run_pass_writes_record_and_exits_0(monkeypatch, tmp_path, capsys):
     assert record.model == "m1" and not record.masked
     assert len(record.agent_version) == 10 or record.agent_version == "unknown"
     assert "used the notebook tool" in record.notes
-    assert (calls["assembled"][2] / "gate.log").read_text() == "gate log text"
+    assert (calls["assembled"][2] / "check.log").read_text() == "check log text"
     assert "PASS" in capsys.readouterr().out
 
 
-def test_run_gate_failure_exits_1_and_records_stage(monkeypatch, tmp_path):
-    install_fakes(monkeypatch, tmp_path, gate_pass=False)
+def test_run_check_failure_exits_1_and_records_stage(monkeypatch, tmp_path):
+    install_fakes(monkeypatch, tmp_path, check_pass=False)
     assert cli.main(run_args(tmp_path)) == 1
     (record,) = ResultsStore(tmp_path / "runs.jsonl").load()
     assert record.result == "FAIL" and record.failure_stage == "benchmark"

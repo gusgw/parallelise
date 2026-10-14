@@ -327,7 +327,7 @@ def build_chart(records: Iterable[Any], dest_svg: Path, masked: bool = False) ->
         ax.set_ylim(0, 112)
         ax.set_yticks(range(0, 101, 20))
         ax.set_ylabel("Pass rate (%)")
-        ax.set_title("Share of cells passing the gate, by model and backend", fontsize=11,
+        ax.set_title("Share of cells passing the check, by model and backend", fontsize=11,
                      loc="left")
         ax.yaxis.grid(True, color="#dddddd", linewidth=0.8)
         ax.set_axisbelow(True)
@@ -382,7 +382,7 @@ def build_comparison_chart(records: Iterable[Any], dest_svg: Path) -> Path:
         ax.set_ylim(0, 112)
         ax.set_yticks(range(0, 101, 20))
         ax.set_ylabel("Pass rate (%)")
-        ax.set_title("Share of runs passing the gate, unmasked and masked", fontsize=11,
+        ax.set_title("Share of runs passing the check, unmasked and masked", fontsize=11,
                      loc="left")
         ax.yaxis.grid(True, color="#dddddd", linewidth=0.8)
         ax.set_axisbelow(True)

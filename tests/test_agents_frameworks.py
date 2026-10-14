@@ -29,7 +29,7 @@ WRITE = tool_call_step("write_file", {"path": "kernel.c", "content": "/* kernel 
 def test_pydantic_agent_runs_end_to_end(tmp_path):
     pytest.importorskip("pydantic_ai")
     work = make_work_dir(tmp_path)
-    steps = [WRITE, tool_call_step("check_gate", {}, 150, 10), finish_step("done", 200, 5)]
+    steps = [WRITE, tool_call_step("run_checks", {}, 150, 10), finish_step("done", 200, 5)]
     result, server = run_with_script("pydantic", work, steps)
     assert result.finished, result.notes
     assert (work / "kernel.c").exists()
@@ -41,7 +41,7 @@ def test_pydantic_agent_runs_end_to_end(tmp_path):
 
 def test_pydantic_agent_refuses_to_finish_before_the_checks_pass(tmp_path):
     pytest.importorskip("pydantic_ai")
-    work = make_work_dir(tmp_path)  # nothing is written, so check_gate is never green
+    work = make_work_dir(tmp_path)  # nothing is written, so run_checks is never green
     result, _ = run_with_script("pydantic", work, [finish_step("done", 10, 1)])
     assert not result.finished
 

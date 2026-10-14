@@ -1,4 +1,4 @@
-# Reference gates on a 12-core host with a 16 GB NVIDIA graphics card
+# Reference checks on a 12-core host with a 16 GB NVIDIA graphics card
 
 Date of the runs: 11 October 2026.
 
@@ -7,9 +7,9 @@ Date of the runs: 11 October 2026.
 Until this run, no machine I had access to could execute every part of the reference
 checks: the message-passing (MPI) reference solutions had not all been timed on a machine
 with more than a few cores, the CUDA reference solutions had not been built in the
-container, and the masked MPI reference had never been run through the gate. This page
-records what happened when each reference solution was passed through the gate on a single
-host that has all the tools. The gate is described in
+container, and the masked MPI reference had never been run through the check. This page
+records what happened when each reference solution was passed through the check on a single
+host that has all the tools. The check is described in
 [docs/ARCHITECTURE.md](../docs/ARCHITECTURE.md).
 
 ## The host and the images
@@ -25,10 +25,10 @@ host that has all the tools. The gate is described in
   nothing else heavy running on the host. The speed-up floor was not relaxed:
   `PARALLELISE_SPEEDUP_UNRELIABLE` was not set. Open MPI oversubscription is enabled in
   the images but was not needed, because no run used more than 12 ranks.
-- Each figure below is one run of the gate. The command was
+- Each figure below is one run of the check. The command was
   `python -m pytest -q -rs -m "slow or mpi" -k reference` for OpenMP and MPI, and
   `python -m pytest -q -rs -m cuda -k reference` for CUDA. Because the test report does
-  not show the speed-ups, I then ran the same gate on each case a second time with a small
+  not show the speed-ups, I then ran the same check on each case a second time with a small
   script that prints the benchmark table, and the speed-ups below come from that second run.
   Every case passed in both runs. Each speed-up is the best over the worker counts 1, 2,
   4, 8 and 12 (or the GPU against one CPU core), measured against the one-worker run of
@@ -85,7 +85,7 @@ the time on the graphics card, so it is a speed-up over one CPU core.
 ## The masked reference
 
 I masked the prefix sum problem with `parallelise mask scan kernel_a <destination>`, which
-made 16 renaming substitutions, and passed the masked reference solutions through the gate
+made 16 renaming substitutions, and passed the masked reference solutions through the check
 in the CPU image. This is the first time a masked MPI reference has been run.
 
 | problem | backend | result | best speed-up | floor |
@@ -96,7 +96,7 @@ in the CPU image. This is the first time a masked MPI reference has been run.
 ## Failures and the one fault found
 
 No reference solution failed on this hardware. One fault was found and fixed in the
-repository: the first CUDA gate run failed at the build stage for all five problems,
+repository: the first CUDA check run failed at the build stage for all five problems,
 because each CUDA `Makefile` defaults to a compiler path that exists only on the author's
 workstation (`/opt/cuda/bin/nvcc`), and that path does not exist in the container. The
 `Makefile` setting can be overridden from the environment, so the fix was to add

@@ -4,7 +4,7 @@ A language model may have seen the well-known algorithms many times, so a result
 problem called "jacobi" may reflect memory rather than ability. ``mask_problem`` writes a
 copy of a problem in which everything that names the algorithm is replaced by a neutral
 alias, while every number, every line of logic and the oracle values stay as they were.
-A masked problem must still pass its reference gate; the tests check that.
+A masked problem must still pass its reference check; the tests check that.
 
 What changes:
 

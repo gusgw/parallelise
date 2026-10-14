@@ -10,7 +10,7 @@ import pytest
 from tests.small_machine import skip_if_only_speedup_failed
 
 from parallelise.assemble import assemble_work_dir
-from parallelise.gate import run_gate
+from parallelise.check import run_check
 from parallelise.mask import (
     NEUTRAL_SENTENCE,
     WORD_LIST,
@@ -170,6 +170,6 @@ def test_masked_reference_builds_and_passes(masked, tmp_path):
     if probe.returncode != 0:
         pytest.skip("gcc has no OpenMP")
     work = assemble_work_dir(dest, "openmp", tmp_path / "w", include_reference=True)
-    result = run_gate(work, "openmp", timeout_s=240)
+    result = run_check(work, "openmp", timeout_s=240)
     skip_if_only_speedup_failed(result, work, "the masked fixture reference")
     assert result.passed, result.log

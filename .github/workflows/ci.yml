@@ -25,7 +25,7 @@ jobs:
       - name: Test (the CUDA tests skip themselves without a graphics card)
         env:
           OMPI_MCA_rmaps_base_oversubscribe: "1"
-          # The hosted runner has few shared cores, so the reference gates verify
+          # The hosted runner has few shared cores, so the reference checks verify
           # correctness here and treat a missed speed-up floor as a skip, not a failure.
           PARALLELISE_SPEEDUP_UNRELIABLE: "1"
         run: pytest -q -rs

@@ -1,8 +1,8 @@
 """The Pydantic AI agent: the framework drives the loop, a validator guards the exit.
 
-Besides the four shared tools it has a ``check_gate`` tool that runs the checks and records
+Besides the four shared tools it has a ``run_checks`` tool that runs the checks and records
 whether they passed. An output validator refuses to accept a final answer until the last
-call of ``check_gate`` succeeded, so the model cannot finish by describing a fix.
+call of ``run_checks`` succeeded, so the model cannot finish by describing a fix.
 The framework is imported lazily so that the package works without it.
 """
 
@@ -32,7 +32,7 @@ INSTALL_HINT = "install the framework with: pip install 'parallelise[agents]'"
 class State:
     """Run state shared with the tools: whether the checks last passed."""
 
-    gate_passed: bool = False
+    checks_passed: bool = False
 
 
 def _import_framework():
@@ -65,7 +65,7 @@ def build_agent(
     work_dir: Path,
     settings: "Settings",
     recorder: LatencyRecorder | None = None,
-    gate_command: tuple[str, ...] = tools.DEFAULT_GATE_COMMAND,
+    check_command: tuple[str, ...] = tools.DEFAULT_CHECK_COMMAND,
 ):
     """Build the Pydantic AI agent for one work folder.
 
@@ -94,8 +94,8 @@ def build_agent(
         retries=4,
         model_settings=parts["ModelSettings"](temperature=settings.temperature),
         instructions=build_system_prompt(work_dir)
-        + " After building and testing with run_shell, call check_gate. Finish only once "
-        "check_gate reports success.",
+        + " After building and testing with run_shell, call run_checks. Finish only once "
+        "run_checks reports success.",
     )
 
     @agent.tool_plain
@@ -121,18 +121,18 @@ def build_agent(
     @agent.tool
     # The framework is imported lazily, so RunContext is a runtime alias here and the type
     # checker cannot see it as a class; the agent library reads the real class at run time.
-    def check_gate(ctx: run_context[State]) -> str:  # type: ignore[valid-type]
+    def run_checks(ctx: run_context[State]) -> str:  # type: ignore[valid-type]
         """Build and run the unit tests (the checks) and record whether they passed."""
-        passed, output = tools.run_gate(work_dir, gate_command)
-        ctx.deps.gate_passed = passed  # type: ignore[attr-defined]
+        passed, output = tools.run_check(work_dir, check_command)
+        ctx.deps.checks_passed = passed  # type: ignore[attr-defined]
         return output
 
     @agent.output_validator
     def must_pass(ctx: run_context[State], output: str) -> str:  # type: ignore[valid-type]
-        # The exit is guarded: no final answer is accepted until check_gate is green.
-        if not ctx.deps.gate_passed:  # type: ignore[attr-defined]
+        # The exit is guarded: no final answer is accepted until run_checks is green.
+        if not ctx.deps.checks_passed:  # type: ignore[attr-defined]
             raise model_retry(
-                "The checks have not passed. Build the code and call check_gate; finish only "
+                "The checks have not passed. Build the code and call run_checks; finish only "
                 "once it reports success."
             )
         return output
@@ -174,11 +174,11 @@ class PydanticAgent:
         # Older releases of the framework expose usage as a method, newer ones as a property.
         usage = outcome.usage() if callable(outcome.usage) else outcome.usage
         return AgentResult(
-            finished=state.gate_passed,
+            finished=state.checks_passed,
             steps=usage.requests,
             requests=usage.requests,
             prompt_tokens=usage.input_tokens,
             completion_tokens=usage.output_tokens,
             latencies_s=list(recorder.latencies_s),
-            notes="the checks passed" if state.gate_passed else "ended without passing checks",
+            notes="the checks passed" if state.checks_passed else "ended without passing checks",
         )

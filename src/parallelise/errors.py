@@ -16,8 +16,8 @@ class ConfigError(ParalleliseError):
     """A setting is missing or has a value that cannot be used."""
 
 
-class GateError(ParalleliseError):
-    """The grading gate could not run at all (as opposed to running and failing)."""
+class CheckError(ParalleliseError):
+    """The grading check could not run at all (as opposed to running and failing)."""
 
 
 class AgentUnavailable(ParalleliseError):

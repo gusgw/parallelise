@@ -326,7 +326,7 @@ L 601.2 293.381891
     <text style="font-size: 7.5px; font-family: 'DejaVu Sans', 'Bitstream Vera Sans', 'Computer Modern Sans Serif', 'Lucida Grande', 'Verdana', 'Geneva', 'Lucid', 'Arial', 'Helvetica', 'Avant Garde', sans-serif; text-anchor: middle; fill: #333333" x="559.995689" y="192.193388" transform="rotate(-0 559.995689 192.193388)">6/15</text>
    </g>
    <g id="text_24">
-    <text style="font-size: 11px; font-family: 'DejaVu Sans', 'Bitstream Vera Sans', 'Computer Modern Sans Serif', 'Lucida Grande', 'Verdana', 'Geneva', 'Lucid', 'Arial', 'Helvetica', 'Avant Garde', sans-serif; text-anchor: start" x="51.562344" y="19.157422" transform="rotate(-0 51.562344 19.157422)">Share of cells passing the gate, by model and backend</text>
+    <text style="font-size: 11px; font-family: 'DejaVu Sans', 'Bitstream Vera Sans', 'Computer Modern Sans Serif', 'Lucida Grande', 'Verdana', 'Geneva', 'Lucid', 'Arial', 'Helvetica', 'Avant Garde', sans-serif; text-anchor: start" x="51.562344" y="19.157422" transform="rotate(-0 51.562344 19.157422)">Share of cells passing the check, by model and backend</text>
    </g>
    <g id="legend_1">
     <g id="text_25">

@@ -6,7 +6,7 @@ Every results table in the project, with where it came from. The experimental de
 ## How to read the tables
 
 - A **run** is one attempt by one agent design, with one model, on one problem and backend,
-  judged by the gate. It passes or fails.
+  judged by the check. It passes or fails.
 - A **cell** is one problem and backend for one model, scored out of the three agent designs.
   "2/3" means two of the three designs passed.
 - All runs are single attempts. Where a cell was run more than once, the latest record is
@@ -280,7 +280,7 @@ benchmark form.
 A serial kernel measured about 1.0 on the benchmarks with the warm-up run and failed the
 floor, as intended.
 
-A later run on a 12-core host with a 16 GB NVIDIA graphics card passed every reference solution on OpenMP, MPI and CUDA, and a masked MPI reference; the speed-ups are in [results/reference-gates-gpu-host.md](../results/reference-gates-gpu-host.md).
+A later run on a 12-core host with a 16 GB NVIDIA graphics card passed every reference solution on OpenMP, MPI and CUDA, and a masked MPI reference; the speed-ups are in [results/reference-checks-gpu-host.md](../results/reference-checks-gpu-host.md).
 
 ## 8. Calling a finished kernel from Python
 

@@ -16,7 +16,7 @@ test_$(KERNEL): test_$(KERNEL).c $(KERNEL).o $(KERNEL).h reference.h testing.h
 bench: bench.c $(KERNEL).o $(KERNEL).h
 	$(MPICC) $(CFLAGS) bench.c $(KERNEL).o -o bench $(LDLIBS)
 
-# full gate: build + unit test at 1 process AND at NP (the answer must not depend on
+# full check: build + unit test at 1 process AND at NP (the answer must not depend on
 # the process count) + real-speedup benchmark validation. CG is memory-bandwidth-bound
 # (stencil plus vector updates), so its speed-up floor is lower than the compute-bound
 # kernels'.

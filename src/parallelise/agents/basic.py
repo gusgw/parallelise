@@ -14,7 +14,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from parallelise.agents import tools
-from parallelise.agents.base import AgentResult, build_system_prompt, gate_feedback
+from parallelise.agents.base import AgentResult, build_system_prompt, check_feedback
 
 if TYPE_CHECKING:
     from parallelise.config import Settings
@@ -62,14 +62,17 @@ class BasicAgent:
                     messages.append(self._run_call(work_dir, call))
                 continue
 
-            passed, output = tools.run_gate(work_dir)
+            passed, output = tools.run_check(work_dir)
             if passed:
                 result.finished = True
                 result.notes = "the checks passed"
                 return result
             log.info("step %d: the model finished but the checks fail; asking again", step)
             messages.append(
-                {"role": "user", "content": gate_feedback(list(tools.DEFAULT_GATE_COMMAND), output)}
+                {
+                    "role": "user",
+                    "content": check_feedback(list(tools.DEFAULT_CHECK_COMMAND), output),
+                }
             )
         result.notes = "stopped: the step budget was spent without passing checks"
         return result

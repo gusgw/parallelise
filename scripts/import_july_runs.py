@@ -55,7 +55,7 @@ STAGE_NOTES = {
     "test-one-worker": "The unit test failed with a single worker.",
     "test-many-workers": "The unit test passed with one worker but failed with several.",
     "benchmark": "The benchmark failed or the speed-up was rejected.",
-    "timeout": "The gate was stopped because it ran out of time.",
+    "timeout": "The check was stopped because it ran out of time.",
 }
 
 _TEST_ONE = re.compile(r"(OMP_NUM_THREADS=1 \./test_|-np 1 \./test_)")
@@ -73,7 +73,7 @@ def split_summary(text: str) -> dict[str, str]:
 
 def classify_section(section: str) -> tuple[str, str]:
     """Return (result, failure_stage) for one agent section of a SUMMARY.txt."""
-    if "GATE PASS" in section and "GATE FAIL" not in section:
+    if "CHECK PASS" in section and "CHECK FAIL" not in section:
         return "PASS", "none"
     lines = section.splitlines()
     if "Terminated" in section or "timed out" in section:

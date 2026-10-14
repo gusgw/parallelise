@@ -1,8 +1,8 @@
-"""Shared tolerance for tests that run the real gate on a machine with too few cores.
+"""Shared tolerance for tests that run the real check on a machine with too few cores.
 
 Hosted continuous-integration runners have two to four shared cores, so a genuinely
 parallel kernel may show little or no speed-up there. When the environment variable
-PARALLELISE_SPEEDUP_UNRELIABLE is set to 1, a gate result that passed every correctness
+PARALLELISE_SPEEDUP_UNRELIABLE is set to 1, a check result that passed every correctness
 stage and failed only the benchmark's speed-up requirement is turned into a skip, with the
 measured speed-up in the message. Flat timings also trip the checker's rule against
 invented tables; on a declared small machine they are genuine, so that reason is accepted

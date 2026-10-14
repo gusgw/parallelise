@@ -19,7 +19,7 @@ test: test_integrate
 bench-run: bench
 	./bench
 
-# the full gate: build (via deps) + unit test at 1 thread AND at many (the answer must
+# the full check: build (via deps) + unit test at 1 thread AND at many (the answer must
 # not depend on the thread count; the many-threads count is explicit so an inherited
 # OMP_NUM_THREADS=1 in the environment cannot quietly skip the multithreaded check)
 check: test_integrate bench

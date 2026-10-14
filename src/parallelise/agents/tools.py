@@ -22,7 +22,7 @@ ALLOWED_COMMANDS = frozenset(
 )
 COMMAND_TIMEOUT_S = 600
 OUTPUT_TAIL_CHARS = 4000
-DEFAULT_GATE_COMMAND = ("make", "check")
+DEFAULT_CHECK_COMMAND = ("make", "check")
 
 
 def _resolve(work_dir: Path, relative: str) -> Path:
@@ -112,7 +112,7 @@ def run_shell(work_dir: Path, command: str) -> str:
     return f"exit {code}\n{output}"
 
 
-def run_gate(work_dir: Path, command: tuple[str, ...] = DEFAULT_GATE_COMMAND) -> tuple[bool, str]:
+def run_check(work_dir: Path, command: tuple[str, ...] = DEFAULT_CHECK_COMMAND) -> tuple[bool, str]:
     """Run the checking command; return whether it passed and the tail of its output."""
     code, output = run_process(work_dir, list(command))
     return code == 0, f"exit {code}\n{output}"

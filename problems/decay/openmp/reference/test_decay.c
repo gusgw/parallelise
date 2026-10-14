@@ -5,7 +5,7 @@
 #include "reference.h"
 #include "testing.h"
 
-/* Reference unit test (validates the harness). Runs under any thread count; the gate
+/* Reference unit test (validates the harness). Runs under any thread count; the check
  * checks it at 1 thread and at many -- the checksum must be the same. */
 int main(void)
 {

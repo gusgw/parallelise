@@ -26,7 +26,7 @@ __all__ = [
     "Agent",
     "LatencyRecorder",
     "build_system_prompt",
-    "gate_feedback",
+    "check_feedback",
 ]
 
 
@@ -198,7 +198,7 @@ def build_system_prompt(work_dir: Path) -> str:
     )
 
 
-def gate_feedback(command: list[str], output: str) -> str:
+def check_feedback(command: list[str], output: str) -> str:
     """Return the message that tells the model its checks are still failing."""
     return (
         "The checks are not passing yet, so you are not finished. Apply the fix by calling "

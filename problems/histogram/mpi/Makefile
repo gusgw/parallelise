@@ -16,7 +16,7 @@ test_$(KERNEL): test_$(KERNEL).c $(KERNEL).o $(KERNEL).h reference.h testing.h
 bench: bench.c $(KERNEL).o $(KERNEL).h
 	$(MPICC) $(CFLAGS) bench.c $(KERNEL).o -o bench $(LDLIBS)
 
-# full gate: build + unit test at 1 process AND at NP (the answer must not depend on
+# full check: build + unit test at 1 process AND at NP (the answer must not depend on
 # the process count) + real-speedup benchmark validation. Binning streams the input
 # array with a couple of operations per element, so it is memory-bandwidth-bound; the
 # speed-up floor is lower than the compute-bound kernels'.

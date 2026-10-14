@@ -3,7 +3,7 @@
 These are small wrappers, written with nanobind (a library that exposes C and C++
 functions to Python), that let a researcher call a kernel written by an agent from
 ordinary Python code. They answer the practical question behind the whole project: once
-an agent has produced a parallel C kernel that passes the gate, how little must the
+an agent has produced a parallel C kernel that passes the check, how little must the
 researcher change in the notebook to use it? In the examples the only change is one
 import line, for instance `from integrate_par import integrate`.
 

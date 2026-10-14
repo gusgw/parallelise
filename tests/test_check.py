@@ -1,4 +1,4 @@
-"""Tests for the gate, using the synthetic OpenMP fixture and deliberately broken kernels."""
+"""Tests for the check, using the synthetic OpenMP fixture and deliberately broken kernels."""
 
 import json
 import shutil
@@ -9,7 +9,7 @@ import pytest
 from tests.small_machine import skip_if_only_speedup_failed
 
 from parallelise.assemble import assemble_work_dir
-from parallelise.gate import FAILURE_STAGES, _tampered_files, run_gate
+from parallelise.check import FAILURE_STAGES, _tampered_files, run_check
 
 FIXTURE = Path(__file__).parent / "fixtures" / "midpoint"
 
@@ -51,7 +51,7 @@ def test_failure_stage_names_match_the_contract():
 
 def test_reference_solution_passes(tmp_path):
     work = folder(tmp_path)
-    result = run_gate(work, "openmp", timeout_s=240)
+    result = run_check(work, "openmp", timeout_s=240)
     skip_if_only_speedup_failed(result, work, "the fixture reference")
     assert result.passed, result.log
     assert result.failure_stage == "none"
@@ -62,21 +62,21 @@ def test_reference_solution_passes(tmp_path):
 def test_missing_kernel_is_no_files(tmp_path):
     work = folder(tmp_path)
     (work / "midpoint.c").unlink()
-    result = run_gate(work, "openmp")
+    result = run_check(work, "openmp")
     assert (result.passed, result.failure_stage) == (False, "no-files")
 
 
 def test_warning_is_a_build_failure(tmp_path):
     source = HEADER + "double midpoint(double a, double b, long n)\n" \
         "{ int unused; return (b - a) * (double)n * 0.0; }\n"  # fmt: skip
-    result = run_gate(folder(tmp_path, source), "openmp")
+    result = run_check(folder(tmp_path, source), "openmp")
     assert result.failure_stage == "build", result.log
 
 
 def test_wrong_answer_fails_at_one_worker(tmp_path):
     source = HEADER + "double midpoint(double a, double b, long n)\n" \
         "{ (void)a; (void)b; (void)n; return 1.0; }\n"  # fmt: skip
-    result = run_gate(folder(tmp_path, source), "openmp")
+    result = run_check(folder(tmp_path, source), "openmp")
     assert result.failure_stage == "test-one-worker", result.log
 
 
@@ -86,7 +86,7 @@ def test_answer_wrong_only_with_threads_fails_at_many_workers(tmp_path):
         "return integral_sum * h;",
         "return omp_get_max_threads() > 1 ? 1.0 : integral_sum * h;",
     ).replace("#include <math.h>", "#include <math.h>\n#include <omp.h>")
-    result = run_gate(folder(tmp_path, broken), "openmp")
+    result = run_check(folder(tmp_path, broken), "openmp")
     assert result.failure_stage == "test-many-workers", result.log
 
 
@@ -94,13 +94,13 @@ def test_serial_kernel_fails_the_benchmark(tmp_path):
     reference = (FIXTURE / "openmp/reference/midpoint.c").read_text()
     serial = reference.replace("#pragma omp parallel for reduction(+ : integral_sum)\n", "")
     assert serial != reference
-    result = run_gate(folder(tmp_path, serial), "openmp", timeout_s=240)
+    result = run_check(folder(tmp_path, serial), "openmp", timeout_s=240)
     assert result.failure_stage == "benchmark", result.log
     assert "BENCH CHECK FAIL" in result.log
 
 
 def test_stricter_floor_than_the_makefile_fails(tmp_path):
-    result = run_gate(folder(tmp_path), "openmp", timeout_s=240, speedup_floor=1000.0)
+    result = run_check(folder(tmp_path), "openmp", timeout_s=240, speedup_floor=1000.0)
     assert result.failure_stage == "benchmark"
     assert not result.passed
 
@@ -108,7 +108,7 @@ def test_stricter_floor_than_the_makefile_fails(tmp_path):
 def test_hanging_test_is_a_timeout(tmp_path):
     source = HEADER + "double midpoint(double a, double b, long n)\n" \
         "{ (void)a; (void)b; (void)n; for (;;) {} return 0.0; }\n"  # fmt: skip
-    result = run_gate(folder(tmp_path, source), "openmp", timeout_s=5)
+    result = run_check(folder(tmp_path, source), "openmp", timeout_s=5)
     assert result.failure_stage == "timeout", result.log
 
 
@@ -126,7 +126,7 @@ def test_edited_trusted_file_is_tampered(tmp_path, victim):
     work = folder(tmp_path)
     with (work / victim).open("a") as handle:
         handle.write("\n/* edited */\n")
-    result = run_gate(work, "openmp", timeout_s=60)
+    result = run_check(work, "openmp", timeout_s=60)
     assert (result.passed, result.failure_stage) == (False, "tampered")
     assert f"{victim} has been changed" in result.log
 
@@ -134,13 +134,13 @@ def test_edited_trusted_file_is_tampered(tmp_path, victim):
 def test_removed_trusted_file_is_tampered(tmp_path):
     work = folder(tmp_path)
     (work / "bench_sweep.sh").unlink()
-    assert run_gate(work, "openmp", timeout_s=60).failure_stage == "tampered"
+    assert run_check(work, "openmp", timeout_s=60).failure_stage == "tampered"
 
 
 def test_missing_manifest_is_tampered(tmp_path):
     work = folder(tmp_path)
     (work / ".trusted.json").unlink()
-    result = run_gate(work, "openmp", timeout_s=60)
+    result = run_check(work, "openmp", timeout_s=60)
     assert result.failure_stage == "tampered"
 
 

@@ -39,12 +39,12 @@ recall component.
 
 One cell was run at a time: the three agent designs for one problem, backend, variant and
 model ran together, and the next cell started when they had finished. The agents are the three designs
-described in [DESIGN.md](DESIGN.md). Each run's work folder was graded by the gate (the independent
+described in [DESIGN.md](DESIGN.md). Each run's work folder was graded by the check (the independent
 checker described in [DESIGN.md](DESIGN.md)): the code must build with warnings as errors, the
 unit test must match the oracle at one worker and at several, and the benchmark must show a real
-speed-up. This campaign's gate also has a new first step that checks the trusted files, described
+speed-up. This campaign's check also has a new first step that checks the trusted files, described
 below. Every record carries the request count, the prompt and completion tokens, the wall time,
-the mean latency per call and the completion tokens per second. Per-run files (the gate log, the
+the mean latency per call and the completion tokens per second. Per-run files (the check log, the
 kernel and test the agent wrote, and the digests taken at assembly) are under
 `results/campaign-2026-10/runs/`, and the log of each run is under `results/campaign-2026-10/logs/`.
 The records were not edited.
@@ -99,7 +99,7 @@ go either way, a result at least this lopsided would arise about 18 times in 100
 sign test that I calculated by hand from these counts). The data therefore do not rule out
 chance.
 
-How the runs that failed failed, by the stage of the gate at which they stopped:
+How the runs that failed failed, by the stage of the check at which they stopped:
 
 | Failure stage | Unmasked | Masked |
 | --- | ---: | ---: |
@@ -117,11 +117,11 @@ tokens on unmasked ones: 26% more requests and 51% more prompt tokens.
 
 ## What the tamper check found
 
-The gate in this campaign first compares each trusted file (the benchmark, the headers, the
+The check in this campaign first compares each trusted file (the benchmark, the headers, the
 Makefile and the checking scripts) with digests, which are fingerprints taken when the work
 folder was made. A run in which any of them has changed fails with failure stage `tampered`.
-The check was added to the gate on 11 October 2026 (source: the repository's revision history,
-the commit "Verify the trusted files before judging, and other review fixes"). The July gate
+The check was added to the check on 11 October 2026 (source: the repository's revision history,
+the commit "Verify the trusted files before judging, and other review fixes"). The July check
 did not have it.
 
 Four of the 192 runs failed this way. In the three Llama runs the agent's own record says the
@@ -138,13 +138,13 @@ budget was spent.
 
 Counting across the four runs, `reference.h` (the oracle in C form) was changed three times,
 the Makefile twice and `bench_sweep.sh` once. Three of the four were by the weakest model.
-The gate logs in `results/campaign-2026-10/runs/` name the files.
+The check logs in `results/campaign-2026-10/runs/` name the files.
 
-This matters for the July numbers. The July gate did not compare the trusted files, so it
+This matters for the July numbers. The July check did not compare the trusted files, so it
 would not have rejected a run for this reason and could not have caught the same behaviour.
 It does not follow that any July pass was a false one: there is no record either way, and the
 July work folders were not kept. What can be said is that agents do sometimes rewrite their
-own checks, that a gate without this check can be fooled, and that the July pass counts,
+own checks, that a check without this check can be fooled, and that the July pass counts,
 especially those for the weakest model, may include passes that were not honest.
 
 ## Latency, throughput and cost
@@ -249,7 +249,7 @@ completed normally. No run of any model met an access or account error.
 - **A different Sonnet.** This campaign used Claude Sonnet 4.5 and July used Claude Sonnet
   4.6. It also used gpt-oss-120b where July used Gemma 31B. The two campaigns are not a
   like-for-like comparison.
-- **A different gate.** This campaign used the gate with the trusted-file check and the
+- **A different check.** This campaign used the check with the trusted-file check and the
   other review fixes made on 11 October 2026. The July runs were graded without them.
 - **Missing counts.** Fourteen records, mostly Pydantic runs that stopped on an error such as
   the request limit of 80, have zero requests and zero tokens, because the counts were lost

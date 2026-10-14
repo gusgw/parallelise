@@ -99,9 +99,9 @@ tool in all three agents now reports a failure to the model as an ordinary messa
 first pilot records of the Pydantic and LangGraph agents in the manifest carry different
 hashes because they come from before the fix.
 
-## The gate
+## The check
 
-The gate has three parts. Each exists because a model has been seen to fail, or to cheat, in
+The check has three parts. Each exists because a model has been seen to fail, or to cheat, in
 the way it guards against.
 
 1. **Build with warnings as errors.** Weak models often produce code that compiles with
@@ -223,7 +223,7 @@ reword can only make the problem harder, so the separation reported is a lower b
 variables and benchmark renamed to a neutral alias, the notebook text replaced by one
 neutral sentence, code comments removed, and algorithm-naming identifiers renamed. Numbers,
 logic and the oracle are unchanged, and the report lists every substitution. A masked
-problem must still pass its reference gate, because the machinery must not care. The study
+problem must still pass its reference check, because the machinery must not care. The study
 runs masked copies of integrate, jacobi, scan and cg on four models, single runs, with
 the same agent designs, and compares pass rate and token use against the unmasked runs. The
 drop, if any, is the models' recall component. The study has now been run (October 2026, 192

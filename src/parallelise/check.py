@@ -1,9 +1,9 @@
-"""The gate: an independent judgement of a finished work folder.
+"""The check: an independent judgement of a finished work folder.
 
 A work folder passes only if its trusted files are unchanged since assembly, it compiles
 with warnings treated as errors, its unit test passes at one worker and at several, its
 benchmark runs, and the benchmark's speed-up figures survive the checks in ``bench_check``.
-The gate never trusts what the agent says about its own work; it rebuilds from
+The check never trusts what the agent says about its own work; it rebuilds from
 scratch and reads only what the trusted benchmark wrote.
 """
 
@@ -29,7 +29,7 @@ from parallelise.bench_check import (
     check_bench_cuda,
 )
 
-log = logging.getLogger("parallelise.gate")
+log = logging.getLogger("parallelise.check")
 
 #: Stages at which a run can fail; "none" means it passed.
 FAILURE_STAGES = (
@@ -52,8 +52,8 @@ STRICT_CFLAGS = {
 
 
 @dataclass
-class GateResult:
-    """What the gate found: whether it passed, where it failed, and the full log."""
+class CheckResult:
+    """What the check found: whether it passed, where it failed, and the full log."""
 
     passed: bool
     failure_stage: str
@@ -172,12 +172,12 @@ def _run(command: list[str], cwd: Path, env: dict[str, str], deadline: float) ->
     return proc.returncode, output
 
 
-def run_gate(
+def run_check(
     work_dir: Path,
     backend: str,
     timeout_s: int = 300,
     speedup_floor: float | None = None,
-) -> GateResult:
+) -> CheckResult:
     """Judge a work folder; the whole judgement shares one time limit of ``timeout_s``.
 
     The speed-up floor normally comes from the problem's Makefile. When ``speedup_floor``
@@ -188,32 +188,32 @@ def run_gate(
     work_dir = Path(work_dir).resolve()
     record: list[str] = []
 
-    def result(stage: str, best: float | None = None) -> GateResult:
+    def result(stage: str, best: float | None = None) -> CheckResult:
         passed = stage == "none"
-        record.append(f"GATE {'PASS' if passed else 'FAIL'} ({stage}) {work_dir}")
-        return GateResult(passed, stage, best, "\n".join(record))
+        record.append(f"CHECK {'PASS' if passed else 'FAIL'} ({stage}) {work_dir}")
+        return CheckResult(passed, stage, best, "\n".join(record))
 
     changed = _tampered_files(work_dir)
     if changed:
-        record.append("[gate] trusted files do not match the digests written at assembly:")
-        record.extend(f"[gate]   {line}" for line in changed)
+        record.append("[check] trusted files do not match the digests written at assembly:")
+        record.extend(f"[check]   {line}" for line in changed)
         return result("tampered")
 
     name = _find_kernel_name(work_dir)
     if name is None or not (work_dir / "Makefile").is_file():
-        record.append("[gate] no Makefile or kernel name found in the work folder")
+        record.append("[check] no Makefile or kernel name found in the work folder")
         return result("no-files")
     needed = [kernel_filename(name, backend), f"test_{name}.c"]
     missing = [f for f in needed if not (work_dir / f).is_file()]
     if missing:
-        record.append("[gate] missing files: " + ", ".join(missing))
+        record.append("[check] missing files: " + ", ".join(missing))
         return result("no-files")
 
     env = dict(os.environ)
     if backend in STRICT_CFLAGS:
         env["CFLAGS"] = STRICT_CFLAGS[backend]
     # The Makefiles run "python3 check_bench.py"; make sure that finds this interpreter
-    # and the package, wherever the gate was started from.
+    # and the package, wherever the check was started from.
     env["PATH"] = str(Path(sys.executable).parent) + os.pathsep + env.get("PATH", "")
     package_parent = str(Path(__file__).resolve().parent.parent)
     env["PYTHONPATH"] = package_parent + os.pathsep + env.get("PYTHONPATH", "")
@@ -222,14 +222,14 @@ def run_gate(
     deadline = time.monotonic() + timeout_s
     best: float | None = None
     try:
-        record.append("[gate] build with warnings as errors")
+        record.append("[check] build with warnings as errors")
         _run(["make", "clean"], work_dir, env, deadline)
         code, out = _run(["make", f"test_{name}", "bench"], work_dir, env, deadline)
         record.append(out)
         if code != 0:
             return result("build")
 
-        record.append("[gate] unit test at one worker and at several, then benchmark")
+        record.append("[check] unit test at one worker and at several, then benchmark")
         code, out = _run(["make", "check"], work_dir, env, deadline)
         record.append(out)
         csv_path = work_dir / "bench.csv"
@@ -242,17 +242,17 @@ def run_gate(
         if code != 0:
             return result(_classify_check_failure(work_dir, out), best)
         if verdict is None:
-            record.append("[gate] the benchmark wrote no bench.csv")
+            record.append("[check] the benchmark wrote no bench.csv")
             return result("benchmark")
         if not verdict.ok:
-            record.append("[gate] " + verdict.message)
+            record.append("[check] " + verdict.message)
             return result("benchmark", best)
     except _Timeout as exc:
         if exc.args and exc.args[0]:
             record.append(str(exc.args[0]))
-        record.append(f"[gate] time limit of {timeout_s} s reached")
+        record.append(f"[check] time limit of {timeout_s} s reached")
         return result("timeout")
     except OSError as exc:
-        record.append(f"[gate] could not run the build tools: {exc}")
+        record.append(f"[check] could not run the build tools: {exc}")
         return result("build")
     return result("none", best)

@@ -15,7 +15,7 @@ test_$(KERNEL): test_$(KERNEL).c $(KERNEL).o $(KERNEL).h reference.h testing.h
 bench: bench.c $(KERNEL).o $(KERNEL).h
 	$(NVCC) $(NVFLAGS) bench.c $(KERNEL).o -o bench $(LDLIBS)
 
-# the full gate: build + unit test (agreement with the notebook oracle) + serial-vs-GPU
+# the full check: build + unit test (agreement with the notebook oracle) + serial-vs-GPU
 # benchmark validation (the trusted serial baseline lives in bench.c, so a kernel that
 # does not really run on the GPU cannot show the required speedup). Floor 3x: this is a
 # double-precision workload and consumer/laptop GPUs run FP64 at a small fraction of

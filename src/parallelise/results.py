@@ -37,7 +37,7 @@ def now_iso() -> str:
 
 @dataclass
 class RunRecord:
-    """Everything worth knowing about one agent run and how the gate judged it."""
+    """Everything worth knowing about one agent run and how the check judged it."""
 
     problem: str
     backend: str

@@ -1,8 +1,8 @@
-"""Every reference solution in problems/ must pass the gate.
+"""Every reference solution in problems/ must pass the check.
 
 This is the check that the machinery is sound without any model: for each problem and
 backend present in the repository it assembles a work folder containing the known-good
-solution and expects the gate to pass. Tests skip only when the needed compiler is absent.
+solution and expects the check to pass. Tests skip only when the needed compiler is absent.
 """
 
 import shutil
@@ -12,7 +12,7 @@ import pytest
 from tests.small_machine import skip_if_only_speedup_failed
 
 from parallelise.assemble import assemble_work_dir
-from parallelise.gate import run_gate
+from parallelise.check import run_check
 
 PROBLEMS = Path(__file__).resolve().parent.parent / "problems"
 
@@ -41,16 +41,16 @@ def missing_tool(backend: str) -> str | None:
 
 
 @pytest.mark.parametrize(("problem", "backend"), cases())
-def test_reference_solution_passes_gate(problem, backend, tmp_path):
+def test_reference_solution_passes_check(problem, backend, tmp_path):
     tool = missing_tool(backend)
     if tool:
         pytest.skip(f"{tool} is not installed")
     work = assemble_work_dir(PROBLEMS / problem, backend, tmp_path / "w", include_reference=True)
-    result = run_gate(work, backend, timeout_s=600)
+    result = run_check(work, backend, timeout_s=600)
     if not result.passed and result.failure_stage == "benchmark":
         # Speed-up figures vary with whatever else the machine is doing, so a missed
         # floor gets one second attempt. A genuinely slow solution fails both times.
-        result = run_gate(work, backend, timeout_s=600)
+        result = run_check(work, backend, timeout_s=600)
     skip_if_only_speedup_failed(
         result, work, f"{problem}/{backend}", always=problem in MEMORY_BOUND
     )

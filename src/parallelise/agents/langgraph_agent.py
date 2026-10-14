@@ -19,7 +19,7 @@ from parallelise.agents.base import (
     AgentUnavailable,
     LatencyRecorder,
     build_system_prompt,
-    gate_feedback,
+    check_feedback,
 )
 
 if TYPE_CHECKING:
@@ -151,14 +151,17 @@ class LangGraphAgent:
                 notes = "stopped: a pass reached the step limit"
                 break
             messages = list(state["messages"])
-            passed, output = tools.run_gate(work_dir)
+            passed, output = tools.run_check(work_dir)
             if passed:
                 finished = True
                 notes = "the checks passed"
                 break
             log.info("pass %d: the checks fail; asking again", passes)
             messages.append(
-                {"role": "user", "content": gate_feedback(list(tools.DEFAULT_GATE_COMMAND), output)}
+                {
+                    "role": "user",
+                    "content": check_feedback(list(tools.DEFAULT_CHECK_COMMAND), output),
+                }
             )
         else:
             notes = "stopped: the checks never passed"

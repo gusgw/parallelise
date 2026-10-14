@@ -1,9 +1,9 @@
 """The command-line interface: `parallelise <subcommand>`.
 
-Exit status is 0 on success, 1 when a gate fails or an error is reported, and 2 for bad
+Exit status is 0 on success, 1 when a check fails or an error is reported, and 2 for bad
 arguments. Every error message says what to do next.
 
-The modules that do the heavy work (gate, assemble, mask, agents, report) are imported
+The modules that do the heavy work (check, assemble, mask, agents, report) are imported
 only when the subcommand that needs them runs. A missing or incomplete module therefore
 produces a clear message for that subcommand alone, instead of stopping the whole program
 at start-up.
@@ -47,7 +47,7 @@ _BACKEND_ADVICE = {
     ),
     "cuda": (
         "Use CUDA (a graphics processor). The kernel is a .cu file built with nvcc, and the "
-        "gate requires a real speed-up over one processor core."
+        "check requires a real speed-up over one processor core."
     ),
 }
 
@@ -199,18 +199,18 @@ def cmd_assemble(args: argparse.Namespace) -> int:
 
 
 def cmd_grade(args: argparse.Namespace) -> int:
-    """Run the gate on an existing work folder."""
+    """Run the check on an existing work folder."""
     _check_backend(args.backend)
     work_dir = Path(args.work_dir)
     if not work_dir.is_dir():
         raise ParalleliseError(f"The work folder {work_dir} does not exist. Check the path.")
-    gate = _lazy("gate")
-    result = gate.run_gate(
+    check = _lazy("check")
+    result = check.run_check(
         work_dir, args.backend, timeout_s=int(args.timeout), speedup_floor=args.floor
     )
     print(result.log)
     speedup = "none" if result.speedup_best is None else f"{result.speedup_best:.2f}"
-    print(f"Gate {'PASSED' if result.passed else 'FAILED'} "
+    print(f"Check {'PASSED' if result.passed else 'FAILED'} "
           f"(failure stage: {result.failure_stage}, best speed-up: {speedup}).")
     return 0 if result.passed else 1
 
@@ -313,7 +313,7 @@ def cmd_run(args: argparse.Namespace) -> int:
     _check_backend(args.backend, allow_auto=True)
     settings = _settings(args)
     assemble = _lazy("assemble")
-    gate = _lazy("gate")
+    check = _lazy("check")
     agents = _lazy("agents")
     problem_dir = _resolve_problem(args.problem, args.problems_dir)
     problem_name = problem_dir.name
@@ -355,16 +355,16 @@ def cmd_run(args: argparse.Namespace) -> int:
         summary = client.summary()
 
     if agent_error:
-        passed, stage, speedup, gate_log = False, "agent-error", None, ""
+        passed, stage, speedup, check_log = False, "agent-error", None, ""
     else:
-        graded = gate.run_gate(work_dir, backend, timeout_s=int(args.gate_timeout))
-        passed, stage, speedup, gate_log = (
+        graded = check.run_check(work_dir, backend, timeout_s=int(args.check_timeout))
+        passed, stage, speedup, check_log = (
             graded.passed,
             "none" if graded.passed else graded.failure_stage,
             graded.speedup_best,
             graded.log,
         )
-        (work_dir / "gate.log").write_text(gate_log, encoding="utf-8")
+        (work_dir / "check.log").write_text(check_log, encoding="utf-8")
     wall = time.perf_counter() - started
 
     notes: list[str] = []
@@ -469,7 +469,7 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--masked", metavar="ALIAS",
                    help="hide the algorithm's name behind this neutral alias")
     p.add_argument("--step-budget", type=int, default=80, help="most agent steps allowed")
-    p.add_argument("--gate-timeout", type=float, default=300.0, help="seconds allowed for grading")
+    p.add_argument("--check-timeout", type=float, default=300.0, help="seconds allowed for grading")
     p.add_argument("--work-root", help="folder for work folders (PARALLELISE_WORK_ROOT)")
     p.add_argument("--results", help="results file (PARALLELISE_RESULTS)")
     p.add_argument("--serving", default="not recorded", help="who served the model")
@@ -483,7 +483,7 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--out", help="write the verdict, as JSON, to this file")
     p.set_defaults(func=cmd_assess)
 
-    p = sub.add_parser("grade", parents=[common], help="run the gate on a work folder")
+    p = sub.add_parser("grade", parents=[common], help="run the check on a work folder")
     p.add_argument("work_dir")
     p.add_argument("--backend", required=True, choices=BACKENDS)
     p.add_argument("--timeout", type=float, default=300.0)

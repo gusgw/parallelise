@@ -1,7 +1,7 @@
 """Building a work folder for one problem and one backend.
 
 The work folder is flat and self-contained. It holds everything an agent is allowed to
-read and the trusted files the gate depends on: the shared test header and benchmark
+read and the trusted files the check depends on: the shared test header and benchmark
 script from the package, a notebook, the oracle in C form, the kernel header with the
 signature to implement, the benchmark the agent cannot change, and the Makefile.
 """
@@ -24,7 +24,7 @@ PROBLEM_LEVEL_FILES = ("reference.h", "reference.json", "problem.h")
 
 #: Name of the file in the work folder that records the digests of the trusted files.
 TRUSTED_MANIFEST = ".trusted.json"
-#: Files the agent must not change. The gate checks them against ``TRUSTED_MANIFEST``.
+#: Files the agent must not change. The check compares them with ``TRUSTED_MANIFEST``.
 #: The kernel header ``<name>.h`` is added to this list for each problem.
 TRUSTED_FILES = (
     "bench.c", "Makefile", "testing.h", "bench_sweep.sh", "check_bench.py",
