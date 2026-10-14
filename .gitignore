@@ -13,5 +13,3 @@ work/
 # build products inside problem folders
 problems/**/bench
 problems/**/bench.csv
-# ignore papers on algorithms
-*.pdf
