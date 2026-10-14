@@ -23,7 +23,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
-log = logging.getLogger("parallelise.report")
+log = logging.getLogger("parallelise.study.report")
 
 BACKEND_ORDER = ("openmp", "mpi", "cuda")
 CAPTION = ("Counts are passes out of cells. A cell is one problem, backend, model and agent "

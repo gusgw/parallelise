@@ -11,7 +11,7 @@ from tests.small_machine import skip_if_only_speedup_failed
 
 from parallelise.assemble import assemble_work_dir
 from parallelise.check import run_check
-from parallelise.mask import (
+from parallelise.study.mask import (
     NEUTRAL_SENTENCE,
     WORD_LIST,
     mask_problem,
@@ -19,7 +19,7 @@ from parallelise.mask import (
     strip_makefile_comments,
 )
 
-FIXTURE = Path(__file__).parent / "fixtures" / "midpoint"
+FIXTURE = Path(__file__).parent.parent / "fixtures" / "midpoint"
 ALIAS = "kernel_a"
 
 

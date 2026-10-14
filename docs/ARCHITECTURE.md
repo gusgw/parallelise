@@ -31,19 +31,26 @@ docs/DESIGN.md            the experimental design and what was learned
 docs/RESULTS.md           every results table, with provenance
 docs/OPERATIONS.md        deploying, health checks, reading the logs, troubleshooting
 src/parallelise/          the package (see "Modules")
+src/parallelise/study/    the study tools, apart from the conversion path: mask.py, report.py, cli.py
 src/parallelise/data/     files copied into every work folder: testing.h, bench_sweep.sh
 problems/<name>/          one folder per algorithm (see "Problems")
 results/                  the run records and the per-run evidence (see "Results")
 studies/coding-agents/    the earlier study of agent designs on a debugging task
 bindings/                 nanobind wrappers that call the finished kernels from Python
 tests/                    pytest suite; `pytest -q` from the root runs it
+tests/study/              tests of the study subpackage; `pytest -q tests/study` runs them alone
 ```
 
 ## Modules
 
-All code is in `src/parallelise/`. Python 3.11 or later. Every public function has
+All code is in `src/parallelise/`. The conversion path is the modules directly in that
+folder, and the study tools are in the subpackage `src/parallelise/study/`. The study
+tools are separate so that each part can be read and tested on its own: `pytest -q tests/study`
+tests the study tools without the conversion path, and `pytest -q tests -k 'not study'` tests
+the conversion path without them. The conversion path needs the study subpackage only when
+`parallelise run --masked` calls the masking tool. Python 3.11 or later. Every public function has
 type hints and a docstring in plain English. Logging goes through
-`logging.getLogger("parallelise.<module>")`; nothing prints except the command-line
+`logging.getLogger("parallelise.<module>")` (`parallelise.study.<module>` for the study tools); nothing prints except the command-line
 layer. Subprocesses are run with argument lists, never a shell string, and always with
 a timeout. No module reads the network except `model.py`.
 
@@ -101,7 +108,7 @@ a timeout. No module reads the network except `model.py`.
   the measured times, duplicated widths, every parallel time exactly the serial time
   divided by the width, constant throughput, efficiency not equal to one at one worker,
   and best speed-up under the floor. `check_bench_cuda` keeps the CUDA variant.
-- `mask.py` — `mask_problem(problem_dir, dest, alias) -> MaskReport`. Produces a copy
+- `study/mask.py` — `mask_problem(problem_dir, dest, alias) -> MaskReport`. Produces a copy
   of a problem whose kernel, files, header guards, Makefile variables and benchmark
   refer to the neutral name `alias`; whose notebook markdown is replaced by one neutral
   sentence; whose code comments are removed; and whose identifiers that name the
@@ -120,7 +127,7 @@ a timeout. No module reads the network except `model.py`.
   `MAX_PASSES` (8) passes, each limited to `step_budget` steps. `pydantic` stops when the
   checks pass or when the framework's request limit, set to `step_budget`, is reached.
   `docs/DESIGN.md` explains the differences.
-- `report.py` — `build_tables(records, masked=False, prices=None) -> str` (Markdown: pass
+- `study/report.py` — `build_tables(records, masked=False, prices=None) -> str` (Markdown: pass
   counts by model and backend, by agent design, by problem; when the records hold masked and
   unmasked runs, masked-against-unmasked tables; when they hold request counts, a serving
   table with cost if `prices` is given), `load_prices(path)`, `build_chart(records,
@@ -137,13 +144,18 @@ a timeout. No module reads the network except `model.py`.
   JSON object at the end of the reply is found even when wrapped in prose or a code fence;
   if none is usable, `ParalleliseError` is raised. `Verdict.chosen_backend` is the single
   backend to run (for a combination, the first part that is not serial).
+- `cli_support.py` — three small helpers used by both command-line modules: `lazy_import`
+  (import a part on first use and turn a failure into a plain message), `resolve_problem`
+  and `settings_from_args`.
+- `study/cli.py` — `register(sub, common, problems)` adds the `mask` and `report` commands to
+  the main parser, so `parallelise mask` and `parallelise report` work as before.
 - `cli.py` — `main(argv=None)` using argparse with subcommands: `health`, `oracle
   <notebook>`, `assemble <problem> <backend> <dest>`, `assess <notebook> [--out verdict.json]`,
   `run <problem> <backend>
   --agent --model` (the backend may be `auto`, which runs the assessment first, stops
   with exit status 1 and no record if the verdict is serial or the problem lacks that
-  backend, and otherwise saves `assessment.json` in the work folder), `grade <work_dir> --backend`, `mask <problem> <alias> <dest>`,
-  `bench-check <csv>`, `report`. Exit status 0 on success, 1 on a failed check or a
+  backend, and otherwise saves `assessment.json` in the work folder), `grade <work_dir> --backend`, `bench-check <csv>`, and the study commands
+  `mask <problem> <alias> <dest>` and `report`, which `study/cli.py` registers. Exit status 0 on success, 1 on a failed check or a
   reported error, 2 on bad arguments. Every error message says what to do next.
 
 ## Problems

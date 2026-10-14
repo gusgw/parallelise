@@ -3,33 +3,38 @@
 Exit status is 0 on success, 1 when a check fails or an error is reported, and 2 for bad
 arguments. Every error message says what to do next.
 
-The modules that do the heavy work (check, assemble, mask, agents, report) are imported
-only when the subcommand that needs them runs. A missing or incomplete module therefore
-produces a clear message for that subcommand alone, instead of stopping the whole program
-at start-up.
+The commands are the conversion commands defined here (health, assess, oracle, assemble,
+run, grade, bench-check) and the study commands (mask, report) that the subpackage
+`parallelise.study` registers into the same parser. The modules that do the heavy work
+(check, assemble, agents, assess and the study tools) are imported only when the
+subcommand that needs them runs. A missing or incomplete module therefore produces a
+clear message for that subcommand alone, instead of stopping the whole program at
+start-up.
 """
 
 from __future__ import annotations
 
 import argparse
 import hashlib
-import importlib
 import inspect
 import logging
 import shutil
 import sys
 import time
 from pathlib import Path
-from types import ModuleType
 from typing import Any
 
 from . import __version__
+from .cli_support import lazy_import as _lazy
+from .cli_support import resolve_problem as _resolve_problem
+from .cli_support import settings_from_args as _settings
 from .config import Settings
 from .errors import AgentUnavailable, ConfigError, ParalleliseError
 from .log import configure_logging
 from .model import ModelClient
 from .oracle import extract_oracle, write_reference
 from .results import ResultsStore, RunRecord
+from .study import cli as study_cli
 
 log = logging.getLogger("parallelise.cli")
 
@@ -50,28 +55,6 @@ _BACKEND_ADVICE = {
         "check requires a real speed-up over one processor core."
     ),
 }
-
-
-def _lazy(name: str, hint: str = "") -> ModuleType:
-    """Import parallelise.<name> on first use, turning an import failure into a plain error."""
-    full = f"parallelise.{name}"
-    try:
-        return importlib.import_module(full)
-    except ModuleNotFoundError as exc:
-        if exc.name == full:
-            raise ParalleliseError(
-                f"The {name!r} part of parallelise is not available in this installation. "
-                "Reinstall the package with 'pip install -e .' from the repository root."
-            ) from exc
-        raise ParalleliseError(
-            f"The {name!r} part of parallelise needs the Python package {exc.name!r}, which is "
-            f"not installed. {hint or 'Install it with pip.'}"
-        ) from exc
-    except ImportError as exc:
-        raise ParalleliseError(
-            f"The {name!r} part of parallelise could not be loaded ({exc}). "
-            "Reinstall the package with 'pip install -e .'."
-        ) from exc
 
 
 def build_task(name: str, backend: str) -> str:
@@ -111,20 +94,6 @@ def _safe(text: str) -> str:
     return "".join(ch if ch.isalnum() or ch in "-_." else "_" for ch in text) or "model"
 
 
-def _resolve_problem(problem: str, problems_dir: str) -> Path:
-    """Accept either a path to a problem folder or the name of one under problems_dir."""
-    direct = Path(problem)
-    if direct.is_dir():
-        return direct
-    named = Path(problems_dir) / problem
-    if named.is_dir():
-        return named
-    raise ParalleliseError(
-        f"There is no problem folder {problem!r} or {str(named)!r}. Run from the repository "
-        "root, or give the folder's path, or set --problems-dir."
-    )
-
-
 def _check_backend(backend: str, allow_auto: bool = False) -> None:
     allowed = BACKENDS + (("auto",) if allow_auto else ())
     if backend not in allowed:
@@ -143,16 +112,6 @@ def _problem_notebook(problem_dir: Path) -> Path:
         f"The problem folder {problem_dir} has no single notebook to assess. "
         "Add one named after the folder."
     )
-
-
-def _settings(args: argparse.Namespace) -> Settings:
-    overrides: dict[str, Any] = {
-        "gateway_url": getattr(args, "gateway_url", None),
-        "model": getattr(args, "model", None),
-        "work_root": getattr(args, "work_root", None),
-        "results_path": getattr(args, "results", None),
-    }
-    return Settings.from_env(overrides)
 
 
 # --- subcommands -------------------------------------------------------------------
@@ -215,18 +174,6 @@ def cmd_grade(args: argparse.Namespace) -> int:
     return 0 if result.passed else 1
 
 
-def cmd_mask(args: argparse.Namespace) -> int:
-    """Write a copy of a problem with the algorithm's name and hints removed."""
-    mask = _lazy("mask")
-    problem_dir = _resolve_problem(args.problem, args.problems_dir)
-    report = mask.mask_problem(problem_dir, Path(args.dest), args.alias)
-    print(f"Masked {problem_dir.name} as {args.alias!r} in {args.dest}.")
-    substitutions = getattr(report, "substitutions", None)
-    if substitutions is not None:
-        print(f"{len(substitutions)} substitutions made.")
-    return 0
-
-
 def cmd_bench_check(args: argparse.Namespace) -> int:
     """Validate the speed-up figures in a benchmark CSV file."""
     csv_path = Path(args.csv)
@@ -239,27 +186,6 @@ def cmd_bench_check(args: argparse.Namespace) -> int:
     best = "none" if verdict.speedup_best is None else f"{verdict.speedup_best:.2f}"
     print(f"Benchmark {'accepted' if verdict.ok else 'rejected'}; best speed-up {best}.")
     return 0 if verdict.ok else 1
-
-
-def cmd_report(args: argparse.Namespace) -> int:
-    """Print the results tables and optionally draw the chart."""
-    settings = _settings(args)
-    records = ResultsStore(settings.results_path).load()
-    if not records:
-        raise ParalleliseError(
-            f"There are no run records in {settings.results_path}. Run 'parallelise run' "
-            "first, or point --results at a results file."
-        )
-    report = _lazy("report", "Install it with: pip install 'parallelise[report]'.")
-    prices = report.load_prices(args.prices) if args.prices else None
-    print(report.build_tables(records, prices=prices))
-    if args.chart:
-        report.build_chart(records, Path(args.chart))
-        print(f"Chart written to {args.chart}.")
-    if args.masked_chart:
-        report.build_comparison_chart(records, Path(args.masked_chart))
-        print(f"Masked-against-unmasked chart written to {args.masked_chart}.")
-    return 0
 
 
 def cmd_assess(args: argparse.Namespace) -> int:
@@ -322,7 +248,7 @@ def cmd_run(args: argparse.Namespace) -> int:
     name = problem_name
     masked = bool(args.masked)
     if masked:
-        mask = _lazy("mask")
+        mask = _lazy("study.mask")
         masked_dir = work_root / "_masked" / problem_name
         if masked_dir.exists():
             shutil.rmtree(masked_dir)
@@ -490,27 +416,13 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--floor", type=float, default=None, help="minimum best speed-up")
     p.set_defaults(func=cmd_grade)
 
-    p = sub.add_parser("mask", parents=[common, problems], help="write a masked copy of a problem")
-    p.add_argument("problem")
-    p.add_argument("alias")
-    p.add_argument("dest")
-    p.set_defaults(func=cmd_mask)
-
     p = sub.add_parser("bench-check", parents=[common], help="validate a benchmark CSV file")
     p.add_argument("csv")
     p.add_argument("--floor", type=float, default=0.0,
                    help="minimum best speed-up (default 0: no floor)")
     p.set_defaults(func=cmd_bench_check)
 
-    p = sub.add_parser("report", parents=[common], help="print results tables")
-    p.add_argument("--results", "--store", dest="results",
-                   help="results file, also called the store (PARALLELISE_RESULTS)")
-    p.add_argument("--prices",
-                   help="JSON price table, US dollars per million tokens, for the cost column")
-    p.add_argument("--chart", help="also write the pass-rate chart to this SVG file")
-    p.add_argument("--masked-chart",
-                   help="also write the masked-against-unmasked chart to this SVG file")
-    p.set_defaults(func=cmd_report)
+    study_cli.register(sub, common, problems)  # the mask and report commands
     return parser
 
 

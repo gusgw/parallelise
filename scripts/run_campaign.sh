@@ -6,6 +6,10 @@
 # benchmark timings of one cell are not disturbed by another. The order is model by model,
 # with the unmasked and masked variants of the same cell next to each other.
 #
+# The masking tool that the masked variant uses, and the report tables built from the records,
+# are in the subpackage src/parallelise/study/ (see its __init__.py); this script holds no
+# Python logic of its own.
+#
 # Each run is one "parallelise run" inside the cpu container image. The model gateway
 # address is read from the environment (PARALLELISE_GATEWAY_URL) and is never stored here.
 #

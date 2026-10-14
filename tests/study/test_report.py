@@ -1,11 +1,11 @@
-"""Tests for the tables and chart in parallelise.report."""
+"""Tests for the tables and chart in parallelise.study.report."""
 from __future__ import annotations
 
 import json
 from pathlib import Path
 
 from parallelise.cli import main
-from parallelise.report import (
+from parallelise.study.report import (
     build_chart,
     build_comparison_chart,
     build_comparison_tables,

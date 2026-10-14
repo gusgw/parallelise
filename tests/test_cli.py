@@ -1,7 +1,6 @@
 """Tests for the command line: exit codes, messages, and the run flow with stand-in parts."""
 
 import json
-import sys
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -77,20 +76,6 @@ def test_missing_work_folder_and_csv(tmp_path, capsys):
     assert "does not exist" in capsys.readouterr().err
     assert cli.main(["bench-check", str(tmp_path / "none.csv")]) == 1
     assert "does not exist" in capsys.readouterr().err
-
-
-def test_unavailable_module_gives_clear_message(monkeypatch, tmp_path, capsys):
-    monkeypatch.setitem(sys.modules, "parallelise.mask", None)
-    (tmp_path / "problems" / "p").mkdir(parents=True)
-    code = cli.main(["mask", str(tmp_path / "problems" / "p"), "abc", str(tmp_path / "d")])
-    assert code == 1
-    err = capsys.readouterr().err
-    assert "'mask' part of parallelise is not available" in err
-
-
-def test_report_with_no_records(tmp_path, capsys):
-    assert cli.main(["report", "--results", str(tmp_path / "none.jsonl")]) == 1
-    assert "no run records" in capsys.readouterr().err
 
 
 # --- the run subcommand, with stand-in assemble, check and agents --------------------------

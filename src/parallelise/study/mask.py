@@ -35,7 +35,7 @@ from collections import Counter
 from dataclasses import dataclass, field
 from pathlib import Path
 
-log = logging.getLogger("parallelise.mask")
+log = logging.getLogger("parallelise.study.mask")
 
 #: Words that name an algorithm or its domain. Matching is on whole identifier parts and
 #: ignores case. The position in this tuple fixes the neutral name, so the output is stable.
