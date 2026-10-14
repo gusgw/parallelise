@@ -130,3 +130,16 @@ with the measured speed-up in the message, because the environment variable
 `PARALLELISE_SPEEDUP_UNRELIABLE=1` is set in the workflow. The speed-up requirement is
 checked on a multi-core host, where that variable is left unset and a missed floor is a
 failure. CUDA gates skip wherever there is no graphics card.
+
+## Memory when running benchmarks in containers
+
+The MPI benchmarks for the prefix sum, decay and reservoir problems allocate two arrays of
+eight bytes per element on every rank. At the default length of 134,217,728 elements that
+is 2 GiB per rank, and the sweep runs as many ranks as the machine has cores, so a
+12-core host needs 24 GiB for one benchmark. Three such benchmarks at once exhausted the
+memory of a 30 GB host during the October 2026 campaign, and the kernel killed unrelated
+services. Run every container with an explicit memory limit and no swap, for example
+`docker run --memory=8g --memory-swap=8g`, run one benchmark container at a time, check
+that at least 12 GB is free before starting, and size the problem to the limit with
+`BENCH_N` and `BENCH_MAX_RANKS` rather than raising the limit. A container killed for
+memory exits with status 137.

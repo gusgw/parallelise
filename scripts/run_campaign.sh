@@ -25,6 +25,32 @@ mkdir -p "$WORK" "$OUT" "$LOGS"
 # The container runs as an ordinary user (identifier 10001), so these must be writable.
 chmod 777 "$WORK" "$OUT" "$LOGS"
 
+# Memory discipline. Every container runs under an explicit memory limit with no swap, one
+# container runs at a time, and a cell does not start while the host has less than
+# MIN_FREE_GB free. The MPI benchmarks of the prefix sum, decay and reservoir problems
+# allocate 2 GiB per rank at the production length, so the benchmark length and the rank
+# count are capped to fit the limit. These caps change the benchmark conditions from the
+# October 2026 campaign, which used the production sizes and no limits.
+MEMORY="${MEMORY:-8g}"
+MIN_FREE_GB="${MIN_FREE_GB:-12}"
+export BENCH_N="${BENCH_N:-20000000}"
+export BENCH_MAX_RANKS="${BENCH_MAX_RANKS:-4}"
+
+wait_for_memory() {
+    local free_gb tries=0
+    while :; do
+        free_gb=$(free -g | awk '/^Mem:/ {print $7}')
+        if [ "${free_gb:-0}" -ge "$MIN_FREE_GB" ]; then return 0; fi
+        tries=$((tries + 1))
+        if [ "$tries" -gt 60 ]; then
+            say "ABORT: only ${free_gb} GB free after waiting an hour; need $MIN_FREE_GB GB."
+            exit 3
+        fi
+        say "waiting: ${free_gb} GB free, need $MIN_FREE_GB GB"
+        sleep 60
+    done
+}
+
 MODELS="${MODELS:-claude-sonnet-4.5 kimi-k2.5 gpt-oss-120b llama-3.3-70b}"
 PROBLEMS="${PROBLEMS:-integrate jacobi scan cg}"
 BACKENDS="${BACKENDS:-openmp mpi}"
@@ -64,7 +90,9 @@ run_one() {
     fi
     local tag="${model}_${problem}_${backend}_${variant}_${agent}"
     docker run --rm \
+        --memory="$MEMORY" --memory-swap="$MEMORY" \
         -v "$WORK:/work" -v "$OUT:/results" \
+        -e BENCH_N -e BENCH_MAX_RANKS \
         -e PARALLELISE_GATEWAY_URL \
         -e PARALLELISE_MODEL="$model" \
         -e PARALLELISE_TEMPERATURE=0.2 \
@@ -78,7 +106,7 @@ run_one() {
 total=0
 for m in $MODELS; do for p in $PROBLEMS; do for b in $BACKENDS; do total=$((total + 2)); done; done; done
 n=0
-say "CAMPAIGN START: $total cells, three agents each."
+say "CAMPAIGN START: $total cells, three agents each, one container at a time under a $MEMORY limit."
 for model in $MODELS; do
     for problem in $PROBLEMS; do
         for backend in $BACKENDS; do
@@ -86,9 +114,9 @@ for model in $MODELS; do
                 n=$((n + 1))
                 say "CELL $n/$total START model=$model problem=$problem backend=$backend variant=$variant"
                 for agent in $AGENTS; do
-                    run_one "$model" "$problem" "$backend" "$variant" "$agent" &
+                    wait_for_memory
+                    run_one "$model" "$problem" "$backend" "$variant" "$agent"
                 done
-                wait
                 say "CELL $n/$total END   model=$model problem=$problem backend=$backend variant=$variant"
             done
         done

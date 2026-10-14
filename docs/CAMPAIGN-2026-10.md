@@ -216,6 +216,16 @@ cell. No other model had a run longer than 24 minutes.
 
 ## Limitations
 
+**The host ran short of memory during the campaign.** The driver ran the three agents of a
+cell at once, each in its own container with no memory limit, and the MPI benchmark for the
+prefix sum allocates 2 GiB per rank at the production length. The host's memory was exhausted
+61 times over the two days and the kernel killed unrelated services. No campaign run was
+itself killed, so every record is a complete run, but timings taken while the machine was
+short of memory are suspect, and memory pressure is a further candidate cause of the very long
+gpt-oss-120b runs on jacobi and conjugate gradient under MPI. Future campaigns run one
+container at a time under an explicit memory limit, with the benchmark length and rank count
+capped to fit.
+
 **Three Llama runs were stopped by the provider, not by the model.** Amazon Bedrock
 returned the error "Too many tokens, please wait before trying again" to three
 llama-3.3-70b runs (cg on OpenMP unmasked with the langgraph design, scan on OpenMP
