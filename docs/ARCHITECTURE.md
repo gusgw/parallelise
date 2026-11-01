@@ -5,16 +5,77 @@ interfaces between its parts. Every path below is relative to the repository roo
 
 ## What the system does
 
-A problem is a research Jupyter notebook that implements a numerical algorithm in
-serial Python and, in its final cell, defines a plain `ORACLE` dictionary holding its
-parameters, its own computed result and a tolerance. A backend is one of `openmp`,
-`mpi` or `cuda`. An agent, driven by a language model reached through an
-OpenAI-compatible endpoint, is given a work folder containing the notebook, the oracle
-in C form, a kernel header with the exact signature to implement, a benchmark it cannot
-change, and a Makefile. The agent writes the kernel and a unit test and must make
-`make check` pass. The check then judges the work independently: it builds with warnings
-treated as errors, runs the unit test at one worker and at several, runs the benchmark,
-and validates the speed-up figures. Every run is recorded as one structured record.
+The program turns a numerical algorithm written as serial Python into a parallel C or CUDA
+program, and judges the result independently. These words are used throughout.
+
+A **notebook** is a Jupyter notebook, a file of cells holding Python code and prose. It is
+the only form of input the harness accepts. The oracle extractor runs the notebook's code
+cells in a child process and reads the dictionary named `ORACLE` that the last cell defines.
+
+The **oracle** is the notebook's own answer with a tolerance, which the C code must
+reproduce. The notebook computes the answer itself and may also hand over the terms of the
+sum behind it, so that the extractor can measure how far a correct program may legitimately
+differ by adding the terms in another order.
+
+A **routine** is the one C or CUDA function that does the computation, with exactly the
+signature that the problem's header states. The agent writes it, together with a small test
+of it; the benchmark and the test both call it. (CUDA uses the word kernel for a function
+that runs on the graphics card. This note says routine for the function the agent writes
+under every backend, and uses kernel only in that CUDA sense.)
+
+A **model** is a large language model reached through the gateway by name, for example
+`kimi-k2.5`. The harness sends it the conversation and the tool definitions and receives
+text or tool calls; it knows nothing else about the model.
+
+An **agent** is the program that drives a model through one conversion. It hands the model
+tools to read the notebook, read and write files and run build commands, keeps the
+conversation going until the model says it has finished, runs the checks itself at that
+point, and feeds failures back until a step budget runs out. An **agent design** is one way
+of building that program. There are three: a plain loop written on `httpx`, one built on
+Pydantic AI, and one built on LangGraph. They give the model the same tools and differ in
+how firmly they refuse to let it finish before the checks pass.
+
+A **backend** is the parallel method: OpenMP (Open Multi-Processing, threads inside one
+computer), MPI (Message Passing Interface, cooperating processes that exchange messages) or
+CUDA (Compute Unified Device Architecture, NVIDIA's system for graphics cards).
+
+A **cell** is one problem on one backend with one model and one agent design. A **work
+folder** is the flat directory that `parallelise` builds for an agent to write into and for
+the check to judge. It holds the notebook, the oracle in C form, a header giving the exact
+signature to implement, a benchmark program that the agent cannot change, and a Makefile.
+
+The **check** is the independent judgement of a work folder (`check.py`). It runs after the
+agent has finished, without the model, and has the same form for every problem. It judges
+two files the agent wrote: the routine and a test program for it. The test program is the
+agent's own; nothing in the oracle or the notebook specifies it. The oracle supplies only
+the expected values and the tolerance, which the harness writes into `reference.h` as C
+constants, and a small helper, `testing.h`, compares numbers within a tolerance and counts
+failures. The agent decides what the test program calls and what it asserts. Before the
+four stages, the check confirms that no trusted file has been changed since the work folder
+was assembled; if one has, the run fails at the stage called `tampered`. The four stages
+follow in order, and the check stops at the first failure:
+
+1. Build the routine, the test program and the benchmark program, with every compiler
+   warning treated as an error.
+2. Run the test program with one worker: one thread for OpenMP, one process for MPI. It must
+   report no failures, which means that its assertions found the routine's answer within
+   the oracle's tolerance.
+3. Run the same test program again with several workers. It must again report no failures.
+   A parallelisation whose answer depends on the number of workers fails here. The
+   parallelism is in the routine under test, not in the test: there is one test program,
+   run twice, and the routine inside it splits its work across the workers it is given.
+4. Run the benchmark program, which times the routine at several worker counts and writes a
+   table, and judge the table by the rules against invented or merely serial speed-ups,
+   including a floor on the best speed-up.
+
+A run that fails is recorded with the stage at which it failed. The mathematics of the
+problem does not change the form of the check, only its numbers: what is compared (a single
+number for integration, a checksum of an array for the stencil and the prefix sum); the
+tolerance, which the notebook sets from how much the result can legitimately move when the
+terms are summed in another order, and which is zero for the integer-exact problems; the
+speed-up floor, lower for problems limited by memory bandwidth than for those limited by
+arithmetic; and the benchmark size. Because the test program is the agent's own, the check
+trusts the agent to test honestly, within the limits that the stages above impose.
 
 ## Layout
 
@@ -25,19 +86,20 @@ pyproject.toml            package metadata, dependencies, pytest and ruff settin
 Makefile                  convenience targets: install, lint, test, check-references, image
 Dockerfile                CPU stage (gcc, OpenMPI, Python) and an optional CUDA stage
 k8s/job.yaml              run one conversion cell as a Kubernetes Job
-.github/workflows/ci.yml  lint, tests, reference checks, container build
+.github/workflows/ci.yml  lint, tests, reference checks, container build, smoke test
 docs/ARCHITECTURE.md      this file
 docs/DESIGN.md            the experimental design and what was learned
 docs/RESULTS.md           every results table, with provenance
 docs/OPERATIONS.md        deploying, health checks, reading the logs, troubleshooting
+scripts/                  run_campaign.sh (a masked-against-unmasked campaign), smoke-test.sh
 src/parallelise/          the package (see "Modules")
 src/parallelise/study/    the study tools, apart from the conversion path: mask.py, report.py, cli.py
 src/parallelise/data/     files copied into every work folder: testing.h, bench_sweep.sh
 problems/<name>/          one folder per algorithm (see "Problems")
 results/                  the run records and the per-run evidence (see "Results")
 studies/coding-agents/    the earlier study of agent designs on a debugging task
-bindings/                 nanobind wrappers that call the finished kernels from Python
-tests/                    pytest suite; `pytest -q` from the root runs it
+bindings/                 nanobind wrappers that call the finished routines from Python
+tests/                    pytest suite and the scripted model server (fake_model_server.py); `pytest -q` from the root runs it
 tests/study/              tests of the study subpackage; `pytest -q tests/study` runs them alone
 ```
 
@@ -96,20 +158,23 @@ a timeout. No module reads the network except `model.py`.
   `include_reference=True` it also copies the known-good solution, which is how the
   machinery is tested without a model.
 - `check.py` — `run_check(work_dir, backend, timeout_s=300, speedup_floor=None) ->
-  CheckResult(passed, failure_stage, speedup_best, log)`. Before anything else it checks the
-  trusted files (the benchmark, headers and Makefile) against the digests written when the
-  work folder was assembled, and fails at the stage `tampered` if any has changed. It then
-  builds with the backend's
-  compiler, runs the unit test at one worker and at several, runs the benchmark and
-  calls `bench_check`. The floor comes from the problem's Makefile (`SPEEDUP_FLOOR`), and falls back to 1.5 for
-  OpenMP and MPI or 3 for CUDA.
-- `bench_check.py` — `check_bench_csv(path, floor) -> BenchVerdict(ok, reasons,
-  speedup_best)` applies these rules: rejects a reported speed-up that disagrees with
-  the measured times, duplicated widths, every parallel time exactly the serial time
-  divided by the width, constant throughput, efficiency not equal to one at one worker,
-  and best speed-up under the floor. `check_bench_cuda` keeps the CUDA variant.
+  CheckResult(passed, failure_stage, speedup_best, log)`. Before anything else it compares
+  the trusted files (the benchmark, headers and Makefile) with the fingerprints written when
+  the work folder was assembled, and fails at the stage `tampered` if any has changed. It
+  then builds with the backend's compiler, runs the unit test at one worker and at several,
+  runs the benchmark and calls `bench_check`. The floor is the least best speed-up that the
+  table must reach. It comes from the problem's Makefile (`SPEEDUP_FLOOR`) and falls back to
+  1.5 for OpenMP and MPI or 3 for CUDA; the module docstring explains it in full.
+- `bench_check.py` — `check_cpu_table(path, floor) -> BenchVerdict(ok, reasons,
+  speedup_best)` judges a table of times at several thread or process counts. It rejects a
+  reported speed-up that disagrees with the measured times, duplicated widths, every
+  parallel time exactly the serial time divided by the width, constant throughput,
+  efficiency not equal to one at one worker, and a best speed-up under the floor.
+  `check_gpu_table` judges the CUDA table, which has one row for the serial run and one for
+  the graphics card. The older names `check_bench_csv` and `check_bench_cuda` remain as
+  deprecated aliases.
 - `study/mask.py` — `mask_problem(problem_dir, dest, alias) -> MaskReport`. Produces a copy
-  of a problem whose kernel, files, header guards, Makefile variables and benchmark
+  of a problem whose routine, files, header guards, Makefile variables and benchmark
   refer to the neutral name `alias`; whose notebook markdown is replaced by one neutral
   sentence; whose code comments are removed; and whose identifiers that name the
   algorithm are renamed from a word list kept in the module. Numbers, logic and the
@@ -133,7 +198,7 @@ a timeout. No module reads the network except `model.py`.
   table with cost if `prices` is given), `load_prices(path)`, `build_chart(records,
   dest_svg)` (grouped bars of pass rate by model and backend) and
   `build_comparison_chart(records, dest_svg)` (pass rate by model, unmasked beside masked),
-  both drawn with matplotlib. `parallelise report` takes `--store`, `--prices`, `--chart` and
+  both drawn with matplotlib. `parallelise study report` takes `--store`, `--prices`, `--chart` and
   `--masked-chart`.
 - `assess.py` — `assess_notebook(notebook: Path, client: ModelClient) -> Verdict` gives the
   whole notebook to the model and asks for an analysis of the dependency structure, the
@@ -147,16 +212,19 @@ a timeout. No module reads the network except `model.py`.
 - `cli_support.py` — three small helpers used by both command-line modules: `lazy_import`
   (import a part on first use and turn a failure into a plain message), `resolve_problem`
   and `settings_from_args`.
-- `study/cli.py` — `register(sub, common, problems)` adds the `mask` and `report` commands to
-  the main parser, so `parallelise mask` and `parallelise report` work as before.
-- `cli.py` — `main(argv=None)` using argparse with subcommands: `health`, `oracle
-  <notebook>`, `assemble <problem> <backend> <dest>`, `assess <notebook> [--out verdict.json]`,
-  `run <problem> <backend>
-  --agent --model` (the backend may be `auto`, which runs the assessment first, stops
-  with exit status 1 and no record if the verdict is serial or the problem lacks that
-  backend, and otherwise saves `assessment.json` in the work folder), `grade <work_dir> --backend`, `bench-check <csv>`, and the study commands
-  `mask <problem> <alias> <dest>` and `report`, which `study/cli.py` registers. Exit status 0 on success, 1 on a failed check or a
-  reported error, 2 on bad arguments. Every error message says what to do next.
+- `study/cli.py` — `register(sub, common, problems)` adds the `study` command, with its
+  subcommands `mask` and `report`, to the main parser. It also registers the old top-level
+  `mask` and `report` as hidden aliases that print a notice and run the new form.
+- `cli.py` — `main(argv=None)` using argparse. The commands listed by `parallelise --help`
+  are `health`, `assess <notebook> [--out verdict.json]`, `run <problem> <backend> [--agent]
+  [--model]`, `check <work_folder> --backend <backend>` and `study`. The argument named
+  `<problem>` is the path to a problem folder (a notebook with the files for each backend)
+  or the name of one of the shipped examples under `problems/`; `<work_folder>` is a
+  finished work folder, not a problem. `assess` is a separate command and `run` never calls
+  it. Three maintenance commands work but are not listed: `oracle <notebook>`, `assemble
+  <problem> <backend> <dest>` and `bench-check <csv>`. The old name `grade` for `check` is a
+  hidden alias that prints a notice. Exit status is 0 on success, 1 on a failed check or a
+  reported error, and 2 on bad arguments. Every error message says what to do next.
 
 ## Problems
 
@@ -165,7 +233,7 @@ problems/<name>/<name>.ipynb      the notebook; its last cell defines ORACLE
 problems/<name>/reference.json    generated by `parallelise oracle`; kept for reference
 problems/<name>/reference.h       generated likewise
 problems/<name>/problem.h         optional input helpers shared by all backends
-problems/<name>/<backend>/<name>.h     the kernel signature the agent must implement
+problems/<name>/<backend>/<name>.h     the routine signature the agent must implement
 problems/<name>/<backend>/bench.c      the trusted benchmark (the agent never edits it)
 problems/<name>/<backend>/Makefile     build, check (one worker and several), benchmark
 problems/<name>/<backend>/reference/   known-good <name>.c and test_<name>.c
@@ -182,7 +250,7 @@ results/runs.jsonl                 one RunRecord per line, every graded run
 results/manifest-july-2026.tsv     the original run manifest, kept verbatim except for paths
 results/manifest-phase2-july-2026.tsv   an identical copy; cite either
 results/tokens-new-problems-july-2026.json   request and token counts per model
-results/runs/<problem>/<backend>/<model>/<agent>/   SUMMARY.txt, bench.csv, the kernel and test the agent wrote
+results/runs/<problem>/<backend>/<model>/<agent>/   SUMMARY.txt, bench.csv, the routine and test the agent wrote
 ```
 
 Serving facts for the July models, as recorded in `serving` and `quantisation`:

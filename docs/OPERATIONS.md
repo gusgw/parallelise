@@ -69,8 +69,44 @@ name otherwise only shows up as a failed run.
   next to `SUMMARY.txt` and `bench.csv`. For a failure at `build`, read the compiler
   messages there. For a rejected benchmark, `parallelise bench-check <csv>` prints the
   reasons.
-- To judge a work folder again without the agent: `parallelise grade <work_dir> --backend
-  <backend>`.
+- To judge a work folder again without the agent: `parallelise check <work_folder>
+  --backend <backend>`. The argument is a finished work folder, not a problem. The older
+  name `grade` still works and prints a notice.
+
+## Running a campaign
+
+A campaign is a named run of `scripts/run_campaign.sh`, which converts a set of problems with
+several models and agent designs, each problem both under its own name and masked behind a
+neutral alias (`problem_a`, `problem_b` and so on), one container at a time. The name is
+required and has no default: set `CAMPAIGN` to a name that says what the campaign is and when
+it ran, for example `CAMPAIGN=campaign-2026-10`, and set `PARALLELISE_GATEWAY_URL` to the
+model gateway address.
+
+    CAMPAIGN=campaign-2026-10 PARALLELISE_GATEWAY_URL=http://localhost:4000/v1 \
+      scripts/run_campaign.sh
+
+The campaign's folder is made by the script from the name: the store `results/$CAMPAIGN`
+(under the folder named by `BASE`, which defaults to the current folder) holds `runs.jsonl`,
+the log of every run and the check evidence, and the work folders go to `work/$CAMPAIGN`.
+The script prints the store path when it starts. Running it again with the same name adds
+to the same store, so use a new name for a new campaign. `MODELS`, `PROBLEMS` and `BACKENDS`
+restrict the run to part of the design. Afterwards, `parallelise study report --results
+results/$CAMPAIGN/runs.jsonl` prints the tables.
+
+## The smoke test
+
+`scripts/smoke-test.sh` tests the tool as a new user would meet it. It clones the
+repository from the checkout that holds the script (or from `REPO`, if set) into a temporary
+folder, creates a virtual environment, installs the package with the development and report
+extras, and starts the scripted stand-in model from `tests/fake_model_server.py`. It then
+runs `parallelise health`, converts `problems/integrate` for OpenMP with the plain agent,
+runs `parallelise check` on the work folder, and prints the report tables. If Docker is
+available it also builds the CPU image and runs `health` and the same conversion inside it;
+otherwise it prints a notice and skips those steps. Every step prints what a good result
+looks like, and the script stops with a non-zero status at the first failure. Because it
+clones, it tests what has been committed, not uncommitted edits. The conversion includes the
+speed-up check, so the machine needs at least two free cores. The workflow in
+`.github/workflows/ci.yml` runs the script as the job `smoke` after the tests.
 
 ## Limits on untrusted generated code
 

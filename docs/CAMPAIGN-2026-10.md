@@ -3,7 +3,7 @@
 This document reports the campaign that asks how much of a model's success on familiar
 algorithms is recall. Every number in it was computed from the 192 run records in
 `results/campaign-2026-10/runs.jsonl`, with one exception that is marked: the prices.
-The tables below are the output of `parallelise report --store
+The tables below are the output of `parallelise study report --results
 results/campaign-2026-10/runs.jsonl --prices results/campaign-2026-10/prices.json
 --masked-chart docs/figures/masked-vs-unmasked.svg`, with the comparisons that the report
 does not print worked out from the same file. Each record is one run, and each run is one
@@ -25,7 +25,7 @@ recall component.
 
 | item | what was used |
 | --- | --- |
-| problems | integrate, jacobi, scan and cg (conjugate gradient); masked as `kernel_a`, `kernel_b`, `kernel_c` and `kernel_d` in that order |
+| problems | integrate, jacobi, scan and cg (conjugate gradient); masked as `problem_a`, `problem_b`, `problem_c` and `problem_d` in that order (the October run used the names `kernel_a` to `kernel_d`; the aliases have since been renamed because kernel now means only a CUDA function) |
 | backends | OpenMP (threads) and MPI (the Message Passing Interface, cooperating processes) |
 | variants | unmasked and masked |
 | agent designs | basic, pydantic and langgraph |

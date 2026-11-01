@@ -219,7 +219,7 @@ clean, and the two problems gave similar results, the effect is probably small, 
 reword can only make the problem harder, so the separation reported is a lower bound.
 
 **The masking study** measures how much of the success on familiar problems is recall.
-`parallelise mask` copies a problem with the kernel, files, header guards, Makefile
+`parallelise study mask` copies a problem with the kernel, files, header guards, Makefile
 variables and benchmark renamed to a neutral alias, the notebook text replaced by one
 neutral sentence, code comments removed, and algorithm-naming identifiers renamed. Numbers,
 logic and the oracle are unchanged, and the report lists every substitution. A masked
