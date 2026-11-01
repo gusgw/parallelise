@@ -13,17 +13,31 @@
 # Each run is one "parallelise run" inside the cpu container image. The model gateway
 # address is read from the environment (PARALLELISE_GATEWAY_URL) and is never stored here.
 #
-# Settings that may be overridden in the environment:
+# A campaign is one named run of this script, and its name is required. Choose a name that
+# says what the campaign is and when it ran, for example CAMPAIGN=campaign-2026-10. The
+# campaign's folder, called the store, is results/$CAMPAIGN under BASE. It is created by this
+# script if it does not exist, and it holds runs.jsonl (one record per run), the log of every
+# run and the check evidence. The work folders go to work/$CAMPAIGN under BASE. Running the
+# script again with the same name adds to the same store; use a new name for a new campaign.
+# The store path is printed when the script starts.
+#
+# Settings read from the environment:
+#   CAMPAIGN   the campaign name (required, no default)
 #   IMAGE      container image                (default parallelise:cpu)
 #   BASE       folder holding work/ and results/   (default the current folder)
 #   MODELS, PROBLEMS, BACKENDS   space-separated lists, to run a part of the design
 set -uo pipefail
 
 : "${PARALLELISE_GATEWAY_URL:?Set PARALLELISE_GATEWAY_URL to the model gateway address.}"
+if [ -z "${CAMPAIGN:-}" ]; then
+    echo "run_campaign.sh: CAMPAIGN is not set. Set it to a name for this campaign, for example" >&2
+    echo "CAMPAIGN=campaign-2026-10, and run the script again. The results go in results/\$CAMPAIGN." >&2
+    exit 2
+fi
 IMAGE="${IMAGE:-parallelise:cpu}"
 BASE="${BASE:-$PWD}"
-WORK="$BASE/work/campaign-2026-10"
-OUT="$BASE/results/campaign-2026-10"
+WORK="$BASE/work/$CAMPAIGN"
+OUT="$BASE/results/$CAMPAIGN"
 LOGS="$OUT/logs"
 mkdir -p "$WORK" "$OUT" "$LOGS"
 # The container runs as an ordinary user (identifier 10001), so these must be writable.
@@ -59,15 +73,15 @@ MODELS="${MODELS:-claude-sonnet-4.5 kimi-k2.5 gpt-oss-120b llama-3.3-70b}"
 PROBLEMS="${PROBLEMS:-integrate jacobi scan cg}"
 BACKENDS="${BACKENDS:-openmp mpi}"
 AGENTS="basic pydantic langgraph"
-NOTES="masked campaign, October 2026"
+NOTES="masked campaign $CAMPAIGN"
 QUANT="not disclosed by the provider"
 
 alias_for() {
     case "$1" in
-        integrate) echo kernel_a ;;
-        jacobi) echo kernel_b ;;
-        scan) echo kernel_c ;;
-        cg) echo kernel_d ;;
+        integrate) echo problem_a ;;
+        jacobi) echo problem_b ;;
+        scan) echo problem_c ;;
+        cg) echo problem_d ;;
     esac
 }
 
@@ -110,6 +124,7 @@ run_one() {
 total=0
 for m in $MODELS; do for p in $PROBLEMS; do for b in $BACKENDS; do total=$((total + 2)); done; done; done
 n=0
+say "CAMPAIGN $CAMPAIGN: the store is $OUT"
 say "CAMPAIGN START: $total cells, three agents each, one container at a time under a $MEMORY limit."
 for model in $MODELS; do
     for problem in $PROBLEMS; do
@@ -126,4 +141,4 @@ for model in $MODELS; do
         done
     done
 done
-say "ALL DONE: $n cells finished. Records are in results/campaign-2026-10/runs.jsonl."
+say "ALL DONE: $n cells finished. Records are in $OUT/runs.jsonl."
