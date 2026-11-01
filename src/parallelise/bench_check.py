@@ -1,9 +1,18 @@
 """Validation of benchmark tables, so that invented speed-ups are rejected.
 
-An agent can easily print a table of the right shape containing made-up figures; one
-kernel was seen to hard-code 1.0, 2.0 and 4.0 and print the time, half the time and a
-quarter of the time. The rules below therefore require the table both to be shaped
-correctly and to look measured.
+In the first version of the harness, in July 2026, the agent ran the benchmark itself and
+the harness read the table that the agent left behind. An agent can print a table of the
+right shape containing made-up figures, and one routine did exactly that: it hard-coded
+1.0, 2.0 and 4.0 and printed the time, half the time and a quarter of the time as if they
+had been measured.
+
+The fix was to make the benchmark program a trusted file that the agent cannot change, and
+the check now runs it afresh at judgement time, overwriting any table the agent left.
+
+The rules below remain as a second line of defence. They are needed, for example, when a
+file named ``GNUmakefile`` makes ``make`` run the agent's own recipe instead of the trusted
+one, so that the table might not come from the trusted benchmark after all. The rules
+therefore require the table both to be shaped correctly and to look measured.
 
 For the worker-count sweep (OpenMP threads or MPI ranks) the columns are the worker
 count, ``time_s``, ``speedup``, ``efficiency`` and optionally ``throughput``:
@@ -39,7 +48,7 @@ CONSISTENCY_TOLERANCE = 0.02  # reported speed-up must match t1/t within this fr
 EXACT_TOLERANCE = 1.0e-9  # relative closeness at which a time is "exactly" t1/width
 THROUGHPUT_VARIATION = 1.05  # throughput must vary by at least this ratio
 DEFAULT_FLOOR = 1.5
-DEFAULT_CUDA_FLOOR = 5.0
+DEFAULT_CUDA_FLOOR = 3.0
 PLAUSIBLE_FACTOR = 1.5  # speed-up may exceed the width by this factor at most
 
 
@@ -99,7 +108,7 @@ def _parse_sweep(lines: list[str]) -> tuple[str, list[dict[str, float]], list[st
     return unit, rows, []
 
 
-def check_bench_csv(path: str | Path, floor: float | None = None) -> BenchVerdict:
+def check_cpu_table(path: str | Path, floor: float | None = None) -> BenchVerdict:
     """Check a worker-count sweep table.
 
     ``floor`` is the least acceptable best speed-up; when omitted it is read from the
@@ -186,11 +195,11 @@ def check_bench_csv(path: str | Path, floor: float | None = None) -> BenchVerdic
     return BenchVerdict(not reasons, reasons, best)
 
 
-def check_bench_cuda(path: str | Path, floor: float | None = None) -> BenchVerdict:
+def check_gpu_table(path: str | Path, floor: float | None = None) -> BenchVerdict:
     """Check a CUDA table with columns ``impl,time_s,speedup`` and rows serial and gpu.
 
     CUDA has no worker-count sweep, so the evidence is the serial CPU run against the GPU
-    run at the same size, both timed by the trusted benchmark. The default floor is 5.0.
+    run at the same size, both timed by the trusted benchmark. The default floor is 3.0.
     """
     if floor is None:
         floor = floor_from_env(DEFAULT_CUDA_FLOOR)
@@ -230,6 +239,16 @@ def check_bench_cuda(path: str | Path, floor: float | None = None) -> BenchVerdi
     return BenchVerdict(not reasons, reasons, su_gpu)
 
 
+def check_bench_csv(path: str | Path, floor: float | None = None) -> BenchVerdict:
+    """Deprecated name of ``check_cpu_table``, kept so that outside callers do not break."""
+    return check_cpu_table(path, floor)
+
+
+def check_bench_cuda(path: str | Path, floor: float | None = None) -> BenchVerdict:
+    """Deprecated name of ``check_gpu_table``, kept so that outside callers do not break."""
+    return check_gpu_table(path, floor)
+
+
 def main(argv: Sequence[str] | None = None, cuda: bool = False) -> int:
     """Command-line entry: check the CSV named by the first argument.
 
@@ -240,7 +259,7 @@ def main(argv: Sequence[str] | None = None, cuda: bool = False) -> int:
     if len(args) != 1:
         print("usage: check_bench.py <bench.csv>")
         return 2
-    verdict = (check_bench_cuda if cuda else check_bench_csv)(args[0])
+    verdict = (check_gpu_table if cuda else check_cpu_table)(args[0])
     if verdict.ok:
         best = f" (best speedup {verdict.speedup_best:.2f})" if verdict.speedup_best else ""
         print("bench stats OK" + best)

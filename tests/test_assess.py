@@ -5,13 +5,12 @@ from pathlib import Path
 
 import pytest
 from tests.fake_model_server import FakeModelServer, finish_step
-from tests.test_cli import install_fakes, make_notebook
+from tests.test_cli import make_notebook
 
 from parallelise import assess, cli
 from parallelise.config import Settings
 from parallelise.errors import ParalleliseError
 from parallelise.model import ModelClient
-from parallelise.results import ResultsStore
 
 VERDICT = {
     "backend": "openmp",
@@ -139,83 +138,9 @@ def test_assess_command_unparsable_exits_1(notebook, capsys):
     assert "parallelise: The model" in err and "Traceback" not in err
 
 
-# --- run --backend auto --------------------------------------------------------------
+# --- run no longer offers an automatic backend ---------------------------------------
 
 
-def auto_setup(monkeypatch, tmp_path, backends=("openmp", "mpi")):
-    calls = install_fakes(monkeypatch, tmp_path)
-    problem = tmp_path / "problems" / "integrate"
-    make_notebook(problem / "integrate.ipynb", "x = 1\n")
-    for backend in backends:
-        (problem / backend).mkdir()
-    fakes_lazy = cli._lazy
-
-    def lazy(name, hint=""):
-        return assess if name == "assess" else fakes_lazy(name, hint)
-
-    monkeypatch.setattr(cli, "_lazy", lazy)
-    return calls
-
-
-def auto_args(tmp_path, server):
-    return [
-        "run", "integrate", "auto", "--agent", "basic", "--model", "m1",
-        "--gateway-url", server.url,
-        "--problems-dir", str(tmp_path / "problems"),
-        "--work-root", str(tmp_path / "work"),
-        "--results", str(tmp_path / "runs.jsonl"),
-    ]
-
-
-def test_auto_runs_the_recommended_backend(monkeypatch, tmp_path, capsys):
-    calls = auto_setup(monkeypatch, tmp_path)
-    with served(reply(dict(VERDICT, backend="mpi"))) as server:
-        assert cli.main(auto_args(tmp_path, server)) == 0
-    assert calls["assembled"][1] == "mpi"
-    work_dir = calls["assembled"][2]
-    saved = json.loads((work_dir / "assessment.json").read_text(encoding="utf-8"))
-    assert saved["backend"] == "mpi"
-    (record,) = ResultsStore(tmp_path / "runs.jsonl").load()
-    assert record.backend == "mpi"
-    assert "chosen by the assessment" in record.notes and "assessment.json" in record.notes
-    assert (record.requests, record.prompt_tokens) == (3, 300)  # the agent's own counts only
-    assert "recommended backend is mpi" in capsys.readouterr().out
-
-
-def test_auto_serial_stops_without_a_record(monkeypatch, tmp_path, capsys):
-    calls = auto_setup(monkeypatch, tmp_path)
-    serial = dict(VERDICT, backend="serial", justification="The recurrence is sequential.")
-    with served(reply(serial)) as server:
-        assert cli.main(auto_args(tmp_path, server)) == 1
-    err = capsys.readouterr().err
-    assert "serial" in err and "no record was written" in err
-    assert "assembled" not in calls
-    assert not (tmp_path / "runs.jsonl").exists()
-
-
-def test_auto_backend_the_problem_lacks_stops_without_a_record(monkeypatch, tmp_path, capsys):
-    calls = auto_setup(monkeypatch, tmp_path)
-    with served(reply(dict(VERDICT, backend="cuda"))) as server:
-        assert cli.main(auto_args(tmp_path, server)) == 1
-    err = capsys.readouterr().err
-    assert "recommends cuda" in err and "no cuda folder" in err and "openmp, mpi" in err
-    assert "assembled" not in calls
-    assert not (tmp_path / "runs.jsonl").exists()
-
-
-def test_auto_with_unparsable_verdict_stops_without_a_record(monkeypatch, tmp_path):
-    calls = auto_setup(monkeypatch, tmp_path)
-    with served("I cannot say.") as server:
-        assert cli.main(auto_args(tmp_path, server)) == 1
-    assert "assembled" not in calls and not (tmp_path / "runs.jsonl").exists()
-
-
-def test_a_named_backend_makes_no_assessment_call(monkeypatch, tmp_path):
-    auto_setup(monkeypatch, tmp_path)
-    with served(reply(VERDICT)) as server:
-        args = auto_args(tmp_path, server)
-        args[2] = "openmp"
-        assert cli.main(args) == 0
-        assert server.requests == []
-
-
+def test_run_refuses_the_backend_auto(capsys):
+    assert cli.main(["run", "integrate", "auto"]) == 2
+    assert "invalid choice" in capsys.readouterr().err

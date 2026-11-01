@@ -14,7 +14,7 @@ from pathlib import Path
 
 import pytest
 
-from parallelise.bench_check import check_bench_csv
+from parallelise.bench_check import check_cpu_table
 
 SPEEDUP_UNRELIABLE = os.environ.get("PARALLELISE_SPEEDUP_UNRELIABLE") == "1"
 
@@ -33,7 +33,7 @@ def skip_if_only_speedup_failed(result, work: Path, label: str, *, always: bool 
     bench_csv = work / "bench.csv"
     if not bench_csv.is_file():
         return
-    verdict = check_bench_csv(bench_csv, floor=0.0)
+    verdict = check_cpu_table(bench_csv, floor=0.0)
     only_flat = all(r.startswith("throughput is essentially constant") for r in verdict.reasons)
     if verdict.ok or (SPEEDUP_UNRELIABLE and only_flat):
         pytest.skip(

@@ -3,12 +3,13 @@
 Exit status is 0 on success, 1 when a check fails or an error is reported, and 2 for bad
 arguments. Every error message says what to do next.
 
-The commands are the conversion commands defined here (health, assess, oracle, assemble,
-run, grade, bench-check) and the study commands (mask, report) that the subpackage
-`parallelise.study` registers into the same parser. The modules that do the heavy work
-(check, assemble, agents, assess and the study tools) are imported only when the
-subcommand that needs them runs. A missing or incomplete module therefore produces a
-clear message for that subcommand alone, instead of stopping the whole program at
+The commands listed by `parallelise --help` are health, assess, run, check and study. The
+study command holds the tools for studying many runs: `study mask` and `study report`. Three
+maintenance commands (oracle, assemble and bench-check) work but are not listed, and the
+older names grade, mask and report remain as hidden aliases that print a notice. The modules
+that do the heavy work (check, assemble, agents, assess and the study tools) are imported
+only when the subcommand that needs them runs. A missing or incomplete module therefore
+produces a clear message for that subcommand alone, instead of stopping the whole program at
 start-up.
 """
 
@@ -22,13 +23,12 @@ import shutil
 import sys
 import time
 from pathlib import Path
-from typing import Any
 
 from . import __version__
+from .cli_support import PROBLEM_HELP, HelpParser
 from .cli_support import lazy_import as _lazy
 from .cli_support import resolve_problem as _resolve_problem
 from .cli_support import settings_from_args as _settings
-from .config import Settings
 from .errors import AgentUnavailable, ConfigError, ParalleliseError
 from .log import configure_logging
 from .model import ModelClient
@@ -94,24 +94,9 @@ def _safe(text: str) -> str:
     return "".join(ch if ch.isalnum() or ch in "-_." else "_" for ch in text) or "model"
 
 
-def _check_backend(backend: str, allow_auto: bool = False) -> None:
-    allowed = BACKENDS + (("auto",) if allow_auto else ())
-    if backend not in allowed:
-        raise ParalleliseError(f"The backend {backend!r} is not one of {', '.join(allowed)}.")
-
-
-def _problem_notebook(problem_dir: Path) -> Path:
-    """Return the notebook of a problem folder."""
-    named = problem_dir / f"{problem_dir.name}.ipynb"
-    if named.is_file():
-        return named
-    found = sorted(problem_dir.glob("*.ipynb"))
-    if len(found) == 1:
-        return found[0]
-    raise ParalleliseError(
-        f"The problem folder {problem_dir} has no single notebook to assess. "
-        "Add one named after the folder."
-    )
+def _check_backend(backend: str) -> None:
+    if backend not in BACKENDS:
+        raise ParalleliseError(f"The backend {backend!r} is not one of {', '.join(BACKENDS)}.")
 
 
 # --- subcommands -------------------------------------------------------------------
@@ -157,8 +142,8 @@ def cmd_assemble(args: argparse.Namespace) -> int:
     return 0
 
 
-def cmd_grade(args: argparse.Namespace) -> int:
-    """Run the check on an existing work folder."""
+def cmd_check(args: argparse.Namespace) -> int:
+    """Run the check on a finished work folder."""
     _check_backend(args.backend)
     work_dir = Path(args.work_dir)
     if not work_dir.is_dir():
@@ -174,13 +159,20 @@ def cmd_grade(args: argparse.Namespace) -> int:
     return 0 if result.passed else 1
 
 
+def cmd_grade(args: argparse.Namespace) -> int:
+    """Run the check under its old name, after a one-line notice."""
+    print("parallelise: the command 'grade' is now called 'check'; running 'check'.",
+          file=sys.stderr)
+    return cmd_check(args)
+
+
 def cmd_bench_check(args: argparse.Namespace) -> int:
     """Validate the speed-up figures in a benchmark CSV file."""
     csv_path = Path(args.csv)
     if not csv_path.is_file():
         raise ParalleliseError(f"The benchmark file {csv_path} does not exist. Check the path.")
     bench = _lazy("bench_check")
-    verdict = bench.check_bench_csv(csv_path, args.floor)
+    verdict = bench.check_cpu_table(csv_path, args.floor)
     for reason in verdict.reasons:
         print(f"- {reason}")
     best = "none" if verdict.speedup_best is None else f"{verdict.speedup_best:.2f}"
@@ -204,39 +196,9 @@ def cmd_assess(args: argparse.Namespace) -> int:
     return 0
 
 
-def _choose_backend(problem_dir: Path, settings: Settings) -> tuple[str, Any]:
-    """Assess the problem's notebook and return the backend to run with the verdict.
-
-    Raises ParalleliseError, which the command line reports with exit status 1, when the
-    recommendation is serial code or names a backend the problem does not have.
-    """
-    assess = _lazy("assess")
-    with ModelClient(settings) as client:
-        verdict = assess.assess_notebook(_problem_notebook(problem_dir), client)
-    chosen = verdict.chosen_backend
-    print(f"Assessment: {verdict.summary_line()}")
-    if chosen == "serial":
-        raise ParalleliseError(
-            f"The assessment recommends well-optimised serial code for {problem_dir.name}, "
-            "so no parallel run was made and no record was written. To run a backend anyway, "
-            "name it instead of 'auto'. Justification: " + (verdict.justification or "none given")
-        )
-    if not (problem_dir / chosen).is_dir():
-        have = ", ".join(b for b in BACKENDS if (problem_dir / b).is_dir()) or "none"
-        raise ParalleliseError(
-            f"The assessment recommends {chosen} for {problem_dir.name}, but the problem has "
-            f"no {chosen} folder (it has: {have}), so no run was made and no record was "
-            "written. Name one of those backends instead of 'auto'."
-        )
-    return chosen, verdict
-
-
 def cmd_run(args: argparse.Namespace) -> int:
-    """Assemble a work folder, run an agent in it, grade the result and record the run.
-
-    With the backend "auto" the model is first asked which backend suits the notebook.
-    """
-    _check_backend(args.backend, allow_auto=True)
+    """Assemble a work folder, run an agent in it, check the result and record the run."""
+    _check_backend(args.backend)
     settings = _settings(args)
     assemble = _lazy("assemble")
     check = _lazy("check")
@@ -256,9 +218,6 @@ def cmd_run(args: argparse.Namespace) -> int:
         problem_dir, name = masked_dir, args.masked
 
     backend = args.backend
-    verdict = None
-    if backend == "auto":
-        backend, verdict = _choose_backend(problem_dir, settings)
 
     agent = agents.get_agent(args.agent)  # may raise AgentUnavailable with an install hint
     work_dir = work_root / problem_name / backend / _safe(settings.model) / args.agent
@@ -296,14 +255,6 @@ def cmd_run(args: argparse.Namespace) -> int:
     notes: list[str] = []
     if args.notes:
         notes.append(args.notes)
-    if verdict is not None:
-        _lazy("assess").write_verdict(verdict, work_dir / "assessment.json")
-        notes.append(
-            f"The backend {backend} was chosen by the assessment ({verdict.model}); the "
-            "verdict is saved as assessment.json in the work folder, and its "
-            f"{verdict.prompt_tokens} prompt and {verdict.completion_tokens} completion tokens "
-            "are not counted in this record."
-        )
     if agent_error:
         reason = str(agent_error).rstrip(".")
         notes.append(f"The agent stopped with {reason}.")
@@ -353,49 +304,62 @@ def cmd_run(args: argparse.Namespace) -> int:
 
 def build_parser() -> argparse.ArgumentParser:
     """Create the argument parser with all subcommands."""
-    parser = argparse.ArgumentParser(
+    parser = HelpParser(
         prog="parallelise",
-        description="Turn a serial Python notebook into a verified parallel C kernel.",
+        description="Turn a serial Python notebook into a verified parallel C program.",
     )
     parser.add_argument("--version", action="version", version=f"parallelise {__version__}")
-    common = argparse.ArgumentParser(add_help=False)
+    common = HelpParser(add_help=False)
     common.add_argument("--log-level", default="WARNING", help="DEBUG, INFO, WARNING or ERROR")
     common.add_argument("--log-json", action="store_true", help="write log lines as JSON")
-    endpoint = argparse.ArgumentParser(add_help=False)
+    endpoint = HelpParser(add_help=False)
     endpoint.add_argument("--gateway-url", help="model endpoint (PARALLELISE_GATEWAY_URL)")
     endpoint.add_argument("--model", help="model name (PARALLELISE_MODEL)")
-    problems = argparse.ArgumentParser(add_help=False)
-    problems.add_argument("--problems-dir", default="problems", help="folder of problems")
+    problems = HelpParser(add_help=False)
+    problems.add_argument("--problems-dir", default="problems",
+                          help="folder holding the shipped examples (default: problems)")
 
-    sub = parser.add_subparsers(dest="command", required=True, metavar="command")
+    sub = parser.add_subparsers(
+        dest="command", required=True, metavar="command", parser_class=HelpParser
+    )
 
-    p = sub.add_parser("health", parents=[common, endpoint], help="check the model endpoint")
+    p = sub.add_parser(
+        "health", parents=[common, endpoint],
+        help="check that the model endpoint answers and serves the chosen model",
+        description="Check that the model endpoint answers, lists the chosen model and "
+                    "completes one small chat request.",
+        epilog="Example: parallelise health --gateway-url http://localhost:4000/v1 --model local",
+    )
     p.set_defaults(func=cmd_health)
 
-    p = sub.add_parser("oracle", parents=[common], help="run a notebook, write reference files")
-    p.add_argument("notebook")
-    p.add_argument("--out", help="folder for the reference files (default: the notebook's)")
-    p.add_argument("--timeout", type=float, default=600.0, help="seconds allowed for the notebook")
-    p.set_defaults(func=cmd_oracle)
+    p = sub.add_parser(
+        "assess", parents=[common, endpoint],
+        help="ask the model which parallel method suits a notebook",
+        description="Ask the model which parallel method suits a notebook, or whether plain "
+                    "serial code is better, and print its reasoning and verdict.",
+        epilog="Example: parallelise assess problems/integrate/integrate.ipynb --out verdict.json",
+    )
+    p.add_argument("notebook", help="the path to the Jupyter notebook to assess")
+    p.add_argument("--out", help="write the verdict, as JSON, to this file")
+    p.set_defaults(func=cmd_assess)
 
-    p = sub.add_parser("assemble", parents=[common, problems], help="build a work folder")
-    p.add_argument("problem")
-    p.add_argument("backend", choices=BACKENDS)
-    p.add_argument("dest")
-    p.add_argument("--with-reference", action="store_true",
-                   help="also copy the known-good solution (tests the machinery without a model)")
-    p.set_defaults(func=cmd_assemble)
-
-    p = sub.add_parser("run", parents=[common, endpoint, problems],
-                       help="run an agent on a problem and record the graded result")
-    p.add_argument("problem")
-    p.add_argument("backend", choices=BACKENDS + ("auto",),
-                   help="a backend, or auto to ask the model first and use its recommendation")
-    p.add_argument("--agent", choices=AGENTS, default="basic")
+    p = sub.add_parser(
+        "run", parents=[common, endpoint, problems],
+        help="convert a problem with an agent, check the result and record the run",
+        description="Build a work folder for a problem, let an agent write the parallel "
+                    "program in it, check the result and add a record to the results file.",
+        epilog="Example: parallelise run integrate openmp --agent basic --model local",
+    )
+    p.add_argument("problem", help=PROBLEM_HELP)
+    p.add_argument("backend", choices=BACKENDS,
+                   help="the parallel method to use: openmp, mpi or cuda")
+    p.add_argument("--agent", choices=AGENTS, default="basic",
+                   help="the design of agent that drives the model (default: basic)")
     p.add_argument("--masked", metavar="ALIAS",
-                   help="hide the algorithm's name behind this neutral alias")
+                   help="hide the algorithm's name behind this neutral alias, such as problem_a")
     p.add_argument("--step-budget", type=int, default=80, help="most agent steps allowed")
-    p.add_argument("--check-timeout", type=float, default=300.0, help="seconds allowed for grading")
+    p.add_argument("--check-timeout", type=float, default=300.0,
+                   help="seconds allowed for the check")
     p.add_argument("--work-root", help="folder for work folders (PARALLELISE_WORK_ROOT)")
     p.add_argument("--results", help="results file (PARALLELISE_RESULTS)")
     p.add_argument("--serving", default="not recorded", help="who served the model")
@@ -403,26 +367,70 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--notes", default="", help="free text stored with the record")
     p.set_defaults(func=cmd_run)
 
-    p = sub.add_parser("assess", parents=[common, endpoint],
-                       help="ask the model which backend suits a notebook")
-    p.add_argument("notebook")
-    p.add_argument("--out", help="write the verdict, as JSON, to this file")
-    p.set_defaults(func=cmd_assess)
+    def add_check_arguments(parser_: argparse.ArgumentParser) -> None:
+        parser_.add_argument(
+            "work_dir",
+            help="the path to a finished work folder (not a problem), such as one made by "
+                 "'parallelise run'")
+        parser_.add_argument("--backend", required=True, choices=BACKENDS,
+                             help="the parallel method the work folder was built for")
+        parser_.add_argument("--timeout", type=float, default=300.0,
+                             help="seconds allowed for the whole check (default: 300)")
+        parser_.add_argument("--floor", type=float, default=None,
+                             help="the least best speed-up to accept; may only tighten the "
+                                  "floor set in the problem's Makefile")
 
-    p = sub.add_parser("grade", parents=[common], help="run the check on a work folder")
-    p.add_argument("work_dir")
-    p.add_argument("--backend", required=True, choices=BACKENDS)
-    p.add_argument("--timeout", type=float, default=300.0)
-    p.add_argument("--floor", type=float, default=None, help="minimum best speed-up")
+    p = sub.add_parser(
+        "check", parents=[common],
+        help="judge a finished work folder again, without the agent or the model",
+        description="Judge a finished work folder: its trusted files, its build, its test at "
+                    "one worker and at several, and its benchmark. The argument is a work "
+                    "folder, not a problem.",
+        epilog="Example: parallelise check work/integrate/openmp/local/basic --backend openmp",
+    )
+    add_check_arguments(p)
+    p.set_defaults(func=cmd_check)
+
+    # A subcommand added without a help argument is not listed by "parallelise --help".
+    p = sub.add_parser("grade", parents=[common],
+                       description="The old name of 'check'.")
+    add_check_arguments(p)
     p.set_defaults(func=cmd_grade)
 
-    p = sub.add_parser("bench-check", parents=[common], help="validate a benchmark CSV file")
-    p.add_argument("csv")
-    p.add_argument("--floor", type=float, default=0.0,
-                   help="minimum best speed-up (default 0: no floor)")
-    p.set_defaults(func=cmd_bench_check)
+    study_cli.register(sub, common, problems)  # the study command and its old aliases
 
-    study_cli.register(sub, common, problems)  # the mask and report commands
+    p = sub.add_parser(
+        "oracle", parents=[common],
+        description="Run a notebook and write the reference files (reference.json and "
+                    "reference.h) from the ORACLE dictionary in its last cell.",
+        epilog="Example: parallelise oracle problems/integrate/integrate.ipynb",
+    )
+    p.add_argument("notebook", help="the path to the Jupyter notebook to run")
+    p.add_argument("--out", help="folder for the reference files (default: the notebook's)")
+    p.add_argument("--timeout", type=float, default=600.0, help="seconds allowed for the notebook")
+    p.set_defaults(func=cmd_oracle)
+
+    p = sub.add_parser(
+        "assemble", parents=[common, problems],
+        description="Build a work folder for a problem and a backend, without running an agent.",
+        epilog="Example: parallelise assemble integrate openmp work/try --with-reference",
+    )
+    p.add_argument("problem", help=PROBLEM_HELP)
+    p.add_argument("backend", choices=BACKENDS, help="the parallel method: openmp, mpi or cuda")
+    p.add_argument("dest", help="the folder to create; it is emptied first if it exists")
+    p.add_argument("--with-reference", action="store_true",
+                   help="also copy the known-good solution (tests the machinery without a model)")
+    p.set_defaults(func=cmd_assemble)
+
+    p = sub.add_parser(
+        "bench-check", parents=[common],
+        description="Apply the benchmark table rules to a CSV file of OpenMP or MPI timings.",
+        epilog="Example: parallelise bench-check work/integrate/openmp/local/basic/bench.csv",
+    )
+    p.add_argument("csv", help="the path to the benchmark table to judge")
+    p.add_argument("--floor", type=float, default=0.0,
+                   help="the least best speed-up to accept (default 0: no floor)")
+    p.set_defaults(func=cmd_bench_check)
     return parser
 
 

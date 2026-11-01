@@ -2,9 +2,30 @@
 
 A work folder passes only if its trusted files are unchanged since assembly, it compiles
 with warnings treated as errors, its unit test passes at one worker and at several, its
-benchmark runs, and the benchmark's speed-up figures survive the checks in ``bench_check``.
-The check never trusts what the agent says about its own work; it rebuilds from
-scratch and reads only what the trusted benchmark wrote.
+benchmark runs, and the benchmark's speed-up figures survive the rules in ``bench_check``.
+The check never trusts what the agent says about its own work; it rebuilds from scratch
+and reads only what the trusted benchmark wrote.
+
+Two terms need explaining.
+
+The floor is the least best speed-up that the benchmark table must reach. A speed-up is
+the time taken by one worker divided by the time taken by several, so a floor of 1.5 means
+that the best row of the table must show the work finishing at least one and a half times
+faster than with one worker. Each problem sets its own floor in the ``SPEEDUP_FLOOR``
+setting of its Makefile. When the Makefile sets none, the floor is 1.5 for OpenMP and MPI.
+Problems limited by the speed of memory rather than by arithmetic use 1.25, because extra
+workers cannot read memory much faster. CUDA problems use 3. A caller may ask for a
+stricter floor than the Makefile's, but not a looser one.
+
+The tampered stage is the first stage of the check. It fails when any trusted file in the
+work folder differs from the fingerprint (a SHA-256 digest) taken when the work folder was
+assembled. The trusted files are the ones the agent must not change: ``bench.c`` (the
+benchmark program), ``Makefile``, ``testing.h`` (the helper for the unit test),
+``bench_sweep.sh``, ``check_bench.py`` and ``check_bench_cuda.py`` (the small scripts that
+call the table rules), ``reference.h`` (the expected values), ``problem.h`` (helpers
+shared between backends, when the problem has one) and the problem's own header
+``<name>.h``, which gives the signature of the routine. A missing or unreadable record of
+the fingerprints also fails this stage, because nothing could then be checked.
 """
 
 from __future__ import annotations
@@ -25,8 +46,8 @@ from parallelise.bench_check import (
     DEFAULT_CUDA_FLOOR,
     DEFAULT_FLOOR,
     BenchVerdict,
-    check_bench_csv,
-    check_bench_cuda,
+    check_cpu_table,
+    check_gpu_table,
 )
 
 log = logging.getLogger("parallelise.check")
@@ -236,7 +257,7 @@ def run_check(
         floor = speedup_floor if speedup_floor is not None else _makefile_floor(work_dir, backend)
         verdict: BenchVerdict | None = None
         if csv_path.is_file():
-            checker = check_bench_cuda if backend == "cuda" else check_bench_csv
+            checker = check_gpu_table if backend == "cuda" else check_cpu_table
             verdict = checker(csv_path, floor)
             best = verdict.speedup_best
         if code != 0:

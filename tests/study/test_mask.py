@@ -20,7 +20,7 @@ from parallelise.study.mask import (
 )
 
 FIXTURE = Path(__file__).parent.parent / "fixtures" / "midpoint"
-ALIAS = "kernel_a"
+ALIAS = "problem_a"
 
 
 def run_notebook_oracle(path: Path) -> dict:
@@ -43,10 +43,10 @@ def test_file_names_use_the_alias(masked):
     dest, report = masked
     names = {str(p.relative_to(dest)) for p in dest.rglob("*") if p.is_file()}
     assert names == {
-        "kernel_a.ipynb", "reference.h", "openmp/kernel_a.h", "openmp/bench.c",
-        "openmp/Makefile", "openmp/reference/kernel_a.c", "openmp/reference/test_kernel_a.c",
+        "problem_a.ipynb", "reference.h", "openmp/problem_a.h", "openmp/bench.c",
+        "openmp/Makefile", "openmp/reference/problem_a.c", "openmp/reference/test_problem_a.c",
     }  # fmt: skip
-    assert ("midpoint.ipynb", "kernel_a.ipynb") in report.renamed_files
+    assert ("midpoint.ipynb", "problem_a.ipynb") in report.renamed_files
 
 
 def test_no_trace_of_the_original_name_or_comments(masked):
@@ -60,13 +60,13 @@ def test_no_trace_of_the_original_name_or_comments(masked):
             assert "//" not in text and "/*" not in text, path
         if path.name == "Makefile":
             assert "#" not in text, path
-    assert "KERNEL  := kernel_a" in (dest / "openmp/Makefile").read_text()
-    assert "#ifndef KERNEL_A_H" in (dest / "openmp/kernel_a.h").read_text()
+    assert "KERNEL  := problem_a" in (dest / "openmp/Makefile").read_text()
+    assert "#ifndef PROBLEM_A_H" in (dest / "openmp/problem_a.h").read_text()
 
 
 def test_word_list_identifiers_are_renamed(masked):
     dest, report = masked
-    source = (dest / "openmp/reference/kernel_a.c").read_text()
+    source = (dest / "openmp/reference/problem_a.c").read_text()
     assert "integral_sum" not in source
     assert re.search(r"double mk\d+_sum = 0.0;", source)
     assert "#pragma omp parallel for reduction(+ : mk" in source
@@ -75,12 +75,12 @@ def test_word_list_identifiers_are_renamed(masked):
 
 def test_notebook_markdown_and_oracle(masked):
     dest, _ = masked
-    notebook = json.loads((dest / "kernel_a.ipynb").read_text())
+    notebook = json.loads((dest / "problem_a.ipynb").read_text())
     markdown = [c for c in notebook["cells"] if c["cell_type"] == "markdown"]
     assert len(markdown) == 1
     assert "".join(markdown[0]["source"]) == NEUTRAL_SENTENCE
     original = run_notebook_oracle(FIXTURE / "midpoint.ipynb")
-    after = run_notebook_oracle(dest / "kernel_a.ipynb")
+    after = run_notebook_oracle(dest / "problem_a.ipynb")
     assert after.pop("kernel") == ALIAS
     assert original.pop("kernel") == "midpoint"
     assert after == original  # numbers, parameters and tolerance are unchanged
@@ -90,7 +90,7 @@ def test_library_names_survive(masked):
     dest, _ = masked
     code = "\n".join(
         "".join(c["source"])
-        for c in json.loads((dest / "kernel_a.ipynb").read_text())["cells"]
+        for c in json.loads((dest / "problem_a.ipynb").read_text())["cells"]
         if c["cell_type"] == "code"
     )
     assert "from math import pi, sin" in code
@@ -103,8 +103,8 @@ def test_report_lists_substitutions(masked):
     assert report.kernel == "midpoint" and report.alias == ALIAS
     assert report.comments_removed > 0 and report.markdown_cells_replaced == 1
     text = report.summary()
-    assert "midpoint -> kernel_a" in text
-    assert "MIDPOINT_H -> KERNEL_A_H" in text
+    assert "midpoint -> problem_a" in text
+    assert "MIDPOINT_H -> PROBLEM_A_H" in text
 
 
 def test_bad_aliases_are_refused(tmp_path):
@@ -140,7 +140,7 @@ def test_library_identifiers_in_c_are_protected(tmp_path):
         "double w = thrust::inclusive_scan(REF_PI_VALUE);\n"
     )
     out = tmp_path / "out"
-    mask_problem(problem, out, "kernel_b")
+    mask_problem(problem, out, "problem_b")
     text = (out / "mpi" / "bench.c").read_text()
     assert re.search(r"#pragma omp scan inclusive\(mk\d+_total\)", text)
     assert "M_PI" in text and "MPI_Scan" in text and "REF_PI_VALUE" in text

@@ -1,15 +1,19 @@
-"""The study commands, `parallelise mask` and `parallelise report`.
+"""The study commands, `parallelise study mask` and `parallelise study report`.
 
-`register` adds them to the main parser, so the command names and options are the same as
-if they were defined in `parallelise.cli`.
+`register` adds the `study` command, with those two subcommands, to the main parser. It also
+adds the older top-level names `mask` and `report` as hidden aliases, which print a one-line
+notice and then run the new form.
 """
 
 from __future__ import annotations
 
 import argparse
+import sys
+from collections.abc import Callable
 from pathlib import Path
+from typing import Any
 
-from ..cli_support import lazy_import, resolve_problem, settings_from_args
+from ..cli_support import PROBLEM_HELP, HelpParser, lazy_import, resolve_problem, settings_from_args
 from ..errors import ParalleliseError
 from ..results import ResultsStore
 
@@ -47,28 +51,87 @@ def cmd_report(args: argparse.Namespace) -> int:
     return 0
 
 
-def register(
-    sub: argparse._SubParsersAction[argparse.ArgumentParser],
-    common: argparse.ArgumentParser,
-    problems: argparse.ArgumentParser,
-) -> None:
-    """Add the mask and report commands to the main parser's subcommands.
+def _old_name(new_form: str, func: Callable[[argparse.Namespace], int]) -> Callable[
+    [argparse.Namespace], int
+]:
+    """Wrap a command so that it first prints a notice pointing at its new form."""
 
-    `common` holds the logging options and `problems` the --problems-dir option, which the
-    main parser shares with its own commands.
-    """
-    p = sub.add_parser("mask", parents=[common, problems], help="write a masked copy of a problem")
-    p.add_argument("problem")
-    p.add_argument("alias")
-    p.add_argument("dest")
-    p.set_defaults(func=cmd_mask)
+    def run(args: argparse.Namespace) -> int:
+        print(f"parallelise: this command is now called '{new_form}'; running it.",
+              file=sys.stderr)
+        return func(args)
 
-    p = sub.add_parser("report", parents=[common], help="print results tables")
+    return run
+
+
+def _add_mask(sub: argparse._SubParsersAction[HelpParser],
+              name: str, parents: list[HelpParser], hidden: bool,
+              func: Callable[[argparse.Namespace], int]) -> None:
+    # Without a help argument a subcommand is not listed in its parent's help.
+    extra: dict[str, Any] = {}
+    if not hidden:
+        extra["help"] = "write a copy of a problem with the name hidden"
+    p = sub.add_parser(
+        name, parents=parents,
+        description="Write a copy of a problem with the algorithm's name and hints removed, "
+                    "so that a model cannot recognise a textbook algorithm by its name.",
+        epilog="Example: parallelise study mask scan problem_c masked/problem_c",
+        **extra,
+    )
+    p.add_argument("problem", help=PROBLEM_HELP)
+    p.add_argument("alias", help="the neutral name to use instead, such as problem_a")
+    p.add_argument("dest", help="the folder to write the masked copy into")
+    p.set_defaults(func=func)
+
+
+def _add_report(sub: argparse._SubParsersAction[HelpParser],
+                name: str, parents: list[HelpParser], hidden: bool,
+                func: Callable[[argparse.Namespace], int]) -> None:
+    extra: dict[str, Any] = {}
+    if not hidden:
+        extra["help"] = "print the results tables, and optionally charts"
+    p = sub.add_parser(
+        name, parents=parents,
+        description="Read the results file and print the pass counts, costs and speeds as "
+                    "Markdown tables. It takes no positional argument.",
+        epilog="Example: parallelise study report --results results/runs.jsonl "
+               "--chart pass-rate.svg",
+        **extra,
+    )
     p.add_argument("--results", "--store", dest="results",
-                   help="results file, also called the store (PARALLELISE_RESULTS)")
+                   help="the results file, also called the store (PARALLELISE_RESULTS)")
     p.add_argument("--prices",
                    help="JSON price table, US dollars per million tokens, for the cost column")
     p.add_argument("--chart", help="also write the pass-rate chart to this SVG file")
     p.add_argument("--masked-chart",
                    help="also write the masked-against-unmasked chart to this SVG file")
-    p.set_defaults(func=cmd_report)
+    p.set_defaults(func=func)
+
+
+def register(
+    sub: argparse._SubParsersAction[HelpParser],
+    common: HelpParser,
+    problems: HelpParser,
+) -> None:
+    """Add the study command, and the hidden old names of its subcommands, to the main parser.
+
+    `common` holds the logging options and `problems` the --problems-dir option, which the
+    main parser shares with its own commands.
+    """
+    study = sub.add_parser(
+        "study", parents=[common],
+        help="tools for studying many runs: mask a problem, report on the results",
+        description="Tools for studying many runs together, apart from converting one "
+                    "problem: 'mask' hides the algorithm's name, and 'report' summarises "
+                    "the results file.",
+    )
+    study_sub = study.add_subparsers(
+        dest="study_command", required=True, metavar="tool", parser_class=HelpParser
+    )
+    _add_mask(study_sub, "mask", [common, problems], False, cmd_mask)
+    _add_report(study_sub, "report", [common], False, cmd_report)
+
+    _add_mask(sub, "mask", [common, problems], True,
+              _old_name("parallelise study mask", cmd_mask))
+    _add_report(sub, "report", [common], True,
+                _old_name("parallelise study report", cmd_report))

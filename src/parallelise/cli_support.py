@@ -16,6 +16,23 @@ from .config import Settings
 from .errors import ParalleliseError
 
 
+class _Formatter(argparse.HelpFormatter):
+    """Wrap descriptions to the terminal width but keep an "Example:" line unbroken."""
+
+    def _fill_text(self, text: str, width: int, indent: str) -> str:
+        if text.startswith("Example:"):
+            return indent + text
+        return super()._fill_text(text, width, indent)
+
+
+class HelpParser(argparse.ArgumentParser):
+    """An argument parser whose help keeps each example command on one line."""
+
+    def __init__(self, **kwargs: Any) -> None:
+        kwargs.setdefault("formatter_class", _Formatter)
+        super().__init__(**kwargs)
+
+
 def lazy_import(name: str, hint: str = "") -> ModuleType:
     """Import parallelise.<name> on first use, turning an import failure into a plain error."""
     full = f"parallelise.{name}"
@@ -38,6 +55,13 @@ def lazy_import(name: str, hint: str = "") -> ModuleType:
         ) from exc
 
 
+#: The help text for every command argument that names a problem.
+PROBLEM_HELP = (
+    "the path to a problem folder (a notebook with the files for each backend), or the "
+    "name of one of the shipped examples under problems/"
+)
+
+
 def resolve_problem(problem: str, problems_dir: str) -> Path:
     """Accept either a path to a problem folder or the name of one under problems_dir."""
     direct = Path(problem)
@@ -47,8 +71,9 @@ def resolve_problem(problem: str, problems_dir: str) -> Path:
     if named.is_dir():
         return named
     raise ParalleliseError(
-        f"There is no problem folder {problem!r} or {str(named)!r}. Run from the repository "
-        "root, or give the folder's path, or set --problems-dir."
+        f"There is no problem folder {problem!r} or {str(named)!r}. Give the path to a problem "
+        "folder, or the name of one of the shipped examples under problems/ (run from the "
+        "repository root, or set --problems-dir)."
     )
 
 

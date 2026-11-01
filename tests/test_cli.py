@@ -72,7 +72,7 @@ def test_health_unreachable_exits_1(capsys):
 
 
 def test_missing_work_folder_and_csv(tmp_path, capsys):
-    assert cli.main(["grade", str(tmp_path / "none"), "--backend", "openmp"]) == 1
+    assert cli.main(["check", str(tmp_path / "none"), "--backend", "openmp"]) == 1
     assert "does not exist" in capsys.readouterr().err
     assert cli.main(["bench-check", str(tmp_path / "none.csv")]) == 1
     assert "does not exist" in capsys.readouterr().err
@@ -193,3 +193,39 @@ def test_run_unavailable_agent_is_not_recorded(monkeypatch, tmp_path, capsys):
 def test_build_task_names_the_files():
     text = cli.build_task("scan", "cuda")
     assert "scan.cu" in text and "test_scan.c" in text and "scan.h" in text
+
+
+# --- the shape of the command list and the old names ---------------------------------------
+
+
+def test_main_help_lists_only_the_five_commands(capsys):
+    assert cli.main(["--help"]) == 0
+    out = capsys.readouterr().out
+    for name in ("health", "assess", "run", "check", "study"):
+        assert f"\n    {name} " in out
+    for hidden in ("grade", "mask", "report", "oracle", "assemble", "bench-check"):
+        assert f"\n    {hidden} " not in out
+
+
+def test_every_command_help_has_an_example(capsys):
+    for command in (["health"], ["assess"], ["run"], ["check"], ["study", "mask"],
+                    ["study", "report"], ["oracle"], ["assemble"], ["bench-check"]):
+        with pytest.raises(SystemExit):
+            cli.build_parser().parse_args([*command, "--help"])
+        assert "Example: parallelise" in capsys.readouterr().out
+
+
+def test_grade_is_a_hidden_alias_of_check(tmp_path, capsys):
+    assert cli.main(["grade", str(tmp_path / "none"), "--backend", "openmp"]) == 1
+    err = capsys.readouterr().err
+    assert "now called 'check'" in err and "does not exist" in err
+
+
+def test_mask_and_report_old_names_print_a_notice(tmp_path, capsys):
+    results = str(tmp_path / "none.jsonl")
+    assert cli.main(["report", "--results", results]) == 1
+    assert "parallelise study report" in capsys.readouterr().err
+    assert cli.main(["study", "report", "--results", results]) == 1
+    assert "There are no run records" in capsys.readouterr().err
+    assert cli.main(["mask", str(tmp_path / "x"), "problem_a", str(tmp_path / "y")]) == 1
+    assert "parallelise study mask" in capsys.readouterr().err
