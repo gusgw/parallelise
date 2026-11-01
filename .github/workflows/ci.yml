@@ -30,6 +30,14 @@ jobs:
           PARALLELISE_SPEEDUP_UNRELIABLE: "1"
         run: pytest -q -rs
 
+  smoke:
+    runs-on: ubuntu-latest
+    needs: test
+    steps:
+      - uses: actions/checkout@v4
+      - name: Clone, install, convert and check in a fresh copy, then repeat inside Docker
+        run: scripts/smoke-test.sh
+
   manifest:
     runs-on: ubuntu-latest
     steps:
