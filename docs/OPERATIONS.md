@@ -55,23 +55,33 @@ name otherwise only shows up as a failed run.
   | `failure_stage`     | Meaning |
   |---------------------|---------|
   | `none`              | The run passed. |
-  | `no-files`          | The agent did not write the routine or the unit test. |
-  | `build`             | The code did not compile, or compiled with warnings, which count as errors. |
-  | `test-one-worker`   | The unit test failed with a single worker. |
+  | `no-files`          | The agent did not write the routine file. |
+  | `tampered`          | The agent changed a trusted file (the benchmark, a header, the Makefile or a helper), or added a file named `GNUmakefile` or `makefile`. The log names the files. |
+  | `build`             | The routine did not compile with the problem's own files, or compiled with warnings, which count as errors. |
+  | `test-one-worker`   | The problem's own unit test failed with a single worker. |
   | `test-many-workers` | It passed with one worker but failed with several; usually a race or a wrong partition of the work. |
   | `benchmark`         | The benchmark failed, or the speed-up figures were rejected or below the floor. |
   | `timeout`           | A step took longer than its limit. |
   | `agent-error`       | The agent or the model client raised an error, for example the gateway was unreachable. |
 
   To list failures: `grep '"result": "FAIL"' results/runs.jsonl`.
-- The check's own log, which holds the compiler output, the test output and the benchmark
-  table, is kept as evidence under `results/runs/<problem>/<backend>/<model>/<agent>/`
-  next to `SUMMARY.txt` and `bench.csv`. For a failure at `build`, read the compiler
-  messages there. For a rejected benchmark, `parallelise bench-check <csv>` prints the
-  reasons.
+- The check's own log, which holds the compiler output, the test output, the benchmark
+  table and one line about the agent's own test program, is written to `check.log` in the
+  work folder, and is kept as evidence under
+  `results/runs/<problem>/<backend>/<model>/<agent>/` next to `SUMMARY.txt` and
+  `bench.csv`. For a failure at `build`, read the compiler messages there. For a rejected
+  benchmark, `parallelise bench-check <csv>` prints the reasons.
+- The check judges the routine in a fresh folder that it assembles in a temporary directory
+  from the problem's own files, with the problem's own test program. When the check fails,
+  that folder is kept as `check-fail` inside the work folder, with the build products and
+  the benchmark table, so that you can see exactly what was judged. When the check passes,
+  the folder is deleted. The agent's own test program is run only for the log, and its
+  result never changes the verdict.
 - To judge a work folder again without the agent: `parallelise check <work_folder>
-  --backend <backend>`. The argument is a finished work folder, not a problem. The older
-  name `grade` still works and prints a notice.
+  --problem <problem> --backend <backend>`. The first argument is a finished work folder,
+  not a problem; `--problem` is the path to the problem folder it was built from, or the
+  name of a shipped example, and for a masked run it is the masked copy that `run` keeps
+  under `<work_root>/_masked/`. The older name `grade` still works and prints a notice.
 
 ## Running a campaign
 
@@ -114,7 +124,11 @@ The model's output is untrusted. Four layers limit what it can do.
 
 1. The agent can only run build commands from a short allow-list, and it runs them as
    argument lists with no shell, so it cannot chain commands, redirect output or expand
-   variables.
+   variables. The list holds no Python interpreter and no shell. Each command runs in a
+   process group of its own, which is killed as a whole at the time limit, and with an
+   environment from which every variable that may hold a secret (a name containing KEY,
+   TOKEN, SECRET or PASSWORD, and every variable beginning `PARALLELISE_`) has been removed.
+   The check gives the same clean environment to the routine it builds and runs.
 2. Every subprocess, whether a build, a test, a benchmark or a notebook execution, has a
    timeout, and a model request has its own (`PARALLELISE_TIMEOUT`).
 3. The container runs as a non-root user. Under Kubernetes the Job also drops all
@@ -124,7 +138,10 @@ The model's output is untrusted. Four layers limit what it can do.
 
 These limits contain mistakes and runaway programs. They are not a full sandbox: the code
 is compiled and run inside the container and could use the network unless you forbid it.
-For stronger isolation use a cluster network policy that allows only the gateway.
+`make` and the compilers can start other programs, and a program running as the same user
+can read the harness's own process information, which holds the gateway key if it was set
+as an environment variable. For stronger isolation use a cluster network policy that allows
+only the gateway.
 
 ## Troubleshooting
 

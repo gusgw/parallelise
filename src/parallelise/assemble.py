@@ -11,9 +11,12 @@ from __future__ import annotations
 import hashlib
 import json
 import logging
+import re
 import shutil
 import stat
 from pathlib import Path
+
+from .errors import ParalleliseError
 
 log = logging.getLogger("parallelise.assemble")
 
@@ -24,11 +27,14 @@ PROBLEM_LEVEL_FILES = ("reference.h", "reference.json", "problem.h")
 
 #: Name of the file in the work folder that records the digests of the trusted files.
 TRUSTED_MANIFEST = ".trusted.json"
-#: Files the agent must not change. The check compares them with ``TRUSTED_MANIFEST``.
-#: The routine header ``<name>.h`` is added to this list for each problem.
+#: The two small scripts that call the benchmark table rules from the work folder.
+CHECKER_SCRIPTS = ("check_bench.py", "check_bench_cuda.py")
+#: Files the agent must not change. The check compares them with ``TRUSTED_MANIFEST`` and
+#: with a fresh copy made from the problem. The routine header ``<name>.h`` is added to this
+#: list for each problem.
 TRUSTED_FILES = (
-    "bench.c", "Makefile", "testing.h", "bench_sweep.sh", "check_bench.py",
-    "check_bench_cuda.py", "reference.h", "problem.h",
+    "bench.c", "Makefile", "testing.h", "bench_sweep.sh", *CHECKER_SCRIPTS,
+    "reference.h", "problem.h",
 )  # fmt: skip
 
 _SHIM = '''"""Calls the benchmark checker in the parallelise package, so there is one copy of it."""
@@ -42,7 +48,7 @@ if __name__ == "__main__":
 '''
 
 
-class AssembleError(Exception):
+class AssembleError(ParalleliseError):
     """Raised when a problem folder is missing something the work folder needs."""
 
 
@@ -61,10 +67,15 @@ def routine_filename(name: str, backend: str) -> str:
     return f"{name}.cu" if backend == "cuda" else f"{name}.c"
 
 
+def unit_test_filename(name: str) -> str:
+    """Return the name of the unit test source file: plain C under every backend."""
+    return f"test_{name}.c"
+
+
 def _write_shims(dest: Path) -> None:
     """Write the two small checker scripts that the Makefiles call from the work folder."""
     package_parent = str(Path(__file__).resolve().parent.parent)
-    for filename, cuda in (("check_bench.py", False), ("check_bench_cuda.py", True)):
+    for filename, cuda in zip(CHECKER_SCRIPTS, (False, True), strict=True):
         (dest / filename).write_text(
             _SHIM.format(package_parent=package_parent, cuda=cuda), encoding="utf-8"
         )
@@ -73,6 +84,23 @@ def _write_shims(dest: Path) -> None:
 def file_digest(path: Path) -> str:
     """Return the SHA-256 digest of a file as hexadecimal text."""
     return hashlib.sha256(path.read_bytes()).hexdigest()
+
+
+_SHIM_LOCATION = re.compile(r"^sys\.path\.insert\(0, .*\)$", re.MULTILINE)
+
+
+def trusted_digest(path: Path) -> str:
+    """Return the digest used to compare a trusted file with another copy of it.
+
+    It is the same as ``file_digest`` except for the two checker scripts. Each holds one
+    line that names the folder where the package is installed, which depends on the computer
+    that assembled the work folder, so that line is left out. Every other line counts.
+    """
+    if path.name not in CHECKER_SCRIPTS:
+        return file_digest(path)
+    text = path.read_text(encoding="utf-8", errors="replace")
+    text = _SHIM_LOCATION.sub("sys.path.insert(0, <package location>)", text)
+    return hashlib.sha256(text.encode("utf-8")).hexdigest()
 
 
 def trusted_file_names(name: str) -> tuple[str, ...]:
@@ -130,7 +158,7 @@ def assemble_work_dir(
 
     if include_reference:
         reference = backend_dir / "reference"
-        for filename in (routine_filename(name, backend), f"test_{name}.c"):
+        for filename in (routine_filename(name, backend), unit_test_filename(name)):
             source = reference / filename
             if not source.is_file():
                 raise AssembleError(f"missing reference file {source}")

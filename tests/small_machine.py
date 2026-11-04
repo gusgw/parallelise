@@ -22,6 +22,9 @@ SPEEDUP_UNRELIABLE = os.environ.get("PARALLELISE_SPEEDUP_UNRELIABLE") == "1"
 def skip_if_only_speedup_failed(result, work: Path, label: str, *, always: bool = False) -> None:
     """Skip the current test if ``result`` failed only for want of speed-up.
 
+    ``work`` is the work folder that was checked; the benchmark table is read from the
+    ``check-fail`` folder inside it.
+
     ``always`` applies the tolerance even when the machine is not declared small; it is
     for problems known to be limited by memory bandwidth. Returns normally when the
     result passed or failed for any other reason, so the caller's assertion then runs.
@@ -30,7 +33,8 @@ def skip_if_only_speedup_failed(result, work: Path, label: str, *, always: bool 
         return
     if not (always or SPEEDUP_UNRELIABLE):
         return
-    bench_csv = work / "bench.csv"
+    # A failed check keeps the folder it judged, with the benchmark table, as check-fail.
+    bench_csv = work / "check-fail" / "bench.csv"
     if not bench_csv.is_file():
         return
     verdict = check_cpu_table(bench_csv, floor=0.0)

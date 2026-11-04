@@ -72,7 +72,8 @@ def test_health_unreachable_exits_1(capsys):
 
 
 def test_missing_work_folder_and_csv(tmp_path, capsys):
-    assert cli.main(["check", str(tmp_path / "none"), "--backend", "openmp"]) == 1
+    missing = ["check", str(tmp_path / "none"), "--problem", "integrate", "--backend", "openmp"]
+    assert cli.main(missing) == 1
     assert "does not exist" in capsys.readouterr().err
     assert cli.main(["bench-check", str(tmp_path / "none.csv")]) == 1
     assert "does not exist" in capsys.readouterr().err
@@ -84,11 +85,12 @@ def test_missing_work_folder_and_csv(tmp_path, capsys):
 class FakeAgent:
     name = "basic"
 
-    def __init__(self, behaviour):
+    def __init__(self, behaviour, routine="integrate"):
         self.behaviour = behaviour
+        self.routine = routine
 
     def run(self, work_dir, task, settings, client, step_budget=80):
-        assert "make check" in task and "integrate.h" in task
+        assert "make check" in task and f"{self.routine}.h" in task
         if self.behaviour == "crash":
             raise RuntimeError("boom")
         return AgentResult(
@@ -97,7 +99,7 @@ class FakeAgent:
         )
 
 
-def install_fakes(monkeypatch, tmp_path, behaviour="ok", check_pass=True):
+def install_fakes(monkeypatch, tmp_path, behaviour="ok", check_pass=True, routine="integrate"):
     problems = tmp_path / "problems" / "integrate"
     problems.mkdir(parents=True)
     calls = {}
@@ -106,7 +108,11 @@ def install_fakes(monkeypatch, tmp_path, behaviour="ok", check_pass=True):
         calls["assembled"] = (Path(problem_dir).name, backend, Path(dest))
         Path(dest).mkdir(parents=True)
 
-    def run_check(work_dir, backend, timeout_s=300, speedup_floor=None):
+    def require_reference_test(problem_dir, backend):
+        calls["required"] = (Path(problem_dir), backend)
+
+    def run_check(work_dir, problem_dir, backend, timeout_s=300, speedup_floor=None):
+        calls["checked"] = (Path(work_dir), Path(problem_dir), backend)
         return SimpleNamespace(
             passed=check_pass,
             failure_stage="none" if check_pass else "benchmark",
@@ -116,8 +122,10 @@ def install_fakes(monkeypatch, tmp_path, behaviour="ok", check_pass=True):
 
     fakes = {
         "assemble": SimpleNamespace(assemble_work_dir=assemble_work_dir),
-        "check": SimpleNamespace(run_check=run_check),
-        "agents": SimpleNamespace(get_agent=lambda name: FakeAgent(behaviour)),
+        "check": SimpleNamespace(
+            run_check=run_check, require_reference_test=require_reference_test
+        ),
+        "agents": SimpleNamespace(get_agent=lambda name: FakeAgent(behaviour, routine)),
     }
     monkeypatch.setattr(cli, "_lazy", lambda name, hint="": fakes[name])
     return calls
@@ -147,6 +155,10 @@ def test_run_pass_writes_record_and_exits_0(monkeypatch, tmp_path, capsys):
     assert "used the notebook tool" in record.notes
     assert (calls["assembled"][2] / "check.log").read_text() == "check log text"
     assert "PASS" in capsys.readouterr().out
+    # The check is given the problem folder the work folder was built from.
+    assert calls["checked"][1] == tmp_path / "problems" / "integrate"
+    assert calls["checked"][0] == calls["assembled"][2] and calls["checked"][2] == "openmp"
+    assert calls["required"] == (tmp_path / "problems" / "integrate", "openmp")
 
 
 def test_run_check_failure_exits_1_and_records_stage(monkeypatch, tmp_path):
@@ -155,6 +167,28 @@ def test_run_check_failure_exits_1_and_records_stage(monkeypatch, tmp_path):
     (record,) = ResultsStore(tmp_path / "runs.jsonl").load()
     assert record.result == "FAIL" and record.failure_stage == "benchmark"
     assert record.speedup_best is None
+
+
+def test_masked_run_is_checked_against_the_masked_problem(monkeypatch, tmp_path):
+    calls = install_fakes(monkeypatch, tmp_path, routine="problem_a")
+    fakes = {}
+
+    def mask_problem(problem_dir, dest, alias):
+        fakes["masked"] = (Path(problem_dir), Path(dest), alias)
+        Path(dest).mkdir(parents=True)
+
+    real = cli._lazy
+    monkeypatch.setattr(
+        cli, "_lazy",
+        lambda name, hint="": SimpleNamespace(mask_problem=mask_problem)
+        if name == "study.mask" else real(name),
+    )
+    assert cli.main([*run_args(tmp_path), "--masked", "problem_a"]) == 0
+    masked_dir = tmp_path / "work" / "_masked" / "integrate"
+    assert fakes["masked"][1] == masked_dir
+    assert calls["assembled"][0] == "integrate"
+    assert calls["checked"][1] == masked_dir
+    assert calls["required"][0] == masked_dir
 
 
 def test_run_agent_crash_is_recorded_as_agent_error(monkeypatch, tmp_path):
@@ -216,9 +250,49 @@ def test_every_command_help_has_an_example(capsys):
 
 
 def test_grade_is_a_hidden_alias_of_check(tmp_path, capsys):
-    assert cli.main(["grade", str(tmp_path / "none"), "--backend", "openmp"]) == 1
+    arguments = [str(tmp_path / "none"), "--problem", "integrate", "--backend", "openmp"]
+    assert cli.main(["grade", *arguments]) == 1
     err = capsys.readouterr().err
     assert "now called 'check'" in err and "does not exist" in err
+
+
+def test_check_needs_the_problem_as_well_as_the_work_folder(tmp_path, capsys):
+    assert cli.main(["check", str(tmp_path), "--backend", "openmp"]) == 2
+    assert "--problem" in capsys.readouterr().err
+
+
+def test_check_passes_the_resolved_problem_folder_to_the_check(monkeypatch, tmp_path, capsys):
+    calls = install_fakes(monkeypatch, tmp_path, check_pass=False)
+    work = tmp_path / "finished"
+    work.mkdir()
+    by_name = ["check", str(work), "--problem", "integrate", "--backend", "openmp",
+               "--problems-dir", str(tmp_path / "problems")]  # fmt: skip
+    assert cli.main(by_name) == 1  # the stand-in check fails
+    assert calls["checked"] == (work, tmp_path / "problems" / "integrate", "openmp")
+    assert "Check FAILED (failure stage: benchmark" in capsys.readouterr().out
+    by_path = ["check", str(work), "--problem", str(tmp_path / "problems" / "integrate"),
+               "--backend", "openmp"]  # fmt: skip
+    assert cli.main(by_path) == 1
+    assert calls["checked"][1] == tmp_path / "problems" / "integrate"
+
+
+def test_check_with_an_unknown_problem_says_what_to_do(monkeypatch, tmp_path, capsys):
+    install_fakes(monkeypatch, tmp_path)
+    work = tmp_path / "finished"
+    work.mkdir()
+    args = ["check", str(work), "--problem", "nothing", "--backend", "openmp",
+            "--problems-dir", str(tmp_path / "problems")]  # fmt: skip
+    assert cli.main(args) == 1
+    assert "no problem folder" in capsys.readouterr().err
+
+
+def test_check_help_explains_the_fresh_folder(capsys):
+    with pytest.raises(SystemExit):
+        cli.build_parser().parse_args(["check", "--help"])
+    text = " ".join(capsys.readouterr().out.split())
+    assert "rebuilds a fresh folder from the problem's own files" in text
+    assert "only the agent's routine and the problem's own known-good test" in text
+    assert "--problem" in text
 
 
 def test_mask_and_report_old_names_print_a_notice(tmp_path, capsys):

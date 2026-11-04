@@ -155,14 +155,16 @@ def cmd_assemble(args: argparse.Namespace) -> int:
 
 
 def cmd_check(args: argparse.Namespace) -> int:
-    """Run the check on a finished work folder."""
+    """Judge a finished work folder again, using the problem it was built from."""
     _check_backend(args.backend)
     work_dir = Path(args.work_dir)
     if not work_dir.is_dir():
         raise ParalleliseError(f"The work folder {work_dir} does not exist. Check the path.")
+    problem_dir = _resolve_problem(args.problem, args.problems_dir)
     check = _lazy("check")
     result = check.run_check(
-        work_dir, args.backend, timeout_s=int(args.timeout), speedup_floor=args.floor
+        work_dir, problem_dir, args.backend, timeout_s=int(args.timeout),
+        speedup_floor=args.floor,
     )
     print(result.log)
     speedup = "none" if result.speedup_best is None else f"{result.speedup_best:.2f}"
@@ -231,6 +233,9 @@ def cmd_run(args: argparse.Namespace) -> int:
 
     backend = args.backend
 
+    # Find out now, before the agent spends any time, whether the check can judge this problem.
+    check.require_reference_test(problem_dir, backend)
+
     agent = agents.get_agent(args.agent)  # may raise AgentUnavailable with an install hint
     work_dir = work_root / problem_name / backend / _safe(settings.model) / args.agent
     if work_dir.exists():
@@ -254,7 +259,7 @@ def cmd_run(args: argparse.Namespace) -> int:
     if agent_error:
         passed, stage, speedup, check_log = False, "agent-error", None, ""
     else:
-        graded = check.run_check(work_dir, backend, timeout_s=int(args.check_timeout))
+        graded = check.run_check(work_dir, problem_dir, backend, timeout_s=int(args.check_timeout))
         passed, stage, speedup, check_log = (
             graded.passed,
             "none" if graded.passed else graded.failure_stage,
@@ -384,6 +389,9 @@ def build_parser() -> argparse.ArgumentParser:
             "work_dir",
             help="the path to a finished work folder (not a problem), such as one made by "
                  "'parallelise run'")
+        parser_.add_argument("--problem", required=True,
+                             help=PROBLEM_HELP + ". Give the problem the work folder was "
+                                  "built from; for a masked run, give the masked copy")
         parser_.add_argument("--backend", required=True, choices=BACKENDS,
                              help="the parallel method the work folder was built for")
         parser_.add_argument("--timeout", type=float, default=300.0,
@@ -393,18 +401,25 @@ def build_parser() -> argparse.ArgumentParser:
                                   "floor set in the problem's Makefile")
 
     p = sub.add_parser(
-        "check", parents=[common],
+        "check", parents=[common, problems],
         help="judge a finished work folder again, without the agent or the model",
-        description="Judge a finished work folder: its trusted files, its build, its test at "
-                    "one worker and at several, and its benchmark. The argument is a work "
-                    "folder, not a problem.",
-        epilog="Example: parallelise check work/integrate/openmp/local/basic --backend openmp",
+        description="Judge the routine in a finished work folder. The check does not use "
+                    "the work folder's own build files or test program: it rebuilds a fresh "
+                    "folder from the problem's own files, copies in only the agent's routine "
+                    "and the problem's own known-good test, and judges that. It builds the "
+                    "routine, runs the problem's test at one worker and at several, and runs "
+                    "the benchmark. It also fails a work folder in which a trusted file has "
+                    "been changed. The agent's own test program is run for the log only. The "
+                    "first argument is a work folder, not a problem; the problem comes from "
+                    "--problem.",
+        epilog="Example: parallelise check work/integrate/openmp/local/basic "
+               "--problem integrate --backend openmp",
     )
     add_check_arguments(p)
     p.set_defaults(func=cmd_check)
 
     # A subcommand added without a help argument is not listed by "parallelise --help".
-    p = sub.add_parser("grade", parents=[common],
+    p = sub.add_parser("grade", parents=[common, problems],
                        description="The old name of 'check'.")
     add_check_arguments(p)
     p.set_defaults(func=cmd_grade)

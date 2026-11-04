@@ -108,8 +108,9 @@ the way it guards against.
    warnings that signal real defects: a missing header, a pointer of the wrong type, an
    unused parameter. Treating warnings as errors turns those into failures at the cheapest
    stage.
-2. **Agreement and parallel invariance.** The unit test compares the result with the
-   notebook's oracle and is run with one worker and again with several. Explicit counts are
+2. **Agreement and parallel invariance.** The problem's own unit test, not the agent's,
+   compares the result with the notebook's oracle and is run with one worker and again with
+   several. Explicit counts are
    used (`OMP_NUM_THREADS` set by the Makefile, `mpirun -np 1` and then several), so an
    inherited environment setting cannot quietly skip the many-worker run. The answer must
    not depend on the worker count. This catches a data race, a wrong partition of the work,
@@ -126,6 +127,23 @@ the way it guards against.
 
 Parts 2 and 3 are independent of each other on purpose. A serial program passes the first
 two parts and fails the third. A fast but wrong program fails the second.
+
+### The routine is judged in a fresh folder
+
+A review of the earlier check found four ways past it. That check ran `make check` in the
+work folder, with the agent's own test program. A test program that asserts nothing passed.
+A file named `GNUmakefile` makes `make` run the agent's own recipe instead of the trusted
+one. Rewriting a trusted file together with the record of fingerprints in the same folder
+went unnoticed. And the allow-listed `python3` and shells ran any code the model wrote.
+The check now judges the agent's routine alone. It assembles a fresh folder from the
+problem's own files, copies in only the routine and the problem's own known-good test
+program (the one in `reference/`, which no agent sees), and runs the three parts there, so
+that a wrong routine fails whatever the agent's own test does. The earlier rules are kept as
+a separate stage, `tampered`, so that an agent which edits a trusted file, or adds a
+`GNUmakefile`, still fails. The agent's tools lost the interpreters and shells, kill every
+child process when a command times out, and run without any variable that may hold a secret.
+These changes alter what counts as a pass and what the agent can do, and they change the
+recorded agent version, so records made before and after them should be reported separately.
 
 ### Boundary bugs and races caught by parallel invariance
 

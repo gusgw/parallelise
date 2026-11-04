@@ -45,23 +45,34 @@ LangGraph.
 
 Each conversion runs in a **work folder** that the harness assembles: the notebook, the
 oracle written as C constants, the header, the benchmark program, the Makefile and a small
-test helper. The agent writes two files into it, the routine and a test program for the
-routine. The **check** then judges the folder after the agent has finished, without the
-model, in four stages, stopping at the first failure:
+test helper. The agent writes two files into it, the routine and a test program of its
+own, which helps it find its mistakes. The **check** then judges the routine after the
+agent has finished, without the model. It does not use the folder as the agent left it.
+It assembles a fresh folder in a temporary directory from the problem's own files, copies
+in only the agent's routine and the problem's own known-good test program, which the agent
+never sees, and judges that fresh folder in four stages, stopping at the first failure:
 
-1. Build the routine, the test program and the benchmark program with every compiler
-   warning treated as an error.
-2. Run the test program with one worker. It must report no failures, which means its
-   assertions found the routine's answer within the oracle's tolerance.
+1. Build the routine, the problem's test program and the benchmark program with every
+   compiler warning treated as an error.
+2. Run the problem's test program with one worker. It must report no failures, which means
+   its assertions found the routine's answer within the oracle's tolerance.
 3. Run the same test program with several workers. The answer must not depend on the
    number of workers.
 4. Run the benchmark program, which times the routine at several worker counts, and judge
    its table: a genuine speed-up must reach the problem's floor, and the figures must look
    measured rather than invented.
 
-The benchmark program, the header and the Makefile are trusted files: the check compares
-them with fingerprints taken when the folder was assembled and refuses to judge a folder
-in which any has changed. Every judged run is written as one record to a results store, one
+Because the verdict rests on the problem's own test and not on the agent's, a test program
+that asserts nothing cannot make a wrong routine pass. The check still builds and runs the
+agent's own test program, at one worker, and adds one line to its log saying whether it
+passed; that line never changes the verdict. The benchmark program, the header, the
+Makefile and the other helper files are trusted files, and the check fails a run in which
+the agent has changed any of them, or has added a file named `GNUmakefile` or `makefile`,
+which `make` would read instead of the Makefile. It compares each trusted file with the
+fingerprint taken when the folder was assembled and with the fresh copy made from the
+problem, so rewriting the fingerprints does not hide an edit. If the check fails, the fresh
+folder that it judged is kept as `check-fail` inside the work folder; if it passes, that
+folder is deleted. Every judged run is written as one record to a results store, one
 JSON object per line: the problem, backend, model and agent design, the outcome and the
 stage of any failure, the best speed-up, and the requests, tokens, latency and throughput of
 the model calls.
@@ -105,9 +116,13 @@ one way to provide one.
 
         parallelise run integrate openmp --agent basic
 
-5. Judge a finished work folder again, without the agent or the model.
+5. Judge a finished work folder again, without the agent or the model. The check needs the
+   problem the work folder was built from, as a path or as the name of a shipped example
+   (for a masked run, the masked copy that `run` keeps under `work/_masked/`), because it
+   rebuilds the folder from the problem's own files and judges only the agent's routine.
 
-        parallelise check work/integrate/openmp/kimi-k2.5/basic --backend openmp
+        parallelise check work/integrate/openmp/kimi-k2.5/basic \
+          --problem integrate --backend openmp
 
 6. Ask the model which method suits a notebook. The reply is a reasoned verdict, printed
    and optionally saved as JSON: which loop iterations are independent, whether arithmetic
@@ -150,7 +165,10 @@ shipped problems have: a header giving the routine's exact signature, a benchmar
 that builds inputs of a chosen size, calls the routine at several worker counts after an
 untimed warm-up call, and writes a timing table, and a Makefile whose `check` target builds
 the routine and the test program, runs the test with one worker and with several, runs the
-benchmark and judges its table against the problem's speed-up floor.
+benchmark and judges its table against the problem's speed-up floor. Each backend also needs
+a `reference` folder holding a known-good routine and a known-good test program,
+`test_<name>.c`. The check judges every agent's routine with that test program, which is
+never copied into an agent's work folder, so a problem without it cannot be run.
 
 The routine, its files and the notebook are named after the problem folder. In a folder
 called `integrate`, the notebook is `integrate.ipynb`, the header is `integrate.h`, the
@@ -224,19 +242,34 @@ properties of the models.
 
 ## Security
 
-Code written by a model is untrusted. The harness limits what it can do in four ways, none
-of which is a sandbox. The agent can run only commands from a short allow-list, as argument
-lists with no shell; the list includes the Python interpreter, so a determined agent can
+Code written by a model is untrusted. The harness limits what it can do in several ways, none
+of which is a sandbox. The agent can run only commands from a short allow-list (the build
+tools, `mpirun`, `ls`, `cat`, and programs inside the work folder), as argument lists with
+no shell; the list holds no Python interpreter and no shell. Every command runs in a process
+group of its own that is killed as a whole when the time limit passes, so no child process
+survives, and with an environment from which every variable that may hold a secret has been
+removed: any name containing KEY, TOKEN, SECRET or PASSWORD, and every variable beginning
+`PARALLELISE_`, which includes the gateway key. That keeps the key out of a program's own
+environment, but it does not hide it from a program that reads the harness's process
+information, which on Linux another process of the same user can do. Neither the allow-list
+nor the environment confines the agent: `make` and the compilers can start other programs,
+and a program the agent builds runs with the agent's own rights, so a determined agent can
 leave the work folder, and a container, not the allow-list, is the boundary that matters.
-The check compares the trusted files against fingerprints taken when the work folder was
-assembled and refuses to judge a folder in which any has changed; the fingerprints live in
-the work folder, so this catches careless edits rather than deliberate ones. Every
-subprocess, whether a build, a test, a benchmark or a notebook run, has a timeout, and so
-does every model request. The container runs as an ordinary user; under Kubernetes it
-drops all capabilities, has a read-only file system, and runs under processor and memory
-limits and a hard deadline. The generated code can reach the network unless the deployment
-forbids it, for example with a network policy; [docs/OPERATIONS.md](docs/OPERATIONS.md)
-describes the settings.
+
+The verdict depends on nothing the agent can change except the routine. The check builds and tests the
+agent's routine in a fresh folder assembled from the problem's own files, with the problem's
+own test, so a test program that asserts nothing, an edited Makefile or benchmark, a
+`GNUmakefile` or a rewritten fingerprint record cannot make a wrong routine pass. The check
+still fails a work folder in which a trusted file differs from its fingerprint or from the
+fresh copy, or which holds a `GNUmakefile` or `makefile`, because an agent that breaks the
+rules should fail. The routine is still compiled and run by the check, with the same
+secret-free environment, so the container is also what contains a routine that is itself
+harmful. Every subprocess, whether a build, a test, a benchmark or a notebook run, has a
+timeout, and so does every model request. The container runs as an ordinary user; under
+Kubernetes it drops all capabilities, has a read-only file system, and runs under processor
+and memory limits and a hard deadline. The generated code can reach the network unless the
+deployment forbids it, for example with a network policy;
+[docs/OPERATIONS.md](docs/OPERATIONS.md) describes the settings.
 
 ## Licence and author
 

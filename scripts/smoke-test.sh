@@ -101,7 +101,7 @@ step "parallelise run integrate openmp --agent basic" \
 WORK_FOLDER="$TMP/work/integrate/openmp/local/basic"
 step "parallelise check on the finished work folder" \
      "the last line reads 'Check PASSED (failure stage: none, best speed-up: ...)'."
-"$PARALLELISE" check "$WORK_FOLDER" --backend openmp
+"$PARALLELISE" check "$WORK_FOLDER" --problem problems/integrate --backend openmp
 
 step "parallelise study report on the new record" \
      "a table that shows one run with one pass."
