@@ -9,18 +9,26 @@ from __future__ import annotations
 
 import json
 import logging
+import os
 import shlex
+import signal
 import subprocess
 from pathlib import Path
 
+from parallelise.config import without_secrets
+
 log = logging.getLogger("parallelise.agents.tools")
 
-# Programs the model may start. The command is run as an argument list with no shell, so
-# ';', '|' and '&&' are passed as plain arguments and cannot chain further commands.
+# Programs the model may start, besides the programs it has built itself (./name). The command
+# is run as an argument list with no shell, so ';', '|' and '&&' are passed as plain arguments
+# and cannot chain further commands. No interpreter is listed: python3, bash and sh would let
+# the model run any code it likes. Note that make and the compilers can themselves start other
+# programs, so this list narrows what the model can do but is not a sandbox.
 ALLOWED_COMMANDS = frozenset(
-    {"make", "gcc", "cc", "clang", "mpicc", "mpirun", "nvcc", "bash", "sh", "ls", "cat", "python3"}
+    {"make", "gcc", "cc", "clang", "mpicc", "mpirun", "nvcc", "ls", "cat"}
 )
 COMMAND_TIMEOUT_S = 600
+KILL_WAIT_S = 5
 OUTPUT_TAIL_CHARS = 4000
 DEFAULT_CHECK_COMMAND = ("make", "check")
 
@@ -77,37 +85,80 @@ def write_file(work_dir: Path, path: str, content: str) -> str:
         return _error(exc)
 
 
+def _kill_process_group(proc: subprocess.Popen) -> None:
+    """Kill every process in the group that ``proc`` leads, and collect what it left."""
+    try:
+        os.killpg(proc.pid, signal.SIGKILL)
+    except (ProcessLookupError, PermissionError):
+        pass  # the whole group has already gone
+    try:
+        proc.communicate(timeout=KILL_WAIT_S)
+    except subprocess.TimeoutExpired:
+        # A descendant that left the group still holds the output pipes. Stop waiting for it.
+        for pipe in (proc.stdout, proc.stderr):
+            if pipe is not None:
+                pipe.close()
+        proc.wait()
+
+
 def run_process(
     work_dir: Path, parts: list[str], timeout_s: int = COMMAND_TIMEOUT_S
 ) -> tuple[int, str]:
     """Run an argument list in the work folder; return (exit code, tail of the output).
 
-    An exit code of -1 means the program could not be started or ran out of time.
+    The program runs in a new session, so it and every child it starts form one process
+    group, and when ``timeout_s`` seconds pass the whole group is killed: no child survives
+    the command. The environment passed on has every variable that may hold a secret removed
+    (see ``without_secrets``), so that a program the model compiled cannot read the gateway
+    key from it. An exit code of -1 means the program could not be started or ran out of
+    time.
     """
     try:
-        proc = subprocess.run(
-            parts, cwd=work_dir, capture_output=True, text=True, timeout=timeout_s, check=False
+        proc = subprocess.Popen(
+            parts,
+            cwd=work_dir,
+            env=without_secrets(),
+            stdin=subprocess.DEVNULL,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+            errors="replace",
+            start_new_session=True,
         )
-    except subprocess.TimeoutExpired:
-        return -1, f"error: the command ran for more than {timeout_s} seconds and was stopped"
     except OSError as exc:
         return -1, _error(exc)
-    return proc.returncode, (proc.stdout + proc.stderr)[-OUTPUT_TAIL_CHARS:]
+    try:
+        stdout, stderr = proc.communicate(timeout=timeout_s)
+    except subprocess.TimeoutExpired:
+        _kill_process_group(proc)
+        return -1, f"error: the command ran for more than {timeout_s} seconds and was stopped"
+    except BaseException:
+        # Ctrl-C and similar: the command is in a session of its own and would not see it.
+        _kill_process_group(proc)
+        raise
+    return proc.returncode, (stdout + stderr)[-OUTPUT_TAIL_CHARS:]
 
 
 def run_shell(work_dir: Path, command: str) -> str:
-    """Run an allow-listed build or test command in the work folder and return its output."""
+    """Run an allow-listed build or test command in the work folder and return its output.
+
+    The command may name an allow-listed program, or a program inside the work folder
+    written as ``./name``. A path that begins with ``./`` but leaves the work folder, such
+    as ``./../../usr/bin/python3``, is refused.
+    """
     try:
         parts = shlex.split(command)
     except ValueError as exc:
         return _error(exc)
     if not parts:
         return "error: empty command"
-    program = Path(parts[0]).name
-    if program not in ALLOWED_COMMANDS and not parts[0].startswith("./"):
+    if parts[0].startswith("./"):
+        try:
+            _resolve(work_dir, parts[0])
+        except ValueError:
+            return f"error: command not allowed: {parts[0]} is outside the work folder"
+    elif Path(parts[0]).name not in ALLOWED_COMMANDS:
         return f"error: command not allowed: {parts[0]}"
-    if program in {"bash", "sh"} and "-c" in parts[1:]:
-        return "error: running a command string through bash or sh is not allowed"
     code, output = run_process(work_dir, parts)
     return f"exit {code}\n{output}"
 

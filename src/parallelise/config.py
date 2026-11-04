@@ -16,6 +16,11 @@ from .errors import ConfigError
 
 DEFAULT_GATEWAY_URL = "http://localhost:4000/v1"
 
+#: A variable whose name contains one of these words is taken to hold a secret.
+_SECRET_WORDS = ("KEY", "TOKEN", "SECRET", "PASSWORD")
+#: Every variable that configures this program starts with this prefix.
+_OWN_PREFIX = "PARALLELISE_"
+
 # field name -> (current variable name, older fallback name or None)
 _ENV_NAMES: dict[str, tuple[str, str | None]] = {
     "gateway_url": ("PARALLELISE_GATEWAY_URL", "MODEL_BASE_URL"),
@@ -108,3 +113,21 @@ class Settings:
             if name in values:
                 values[name] = str(values[name])
         return cls(**values).validate()
+
+
+def without_secrets(environ: Mapping[str, str] | None = None) -> dict[str, str]:
+    """Return a copy of the environment that is safe to give to code the model wrote.
+
+    The copy leaves out every variable whose name contains KEY, TOKEN, SECRET or PASSWORD
+    (in any capitals), and every variable whose name begins with PARALLELISE_, which holds
+    this program's own settings, among them the gateway key. A program that the agent
+    compiled and runs can then not read the key from its environment. The argument defaults
+    to the real environment.
+    """
+    source = os.environ if environ is None else environ
+    return {
+        name: value
+        for name, value in source.items()
+        if not name.upper().startswith(_OWN_PREFIX)
+        and not any(word in name.upper() for word in _SECRET_WORDS)
+    }

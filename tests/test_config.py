@@ -5,7 +5,7 @@ import logging
 
 import pytest
 
-from parallelise.config import DEFAULT_GATEWAY_URL, Settings
+from parallelise.config import DEFAULT_GATEWAY_URL, Settings, without_secrets
 from parallelise.errors import ConfigError
 from parallelise.log import configure_logging
 
@@ -58,6 +58,25 @@ def test_bad_values_give_plain_errors(env, words):
 def test_unknown_override_is_rejected():
     with pytest.raises(ConfigError):
         Settings.from_env({"colour": "red"}, environ={})
+
+
+def test_without_secrets_drops_keys_tokens_passwords_and_own_settings():
+    environ = {
+        "PARALLELISE_API_KEY": "a", "PARALLELISE_MODEL": "b", "MODEL_API_KEY": "c",
+        "GITHUB_TOKEN": "d", "client_secret": "e", "DB_PASSWORD": "f", "SSH_KEY_FILE": "g",
+        "PATH": "/usr/bin", "OMP_NUM_THREADS": "2", "BENCH_N": "100",
+    }  # fmt: skip
+    assert without_secrets(environ) == {
+        "PATH": "/usr/bin", "OMP_NUM_THREADS": "2", "BENCH_N": "100",
+    }  # fmt: skip
+    assert "PARALLELISE_API_KEY" in environ  # the original is not changed
+
+
+def test_without_secrets_reads_the_real_environment_by_default(monkeypatch):
+    monkeypatch.setenv("PARALLELISE_API_KEY", "secret")
+    monkeypatch.setenv("HARMLESS", "yes")
+    cleaned = without_secrets()
+    assert "PARALLELISE_API_KEY" not in cleaned and cleaned["HARMLESS"] == "yes"
 
 
 def test_configure_logging_is_idempotent_and_json(capsys):
