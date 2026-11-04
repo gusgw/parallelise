@@ -1,6 +1,6 @@
 ROUTINE := decay
 CC      ?= gcc
-CFLAGS  ?= -O2 -fopenmp -Wall -Wextra -std=c11
+CFLAGS  ?= -O2 -fopenmp -Wall -Wextra -Werror -std=c11
 LDLIBS  ?= -lm
 BENCH_N ?= 134217728
 

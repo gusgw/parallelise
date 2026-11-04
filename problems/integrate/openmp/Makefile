@@ -1,5 +1,5 @@
 CC      ?= gcc
-CFLAGS  ?= -O2 -fopenmp -Wall -Wextra -std=c11
+CFLAGS  ?= -O2 -fopenmp -Wall -Wextra -Werror -std=c11
 LDLIBS  ?= -lm
 
 all: test_integrate bench
