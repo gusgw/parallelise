@@ -1,13 +1,17 @@
 """The record of one graded run, and the file that holds all of them.
 
 The store is a JSON Lines file: one JSON object per line. Appending a line is the only
-way it changes, so an interrupted run cannot damage earlier records.
+way it changes, so an interrupted run cannot damage earlier records. A record gains fields
+as the program learns to note more about a run; every new field has a default, so that
+records written earlier still load, with the new fields marked as not recorded (None, an
+empty text or an empty mapping).
 """
 
 from __future__ import annotations
 
 import json
 import logging
+import os
 from dataclasses import asdict, dataclass, field, fields
 from datetime import UTC, datetime
 from pathlib import Path
@@ -17,6 +21,9 @@ from .errors import ResultsError
 
 log = logging.getLogger("parallelise.results")
 
+# "agent-error" is found only in records made before an agent that raised an error was judged
+# by the check like any other; a new run never writes it, but it stays valid so that the old
+# records load and validate.
 FAILURE_STAGES = (
     "none",
     "no-files",
@@ -58,6 +65,16 @@ class RunRecord:
     serving: str = "not recorded"
     quantisation: str = "not disclosed"
     notes: str = ""
+    # Added later, so each of these is absent (None, "" or an empty mapping) in older records.
+    temperature: float | None = None  # the sampling temperature the model was asked to use
+    step_budget: int | None = None  # the most model steps the agent was allowed
+    time_limit_s: float | None = None  # the wall-clock limit on the agent, in seconds
+    agent_time_s: float | None = None  # seconds the agent ran, until it stopped
+    check_time_s: float | None = None  # seconds the check took, after the agent stopped
+    framework_versions: dict[str, str] = field(default_factory=dict)  # package -> version
+    cpu_count: int | None = None  # processor cores the run could use
+    package_version: str = ""  # the version of parallelise itself
+    source_hash: str = ""  # short hash of the source files, so that any code change shows
 
     def validate(self) -> None:
         """Raise ResultsError if the result or failure stage is not one of the known values."""
@@ -77,8 +94,11 @@ class RunRecord:
     def from_dict(cls, data: dict[str, Any]) -> RunRecord:
         """Build a record from a dictionary, ignoring keys this version does not know."""
         names = {f.name for f in fields(cls)}
+        known = {k: v for k, v in data.items() if k in names}
+        if known.get("framework_versions") is None:
+            known.pop("framework_versions", None)
         try:
-            return cls(**{k: v for k, v in data.items() if k in names})
+            return cls(**known)
         except TypeError as exc:
             raise ResultsError(f"A run record is missing a required field: {exc}.") from exc
 
@@ -89,14 +109,54 @@ class ResultsStore:
     def __init__(self, path: str | Path) -> None:
         self.path = Path(path)
 
+    def ensure_writable(self) -> None:
+        """Raise ResultsError if a record could not be added to the file.
+
+        A run can take an hour, so this is called before it starts: finding out afterwards that
+        the record cannot be saved would waste it. Nothing is created or changed.
+        """
+        if self.path.is_dir():
+            raise ResultsError(
+                f"The results file {self.path} is a folder. Give --results (or "
+                "PARALLELISE_RESULTS) the path of a file."
+            )
+        if self.path.exists():
+            if not os.access(self.path, os.W_OK):
+                raise ResultsError(
+                    f"The results file {self.path} cannot be written to. Check its permissions, "
+                    "or give --results (or PARALLELISE_RESULTS) another path."
+                )
+            return
+        folder = self.path.parent
+        while not folder.exists() and folder != folder.parent:
+            folder = folder.parent
+        if not folder.is_dir():
+            raise ResultsError(
+                f"The results file {self.path} cannot be made, because {folder} is not a folder. "
+                "Give --results (or PARALLELISE_RESULTS) another path."
+            )
+        if not os.access(folder, os.W_OK | os.X_OK):
+            raise ResultsError(
+                f"The results file {self.path} cannot be made, because the folder {folder} "
+                "cannot be written to. Check its permissions, or give --results (or "
+                "PARALLELISE_RESULTS) another path."
+            )
+
     def append(self, record: RunRecord) -> None:
         """Validate the record and add it as one line, creating the file if needed."""
         record.validate()
         line = json.dumps(record.to_dict(), sort_keys=False) + "\n"
-        self.path.parent.mkdir(parents=True, exist_ok=True)
-        # One write call in append mode keeps concurrent runs from interleaving lines.
-        with open(self.path, "a", encoding="utf-8") as handle:
-            handle.write(line)
+        try:
+            self.path.parent.mkdir(parents=True, exist_ok=True)
+            # One write call in append mode keeps concurrent runs from interleaving lines.
+            with open(self.path, "a", encoding="utf-8") as handle:
+                handle.write(line)
+        except OSError as exc:
+            raise ResultsError(
+                f"The record could not be added to {self.path} ({exc.strerror or exc}). Check "
+                "the path and its permissions, or give --results (or PARALLELISE_RESULTS) "
+                "another path."
+            ) from exc
         log.info(
             "recorded %s %s %s in %s", record.problem, record.backend, record.result, self.path
         )
@@ -106,18 +166,31 @@ class ResultsStore:
         if not self.path.exists():
             return []
         records: list[RunRecord] = []
-        with open(self.path, encoding="utf-8") as handle:
-            for number, line in enumerate(handle, start=1):
-                if not line.strip():
-                    continue
-                try:
-                    data = json.loads(line)
-                except json.JSONDecodeError as exc:
-                    raise ResultsError(
-                        f"Line {number} of {self.path} is not valid JSON ({exc.msg}). "
-                        "Remove or repair that line."
-                    ) from exc
-                if not isinstance(data, dict):
-                    raise ResultsError(f"Line {number} of {self.path} is not a JSON object.")
-                records.append(RunRecord.from_dict(data))
+        try:
+            with open(self.path, encoding="utf-8") as handle:
+                for number, line in enumerate(handle, start=1):
+                    if not line.strip():
+                        continue
+                    try:
+                        data = json.loads(line)
+                    except json.JSONDecodeError as exc:
+                        raise ResultsError(
+                            f"Line {number} of {self.path} is not valid JSON ({exc.msg}). "
+                            "Remove or repair that line."
+                        ) from exc
+                    if not isinstance(data, dict):
+                        raise ResultsError(
+                            f"Line {number} of {self.path} is not a JSON object."
+                        )
+                    records.append(RunRecord.from_dict(data))
+        except UnicodeDecodeError as exc:
+            raise ResultsError(
+                f"The results file {self.path} is not a text file in UTF-8 form. Give --results "
+                "(or PARALLELISE_RESULTS) the path of a results file."
+            ) from exc
+        except OSError as exc:
+            raise ResultsError(
+                f"The results file {self.path} cannot be read ({exc.strerror or exc}). Check "
+                "the path and its permissions."
+            ) from exc
         return records

@@ -18,6 +18,8 @@ def test_defaults_when_environment_is_empty():
     assert s.request_timeout_s == 600
     assert s.work_root == "work"
     assert s.results_path == "results/runs.jsonl"
+    assert s.time_limit_s == 1800
+    assert s.throttle_wait_s == 120
 
 
 def test_current_names_beat_older_names():
@@ -48,6 +50,11 @@ def test_overrides_win_and_none_is_ignored():
         ({"PARALLELISE_TEMPERATURE": "3"}, "between 0 and 2"),
         ({"PARALLELISE_TEMPERATURE": "warm"}, "not a number"),
         ({"PARALLELISE_TIMEOUT": "0"}, "positive"),
+        ({"PARALLELISE_TIME_LIMIT": "0"}, "PARALLELISE_TIME_LIMIT"),
+        ({"PARALLELISE_TIME_LIMIT": "soon"}, "not a number"),
+        ({"PARALLELISE_THROTTLE_WAIT": "-5"}, "PARALLELISE_THROTTLE_WAIT"),
+        ({"PARALLELISE_THROTTLE_WAIT": "long"}, "not a number"),
+        ({"PARALLELISE_API_KEY": "k\u00e9y"}, "PARALLELISE_API_KEY"),
     ],
 )
 def test_bad_values_give_plain_errors(env, words):
@@ -93,3 +100,11 @@ def test_configure_logging_is_idempotent_and_json(capsys):
 def test_configure_logging_rejects_unknown_level():
     with pytest.raises(ConfigError):
         configure_logging("LOUD")
+
+
+def test_time_limit_and_throttle_wait_come_from_the_environment_and_options():
+    env = {"PARALLELISE_TIME_LIMIT": "600", "PARALLELISE_THROTTLE_WAIT": "30"}
+    s = Settings.from_env(environ=env)
+    assert (s.time_limit_s, s.throttle_wait_s) == (600, 30)
+    assert Settings.from_env({"time_limit_s": 90}, environ=env).time_limit_s == 90
+    assert Settings.from_env({"throttle_wait_s": 0}, environ={}).throttle_wait_s == 0

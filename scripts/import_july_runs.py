@@ -31,7 +31,9 @@ MANIFEST = ROOT / "results" / "manifest-july-2026.tsv"
 RUNS_DIR = ROOT / "results" / "runs"
 OUTPUT = ROOT / "results" / "runs.jsonl"
 
-# The field order matches RunRecord in src/parallelise/results.py.
+# The fields of a July record, in the order of RunRecord in src/parallelise/results.py. The
+# record has since gained fields (temperature, versions and the like); each has a default,
+# so these records load unchanged and the new fields read as not recorded.
 FIELDS = (
     "when", "problem", "backend", "model", "agent", "agent_version", "masked",
     "result", "failure_stage", "speedup_best", "wall_time_s", "requests",

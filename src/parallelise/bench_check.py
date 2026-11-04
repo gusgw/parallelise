@@ -119,7 +119,7 @@ def check_cpu_table(path: str | Path, floor: float | None = None) -> BenchVerdic
         floor = floor_from_env(DEFAULT_FLOOR)
     try:
         lines = _read_lines(Path(path))
-    except OSError as exc:
+    except (OSError, ValueError) as exc:  # ValueError: not text
         return BenchVerdict(False, [f"cannot read {path}: {exc}"])
     unit, rows, problems = _parse_sweep(lines)
     best = max((r["speedup"] for r in rows), default=None)
@@ -205,7 +205,7 @@ def check_gpu_table(path: str | Path, floor: float | None = None) -> BenchVerdic
         floor = floor_from_env(DEFAULT_CUDA_FLOOR)
     try:
         lines = _read_lines(Path(path))
-    except OSError as exc:
+    except (OSError, ValueError) as exc:  # ValueError: not text
         return BenchVerdict(False, [f"cannot read {path}: {exc}"])
     rows: dict[str, tuple[float, float]] = {}
     for line in lines:

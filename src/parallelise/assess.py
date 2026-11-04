@@ -129,11 +129,17 @@ def notebook_text(notebook: Path) -> str:
             "Give the path of an .ipynb file."
         ) from exc
     parts = []
-    for index, cell in enumerate(cells):
-        source = cell.get("source", "")
-        if isinstance(source, list):
-            source = "".join(source)
-        parts.append(f"--- cell {index} ({cell.get('cell_type', '?')}) ---\n{source}")
+    try:
+        for index, cell in enumerate(cells):
+            source = cell.get("source", "")
+            if isinstance(source, list):
+                source = "".join(source)
+            parts.append(f"--- cell {index} ({cell.get('cell_type', '?')}) ---\n{source}")
+    except (TypeError, AttributeError) as exc:
+        raise ParalleliseError(
+            f"The file {notebook} is not a Jupyter notebook (its cells are not in the expected "
+            "form). Give the path of an .ipynb file."
+        ) from exc
     return "\n\n".join(parts)
 
 

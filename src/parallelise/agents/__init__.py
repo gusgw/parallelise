@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from parallelise.agents.base import Agent, AgentResult, AgentUnavailable
+from parallelise.errors import InputError
 
 __all__ = ["Agent", "AgentResult", "AgentUnavailable", "AGENT_NAMES", "get_agent"]
 
@@ -13,7 +14,8 @@ def get_agent(name: str) -> Agent:
     """Return an agent by name: ``basic``, ``pydantic`` or ``langgraph``.
 
     The framework modules are imported only when asked for. Running the returned agent
-    raises ``AgentUnavailable`` with an installation hint if its framework is missing.
+    raises ``AgentUnavailable`` with an installation hint if its framework is missing. An
+    unknown name raises ``InputError``, which is also a ``ValueError``.
     """
     if name == "basic":
         from parallelise.agents.basic import BasicAgent
@@ -27,4 +29,4 @@ def get_agent(name: str) -> Agent:
         from parallelise.agents.langgraph_agent import LangGraphAgent
 
         return LangGraphAgent()
-    raise ValueError(f"unknown agent {name!r}; choose one of: {', '.join(AGENT_NAMES)}")
+    raise InputError(f"The agent {name!r} is not one of {', '.join(AGENT_NAMES)}. Choose one.")

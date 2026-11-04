@@ -17,6 +17,7 @@ import stat
 from pathlib import Path
 
 from .errors import ParalleliseError
+from .folders import prepare_destination
 
 log = logging.getLogger("parallelise.assemble")
 
@@ -57,7 +58,8 @@ def routine_name(problem_dir: Path) -> str:
     notebooks = sorted(problem_dir.glob("*.ipynb"))
     if len(notebooks) != 1:
         raise AssembleError(
-            f"{problem_dir} must contain exactly one notebook, found {len(notebooks)}"
+            f"The problem folder {problem_dir} must contain exactly one notebook (.ipynb "
+            f"file), but it holds {len(notebooks)}. Give the path of a problem folder."
         )
     return notebooks[0].stem
 
@@ -121,26 +123,71 @@ def _write_trusted_manifest(dest: Path, name: str) -> None:
 
 
 def assemble_work_dir(
-    problem_dir: Path, backend: str, dest: Path, include_reference: bool = False
+    problem_dir: Path,
+    backend: str,
+    dest: Path,
+    include_reference: bool = False,
+    force: bool = False,
 ) -> Path:
     """Build a flat work folder at ``dest`` and return it.
 
-    ``dest`` is emptied first if it already exists. With ``include_reference`` the
-    known-good routine and unit test are copied in too, which is how the machinery is tested
-    without a model. Raises ``AssembleError`` if a required file is missing.
+    ``dest`` must not exist or must be empty. A folder that holds files is refused (with
+    ``InputError``, whose message names the folder and ``--force``), and with ``force`` true it
+    is deleted first. With
+    ``include_reference`` the known-good routine and unit test are copied in too, which is
+    how the machinery is tested without a model. Raises ``AssembleError`` if a required file
+    is missing or the folder cannot be written. The problem is examined before anything is
+    deleted, so a bad problem never costs the destination.
     """
     problem_dir, dest = Path(problem_dir), Path(dest)
     if backend not in BACKENDS:
-        raise AssembleError(f"unknown backend {backend!r}; choose one of {', '.join(BACKENDS)}")
+        raise AssembleError(
+            f"The backend {backend!r} is not one of {', '.join(BACKENDS)}. Choose one of them."
+        )
     backend_dir = problem_dir / backend
     if not backend_dir.is_dir():
-        raise AssembleError(f"{problem_dir.name} has no {backend} backend ({backend_dir})")
+        raise AssembleError(
+            f"The problem {problem_dir.name} has no {backend} backend (there is no folder "
+            f"{backend_dir}). Choose a backend that the problem has."
+        )
     name = routine_name(problem_dir)
+    for filename in (f"{name}.h", "bench.c", "Makefile"):
+        if not (backend_dir / filename).is_file():
+            raise AssembleError(
+                f"The problem lacks {backend_dir / filename}, which every work folder needs. "
+                "Add the file to the problem."
+            )
+    if include_reference:
+        for filename in (routine_filename(name, backend), unit_test_filename(name)):
+            source = backend_dir / "reference" / filename
+            if not source.is_file():
+                raise AssembleError(
+                    f"The problem lacks the known-good file {source}, so it cannot be copied "
+                    "in. Add the file, or leave out the request for the reference solution."
+                )
 
-    if dest.exists():
-        shutil.rmtree(dest)
-    dest.mkdir(parents=True)
+    prepare_destination(dest, force)
+    try:
+        _write_work_dir(problem_dir, backend_dir, name, backend, dest, include_reference)
+    except OSError as exc:
+        raise AssembleError(
+            f"The work folder {dest} could not be written ({exc.strerror or exc}). Check the "
+            "path and its permissions, or choose another folder."
+        ) from exc
+    log.info("assembled %s/%s into %s", name, backend, dest)
+    return dest
 
+
+def _write_work_dir(
+    problem_dir: Path,
+    backend_dir: Path,
+    name: str,
+    backend: str,
+    dest: Path,
+    include_reference: bool,
+) -> None:
+    """Copy the files of a work folder into ``dest``, which is made if it is not there."""
+    dest.mkdir(parents=True, exist_ok=True)
     for filename in DATA_FILES:
         shutil.copy2(DATA_DIR / filename, dest / filename)
     (dest / "bench_sweep.sh").chmod((dest / "bench_sweep.sh").stat().st_mode | stat.S_IXUSR)
@@ -151,18 +198,9 @@ def assemble_work_dir(
         if (problem_dir / filename).is_file():
             shutil.copy2(problem_dir / filename, dest / filename)
     for filename in (f"{name}.h", "bench.c", "Makefile"):
-        source = backend_dir / filename
-        if not source.is_file():
-            raise AssembleError(f"missing {source}")
-        shutil.copy2(source, dest / filename)
-
+        shutil.copy2(backend_dir / filename, dest / filename)
     if include_reference:
         reference = backend_dir / "reference"
         for filename in (routine_filename(name, backend), unit_test_filename(name)):
-            source = reference / filename
-            if not source.is_file():
-                raise AssembleError(f"missing reference file {source}")
-            shutil.copy2(source, dest / filename)
+            shutil.copy2(reference / filename, dest / filename)
     _write_trusted_manifest(dest, name)
-    log.info("assembled %s/%s into %s", name, backend, dest)
-    return dest

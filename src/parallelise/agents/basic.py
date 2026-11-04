@@ -14,7 +14,8 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from parallelise.agents import tools
-from parallelise.agents.base import AgentResult, build_system_prompt, check_feedback
+from parallelise.agents.base import AgentResult, Deadline, build_system_prompt, check_feedback
+from parallelise.errors import ModelError
 
 if TYPE_CHECKING:
     from parallelise.config import Settings
@@ -36,15 +37,30 @@ class BasicAgent:
         client: ModelClient,
         step_budget: int = 80,
     ) -> AgentResult:
-        """Loop until the checks pass or ``step_budget`` model calls have been made."""
+        """Loop until the checks pass, ``step_budget`` model calls have been made, or the time
+        limit in ``settings`` has passed.
+
+        The time is checked before every call to the model. If the model service fails, the
+        run ends there and the result carries the error with the counts so far.
+        """
         work_dir = Path(work_dir)
+        deadline = Deadline(settings.time_limit_s)
         messages: list[dict] = [
             {"role": "system", "content": build_system_prompt(work_dir)},
             {"role": "user", "content": task},
         ]
         result = AgentResult(False, 0, 0, 0, 0, [], "")
         for step in range(1, step_budget + 1):
-            reply = client.chat(messages, tools.TOOL_SCHEMAS)
+            if deadline.expired():
+                result.time_limit_reached = True
+                log.warning("step %d: the time limit has passed; stopping the agent", step)
+                return result
+            try:
+                reply = client.chat(messages, tools.TOOL_SCHEMAS)
+            except ModelError as exc:
+                result.error = f"{type(exc).__name__}: {exc}"
+                log.warning("step %d: the model call failed: %s", step, exc)
+                return result
             result.steps = step
             result.requests += 1
             result.prompt_tokens += reply.prompt_tokens

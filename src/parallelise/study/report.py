@@ -23,6 +23,8 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
+from ..errors import ResultsError
+
 log = logging.getLogger("parallelise.study.report")
 
 BACKEND_ORDER = ("openmp", "mpi", "cuda")
@@ -42,8 +44,18 @@ def _get(record: Any, name: str) -> Any:
 
 
 def _when(record: Any) -> datetime:
-    """Parse a record's timestamp; a missing time zone is taken to be UTC."""
-    stamp = datetime.fromisoformat(str(_get(record, "when")))
+    """Parse a record's timestamp; a missing time zone is taken to be UTC.
+
+    Raises ResultsError if the timestamp is not a date and time in ISO 8601 form.
+    """
+    text = str(_get(record, "when"))
+    try:
+        stamp = datetime.fromisoformat(text)
+    except ValueError:
+        raise ResultsError(
+            f"A run record has the timestamp {text!r}, which is not a date and time in ISO 8601 "
+            "form such as 2026-10-11T20:00:16+00:00. Correct the 'when' field of that record."
+        ) from None
     return stamp if stamp.tzinfo else stamp.replace(tzinfo=UTC)
 
 
@@ -118,11 +130,21 @@ def _model_order(cells: Sequence[Any]) -> list[str]:
 
 
 def _number(record: Any, name: str) -> float:
-    """Read a numeric field, treating a missing field as zero."""
+    """Read a numeric field, treating a missing field as zero.
+
+    Raises ResultsError if the field holds something that is not a number.
+    """
     try:
-        return float(_get(record, name) or 0)
+        value = _get(record, name)
     except (KeyError, AttributeError):
         return 0.0
+    try:
+        return float(value or 0)
+    except (TypeError, ValueError):
+        raise ResultsError(
+            f"A run record has the value {value!r} in the field {name!r}, which is not a "
+            "number. Correct that record."
+        ) from None
 
 
 def load_prices(path: str | Path) -> dict[str, tuple[float, float]]:
@@ -130,12 +152,48 @@ def load_prices(path: str | Path) -> dict[str, tuple[float, float]]:
 
     The file is JSON. Each model name maps to an object with `input` and `output`, for
     example {"some-model": {"input": 3.0, "output": 15.0}}. Entries whose value is not an
-    object, such as a "source" note, are ignored.
+    object, such as a "source" note, are ignored. Raises ResultsError, with a message that
+    names the file, if it cannot be read, is not JSON, has the wrong shape, or lacks a price
+    or holds one that is not a number.
     """
-    data = json.loads(Path(path).read_text(encoding="utf-8"))
-    table = data.get("usd_per_million_tokens", data)
-    return {name: (float(entry["input"]), float(entry["output"]))
-            for name, entry in table.items() if isinstance(entry, dict)}
+    path = Path(path)
+    try:
+        text = path.read_text(encoding="utf-8")
+    except (OSError, UnicodeDecodeError) as exc:
+        reason = exc.strerror if isinstance(exc, OSError) and exc.strerror else "not UTF-8 text"
+        raise ResultsError(
+            f"The price file {path} cannot be read ({reason}). Check the path."
+        ) from exc
+    try:
+        data = json.loads(text)
+    except ValueError as exc:
+        raise ResultsError(
+            f"The price file {path} is not valid JSON ({exc}). Correct the file."
+        ) from exc
+    table = data.get("usd_per_million_tokens", data) if isinstance(data, dict) else None
+    if not isinstance(table, dict):
+        raise ResultsError(
+            f"The price file {path} must hold a JSON object that maps each model name to an "
+            'object with its "input" and "output" prices.'
+        )
+    prices: dict[str, tuple[float, float]] = {}
+    for name, entry in table.items():
+        if not isinstance(entry, dict):
+            continue
+        for key in ("input", "output"):
+            if key not in entry:
+                raise ResultsError(
+                    f"In the price file {path}, the model {name!r} has no {key!r} price. Add it "
+                    "as a number of US dollars per million tokens."
+                )
+        try:
+            prices[name] = (float(entry["input"]), float(entry["output"]))
+        except (TypeError, ValueError):
+            raise ResultsError(
+                f"In the price file {path}, the prices for the model {name!r} must be numbers "
+                "of US dollars per million tokens."
+            ) from None
+    return prices
 
 
 def _change(unmasked: tuple[int, int], masked: tuple[int, int]) -> str:

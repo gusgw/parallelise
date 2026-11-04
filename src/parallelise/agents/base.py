@@ -8,6 +8,7 @@ give the model exactly the same instructions and the comparison between them is 
 from __future__ import annotations
 
 import time
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING, Protocol
@@ -24,6 +25,7 @@ __all__ = [
     "AgentResult",
     "AgentUnavailable",
     "Agent",
+    "Deadline",
     "LatencyRecorder",
     "build_system_prompt",
     "check_feedback",
@@ -37,6 +39,13 @@ class AgentResult:
     ``finished`` is true only when the checks passed at the end of the run. ``steps`` counts
     turns of the agent's own loop, ``requests`` counts calls made to the model, and the token
     counts and latencies are summed or listed over those calls.
+
+    ``time_limit_reached`` is true when the run was stopped, between steps, because the time
+    limit in the settings had passed. ``error`` holds a short description when the run ended
+    because the model or the framework failed; the counts then cover the calls that were made
+    before the failure, so that a failed run still reports what it used. An agent returns its
+    result in both cases rather than raising an error, but the command line also copes with an
+    agent that raises.
     """
 
     finished: bool
@@ -46,6 +55,30 @@ class AgentResult:
     completion_tokens: int
     latencies_s: list[float] = field(default_factory=list)
     notes: str = ""
+    time_limit_reached: bool = False
+    error: str = ""
+
+
+class Deadline:
+    """A wall-clock limit on one agent run.
+
+    Each agent design makes one when its run starts and asks ``expired`` before every call to
+    the model, so that a run past its limit stops cleanly between steps. A step that is
+    already under way is not interrupted, so a run may overrun the limit by the length of
+    its last step.
+    """
+
+    def __init__(self, seconds: float, clock: Callable[[], float] = time.monotonic) -> None:
+        self._clock = clock
+        self._end = clock() + seconds
+
+    def remaining(self) -> float:
+        """Return the seconds left, or 0 when the limit has passed."""
+        return max(0.0, self._end - self._clock())
+
+    def expired(self) -> bool:
+        """Return whether the limit has passed."""
+        return self._clock() >= self._end
 
 
 class Agent(Protocol):
@@ -81,8 +114,10 @@ class LatencyRecorder:
         request.extensions["parallelise_started"] = time.perf_counter()
 
     def _finish(self, response: httpx.Response) -> None:
+        # Only answers that were accepted count, as in ``ModelClient``: an answer that refused
+        # the request (HTTP 429, for example) is not a model call, and the call is made again.
         started = response.request.extensions.get("parallelise_started")
-        if started is not None:
+        if started is not None and response.status_code < 400:
             self.latencies_s.append(time.perf_counter() - started)
 
     def sync_hooks(self) -> dict[str, list]:

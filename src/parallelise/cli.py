@@ -1,7 +1,14 @@
 """The command-line interface: `parallelise <subcommand>`.
 
 Exit status is 0 on success, 1 when a check fails or an error is reported, and 2 for bad
-arguments. Every error message says what to do next.
+arguments. Every error a user can cause ends as one line that says what to do next, never as
+a stack trace: the errors the program raises on purpose are all ``ParalleliseError``, and an
+unexpected error from the operating system (a path that cannot be read or written) is
+reported in the same way.
+
+No command deletes a folder that it did not make unless ``--force`` is given: ``assemble``,
+``study mask`` and ``run`` refuse a destination that already holds files. A later ``run`` of
+the same cell replaces its own earlier work folder, which it recognises by a marker file.
 
 The commands listed by `parallelise --help` are health, assess, run, check and study. The
 study command holds the tools for studying many runs: `study mask` and `study report`. Three
@@ -18,18 +25,19 @@ from __future__ import annotations
 import argparse
 import hashlib
 import inspect
+import json
 import logging
-import shutil
 import sys
 import time
 from pathlib import Path
 
-from . import __version__
+from . import __version__, provenance
 from .cli_support import PROBLEM_HELP, HelpParser
 from .cli_support import lazy_import as _lazy
 from .cli_support import resolve_problem as _resolve_problem
 from .cli_support import settings_from_args as _settings
-from .errors import AgentUnavailable, ConfigError, ParalleliseError
+from .errors import AgentUnavailable, ConfigError, ParalleliseError, ResultsError
+from .folders import ensure_folder, prepare_own_folder, write_marker
 from .log import configure_logging
 from .model import ModelClient
 from .oracle import extract_oracle, write_reference
@@ -148,7 +156,8 @@ def cmd_assemble(args: argparse.Namespace) -> int:
     assemble = _lazy("assemble")
     problem_dir = _resolve_problem(args.problem, args.problems_dir)
     assemble.assemble_work_dir(
-        problem_dir, args.backend, Path(args.dest), include_reference=args.with_reference
+        problem_dir, args.backend, Path(args.dest), include_reference=args.with_reference,
+        force=args.force,
     )
     print(f"Assembled {problem_dir.name} for {args.backend} in {args.dest}.")
     return 0
@@ -210,10 +219,39 @@ def cmd_assess(args: argparse.Namespace) -> int:
     return 0
 
 
+def _check_run_numbers(args: argparse.Namespace) -> None:
+    """Raise ConfigError if a number given to ``run`` could not work."""
+    if args.step_budget < 1:
+        raise ConfigError(
+            f"The step budget {args.step_budget} must be a whole number of 1 or more. "
+            "Pass --step-budget with such a number."
+        )
+    if not args.check_timeout > 0:
+        raise ConfigError(
+            f"The check timeout {args.check_timeout:g} must be positive. Pass --check-timeout "
+            "with a number of seconds above zero."
+        )
+
+
+def _log_agent_failure(exc: Exception) -> None:
+    """Log that the agent failed; a stack trace only for an error nobody expected."""
+    log.error(
+        "the agent failed: %s: %s", type(exc).__name__, exc,
+        exc_info=not isinstance(exc, ParalleliseError),
+    )
+
+
 def cmd_run(args: argparse.Namespace) -> int:
-    """Assemble a work folder, run an agent in it, check the result and record the run."""
+    """Assemble a work folder, run an agent in it, check the result and record the run.
+
+    The check runs whatever happened to the agent: if it failed, ran out of time or was stopped
+    by the time limit, the routine on disk is still judged, and the record holds both the
+    check's result and a note about the agent. The agent's time and the check's time are
+    recorded separately.
+    """
     _check_backend(args.backend)
     settings = _settings(args)
+    _check_run_numbers(args)
     assemble = _lazy("assemble")
     check = _lazy("check")
     agents = _lazy("agents")
@@ -221,14 +259,20 @@ def cmd_run(args: argparse.Namespace) -> int:
     problem_name = problem_dir.name
     work_root = Path(settings.work_root)
 
+    # Find out now, before anything takes long, that the record can be kept and the folders
+    # can be made: an hour's work must not be lost at the end to a wrong path.
+    store = ResultsStore(settings.results_path)
+    store.ensure_writable()
+    ensure_folder(work_root, "the work root")
+
     name = problem_name
     masked = bool(args.masked)
     if masked:
         mask = _lazy("study.mask")
         masked_dir = work_root / "_masked" / problem_name
-        if masked_dir.exists():
-            shutil.rmtree(masked_dir)
+        prepare_own_folder(masked_dir, args.force)
         mask.mask_problem(problem_dir, masked_dir, args.masked)
+        write_marker(masked_dir)
         problem_dir, name = masked_dir, args.masked
 
     backend = args.backend
@@ -238,9 +282,9 @@ def cmd_run(args: argparse.Namespace) -> int:
 
     agent = agents.get_agent(args.agent)  # may raise AgentUnavailable with an install hint
     work_dir = work_root / problem_name / backend / _safe(settings.model) / args.agent
-    if work_dir.exists():
-        shutil.rmtree(work_dir)
+    prepare_own_folder(work_dir, args.force)
     assemble.assemble_work_dir(problem_dir, backend, work_dir, include_reference=False)
+    write_marker(work_dir)
 
     task = build_task(name, backend)
     started = time.perf_counter()
@@ -252,36 +296,42 @@ def cmd_run(args: argparse.Namespace) -> int:
         except AgentUnavailable:
             raise
         except Exception as exc:  # an agent crash is a result to record, not a reason to stop
-            log.exception("the agent failed")
+            _log_agent_failure(exc)
             agent_error = f"{type(exc).__name__}: {exc}"
         summary = client.summary()
+    agent_time = time.perf_counter() - started
+    if not agent_error and result is not None:
+        agent_error = result.error
 
-    if agent_error:
-        passed, stage, speedup, check_log = False, "agent-error", None, ""
-    else:
-        graded = check.run_check(work_dir, problem_dir, backend, timeout_s=int(args.check_timeout))
-        passed, stage, speedup, check_log = (
-            graded.passed,
-            "none" if graded.passed else graded.failure_stage,
-            graded.speedup_best,
-            graded.log,
-        )
-        (work_dir / "check.log").write_text(check_log, encoding="utf-8")
+    # Judge what is on disk, whatever became of the agent.
+    check_started = time.perf_counter()
+    graded = check.run_check(work_dir, problem_dir, backend, timeout_s=int(args.check_timeout))
+    check_time = time.perf_counter() - check_started
+    try:
+        (work_dir / "check.log").write_text(graded.log, encoding="utf-8")
+    except OSError as exc:
+        log.warning("the check log could not be written to %s: %s", work_dir, exc)
+    passed = graded.passed
+    stage = "none" if passed else graded.failure_stage
     wall = time.perf_counter() - started
 
+    time_limited = result is not None and result.time_limit_reached
     notes: list[str] = []
     if args.notes:
         notes.append(args.notes)
     if agent_error:
         reason = str(agent_error).rstrip(".")
         notes.append(f"The agent stopped with {reason}.")
+    if time_limited:
+        notes.append(f"The time limit of {settings.time_limit_s:g} seconds stopped the agent.")
     if result is not None:
         if result.notes:
             notes.append(result.notes)
-        if not result.finished:
+        if not result.finished and not agent_error and not time_limited:
             notes.append("The agent used its step budget without declaring itself finished.")
     latencies = list(result.latencies_s) if result is not None else []
-    # Prefer the agent's own counts; fall back to the client's when the agent kept none.
+    # Prefer the agent's own counts; fall back to the client's when the agent kept none. The
+    # client's cover every call it made, including those before an agent that raised an error.
     requests = result.requests if result and result.requests else summary["requests"]
     prompt = result.prompt_tokens if result and result.prompt_tokens else summary["prompt_tokens"]
     completion = (
@@ -298,7 +348,7 @@ def cmd_run(args: argparse.Namespace) -> int:
         masked=masked,
         result="PASS" if passed else "FAIL",
         failure_stage=stage,
-        speedup_best=speedup,
+        speedup_best=graded.speedup_best,
         wall_time_s=round(wall, 2),
         requests=requests,
         prompt_tokens=prompt,
@@ -309,8 +359,21 @@ def cmd_run(args: argparse.Namespace) -> int:
         serving=args.serving,
         quantisation=args.quantisation,
         notes=" ".join(notes),
+        temperature=settings.temperature,
+        step_budget=args.step_budget,
+        time_limit_s=settings.time_limit_s,
+        agent_time_s=round(agent_time, 2),
+        check_time_s=round(check_time, 2),
+        framework_versions=provenance.framework_versions(),
+        cpu_count=provenance.cpu_count(),
+        package_version=provenance.package_version(),
+        source_hash=provenance.source_hash(),
     )
-    ResultsStore(settings.results_path).append(record)
+    try:
+        store.append(record)
+    except ResultsError:
+        log.error("the record that could not be saved was: %s", json.dumps(record.to_dict()))
+        raise
     print(f"{record.result}: {problem_name} on {backend} with {args.agent} and "
           f"{settings.model} (failure stage: {stage}). Record added to {settings.results_path}.")
     return 0 if passed else 1
@@ -364,7 +427,11 @@ def build_parser() -> argparse.ArgumentParser:
         "run", parents=[common, endpoint, problems],
         help="convert a problem with an agent, check the result and record the run",
         description="Build a work folder for a problem, let an agent write the parallel "
-                    "program in it, check the result and add a record to the results file.",
+                    "program in it, check the result and add a record to the results file. "
+                    "The check judges whatever is on disk when the agent stops, whether it "
+                    "finished, used its steps, ran out of time or failed. A work folder made "
+                    "by an earlier run of the same cell is replaced; any other folder in the "
+                    "way is refused unless --force is given.",
         epilog="Example: parallelise run integrate openmp --agent basic --model local",
     )
     p.add_argument("problem", help=PROBLEM_HELP)
@@ -375,8 +442,15 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--masked", metavar="ALIAS",
                    help="hide the algorithm's name behind this neutral alias, such as problem_a")
     p.add_argument("--step-budget", type=int, default=80, help="most agent steps allowed")
+    p.add_argument("--time-limit", type=float, metavar="SECONDS",
+                   help="most seconds the agent may run before it is stopped between steps, "
+                        "and the routine on disk is checked (PARALLELISE_TIME_LIMIT; "
+                        "default: 1800)")
     p.add_argument("--check-timeout", type=float, default=300.0,
                    help="seconds allowed for the check")
+    p.add_argument("--force", action="store_true",
+                   help="delete a work folder (and a masked copy) that was not made by an "
+                        "earlier run, instead of refusing to")
     p.add_argument("--work-root", help="folder for work folders (PARALLELISE_WORK_ROOT)")
     p.add_argument("--results", help="results file (PARALLELISE_RESULTS)")
     p.add_argument("--serving", default="not recorded", help="who served the model")
@@ -444,9 +518,12 @@ def build_parser() -> argparse.ArgumentParser:
     )
     p.add_argument("problem", help=PROBLEM_HELP)
     p.add_argument("backend", choices=BACKENDS, help="the parallel method: openmp, mpi or cuda")
-    p.add_argument("dest", help="the folder to create; it is emptied first if it exists")
+    p.add_argument("dest", help="the folder to create; it must not exist or must be empty, "
+                                "unless --force is given")
     p.add_argument("--with-reference", action="store_true",
                    help="also copy the known-good solution (tests the machinery without a model)")
+    p.add_argument("--force", action="store_true",
+                   help="delete what is in the destination folder first, instead of refusing")
     p.set_defaults(func=cmd_assemble)
 
     p = sub.add_parser(
@@ -476,6 +553,12 @@ def main(argv: list[str] | None = None) -> int:
         return 1
     except ParalleliseError as exc:
         print(f"parallelise: {exc}", file=sys.stderr)
+        return 1
+    except OSError as exc:  # a path that cannot be read or written, not caught closer to it
+        log.debug("operating-system error", exc_info=True)
+        where = f": {exc.filename}" if exc.filename else ""
+        print(f"parallelise: {exc.strerror or exc}{where}. Check the path and its permissions.",
+              file=sys.stderr)
         return 1
     except KeyboardInterrupt:
         print("parallelise: interrupted.", file=sys.stderr)

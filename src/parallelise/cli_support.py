@@ -84,5 +84,6 @@ def settings_from_args(args: argparse.Namespace) -> Settings:
         "model": getattr(args, "model", None),
         "work_root": getattr(args, "work_root", None),
         "results_path": getattr(args, "results", None),
+        "time_limit_s": getattr(args, "time_limit", None),
     }
     return Settings.from_env(overrides)

@@ -35,6 +35,9 @@ from collections import Counter
 from dataclasses import dataclass, field
 from pathlib import Path
 
+from ..errors import InputError
+from ..folders import prepare_destination
+
 log = logging.getLogger("parallelise.study.mask")
 
 #: Words that name an algorithm or its domain. Matching is on whole identifier parts and
@@ -352,8 +355,29 @@ def _count_python_comments(source: str) -> int:
         return 0
 
 
+def _read_notebook(path: Path) -> dict:
+    """Read a notebook file, or raise InputError saying why it cannot be used."""
+    try:
+        notebook = json.loads(path.read_text(encoding="utf-8"))
+        if not isinstance(notebook, dict) or not isinstance(notebook["cells"], list):
+            raise ValueError("it has no list of cells")
+        for cell in notebook["cells"]:
+            if "cell_type" not in cell or "source" not in cell:
+                raise ValueError("a cell lacks its type or its source")
+    except OSError as exc:
+        raise InputError(
+            f"The notebook {path} cannot be read ({exc.strerror or exc}). Check the path."
+        ) from exc
+    except (ValueError, KeyError, TypeError) as exc:
+        raise InputError(
+            f"The file {path.name} is not a usable Jupyter notebook ({exc}). Give a problem "
+            "whose notebook is a valid .ipynb file."
+        ) from exc
+    return notebook
+
+
 def _mask_notebook(path: Path, dest: Path, renamer: _Renamer, report: MaskReport) -> None:
-    notebook = json.loads(path.read_text(encoding="utf-8"))
+    notebook = _read_notebook(path)
     cells = notebook["cells"]
     code = [c for c in cells if c["cell_type"] == "code"]
     sources = ["".join(c["source"]) for c in code]
@@ -388,28 +412,57 @@ def _choose_prefix(problem_dir: Path) -> str:
     return "zz_"
 
 
-def mask_problem(problem_dir: Path, dest: Path, alias: str) -> MaskReport:
+def mask_problem(problem_dir: Path, dest: Path, alias: str, force: bool = False) -> MaskReport:
     """Write a masked copy of ``problem_dir`` to ``dest`` and report every change.
 
-    ``alias`` must be a plain identifier that is not itself in the word list. ``dest`` is
-    emptied first if it exists. The routine name is taken from the problem's notebook.
+    ``alias`` must be a plain identifier that is not itself in the word list. ``dest`` must
+    not exist or must be empty: a folder that holds files is refused with a message that
+    names it and ``--force``, and with ``force`` true it is deleted first. The routine name
+    is taken from the problem's notebook. Every problem with the arguments (a bad alias, a
+    folder without exactly one notebook, a notebook that is not valid, a destination that
+    cannot be used) raises ``InputError``, and is found before anything is deleted.
     """
     problem_dir, dest = Path(problem_dir), Path(dest)
     if not re.fullmatch(r"[A-Za-z][A-Za-z0-9_]*", alias):
-        raise ValueError(f"alias {alias!r} must be a plain identifier")
+        raise InputError(
+            f"The alias {alias!r} must be a plain identifier: letters, digits and underscores, "
+            "starting with a letter. Choose a neutral name such as problem_a."
+        )
     if alias.lower() in WORD_LIST:
-        raise ValueError(f"alias {alias!r} is itself in the word list; choose a neutral one")
+        raise InputError(
+            f"The alias {alias!r} is itself a word that names an algorithm, so it would give "
+            "the algorithm away. Choose a neutral name such as problem_a."
+        )
     notebooks = sorted(problem_dir.glob("*.ipynb"))
     if len(notebooks) != 1:
-        raise ValueError(f"{problem_dir} must contain exactly one notebook")
+        raise InputError(
+            f"The problem folder {problem_dir} must contain exactly one notebook (.ipynb "
+            f"file), but it holds {len(notebooks)}. Give the path of a problem folder."
+        )
     routine = notebooks[0].stem
+    _read_notebook(notebooks[0])  # a notebook that cannot be used must not cost the destination
 
     renamer = _Renamer(routine, alias, _choose_prefix(problem_dir))
     report = MaskReport(routine=routine, alias=alias)
-    if dest.exists():
-        shutil.rmtree(dest)
-    dest.mkdir(parents=True)
+    prepare_destination(dest, force)
+    try:
+        dest.mkdir(parents=True, exist_ok=True)
+        _write_masked_copy(problem_dir, dest, renamer, report)
+    except OSError as exc:
+        raise InputError(
+            f"The masked copy could not be written to {dest} ({exc.strerror or exc}). Check the "
+            "path and its permissions, or choose another folder."
+        ) from exc
+    for (file, original, replacement), count in sorted(renamer.counts.items()):
+        report.substitutions.append(Substitution(file, original, replacement, count))
+    log.info("masked %s as %s: %d substitutions", routine, alias, len(report.substitutions))
+    return report
 
+
+def _write_masked_copy(
+    problem_dir: Path, dest: Path, renamer: _Renamer, report: MaskReport
+) -> None:
+    """Write every masked file of the problem under ``dest``, noting the changes in ``report``."""
     for source in sorted(problem_dir.rglob("*")):
         relative = source.relative_to(problem_dir)
         if source.is_dir() or _SKIP_DIRS & set(relative.parts) or source.suffix in _SKIP_SUFFIXES:
@@ -443,11 +496,6 @@ def mask_problem(problem_dir: Path, dest: Path, alias: str) -> MaskReport:
         target.write_text(text, encoding="utf-8")
         if os_executable(source):
             target.chmod(source.stat().st_mode)
-
-    for (file, original, replacement), count in sorted(renamer.counts.items()):
-        report.substitutions.append(Substitution(file, original, replacement, count))
-    log.info("masked %s as %s: %d substitutions", routine, alias, len(report.substitutions))
-    return report
 
 
 def os_executable(path: Path) -> bool:

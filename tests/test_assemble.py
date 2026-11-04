@@ -29,11 +29,14 @@ def test_work_folder_with_reference(tmp_path):
     assert (dest / "test_midpoint.c").is_file()
 
 
-def test_existing_destination_is_emptied(tmp_path):
+def test_existing_destination_with_files_is_refused_unless_forced(tmp_path):
     dest = tmp_path / "w"
     dest.mkdir()
     (dest / "stale.txt").write_text("old")
-    assemble_work_dir(FIXTURE, "openmp", dest)
+    with pytest.raises(ParalleliseError, match="--force"):
+        assemble_work_dir(FIXTURE, "openmp", dest)
+    assert (dest / "stale.txt").exists()
+    assemble_work_dir(FIXTURE, "openmp", dest, force=True)
     assert not (dest / "stale.txt").exists()
 
 

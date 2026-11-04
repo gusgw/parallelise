@@ -18,6 +18,8 @@ RUN useradd --create-home --uid 10001 --shell /usr/sbin/nologin parallelise
 
 WORKDIR /app
 COPY . /app
+# The framework packages are installed at the exact versions that pyproject.toml pins in its
+# "agents" extra: the image installs from the project file itself, so the pins apply here.
 RUN pip install --no-cache-dir ".[dev,report,agents]" \
     && chown -R parallelise:parallelise /app
 
@@ -50,6 +52,7 @@ RUN useradd --create-home --uid 10001 --shell /usr/sbin/nologin parallelise
 
 WORKDIR /app
 COPY . /app
+# As in the cpu stage, the pins in pyproject.toml apply to this install.
 RUN pip install --no-cache-dir ".[dev,report,agents]" \
     && chown -R parallelise:parallelise /app
 

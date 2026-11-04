@@ -4,20 +4,29 @@ Besides the four shared tools it has a ``run_checks`` tool that runs the checks 
 whether they passed. An output validator refuses to accept a final answer until the last
 call of ``run_checks`` succeeded, so the model cannot finish by describing a fix.
 The framework is imported lazily so that the package works without it.
+
+The framework's graph is driven one node at a time, so that the time limit can be checked
+before each call to the model and so that the counts of requests and tokens survive a run
+that ends in an error. The model is reached through an ``httpx2`` client, the HTTP library
+that Pydantic AI now uses itself (it deprecates a client of the older ``httpx`` library), which
+waits out HTTP 429 answers like the other agents.
 """
 
+import asyncio
 import logging
 from dataclasses import dataclass
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from parallelise.agents import tools
 from parallelise.agents.base import (
     AgentResult,
     AgentUnavailable,
+    Deadline,
     LatencyRecorder,
     build_system_prompt,
 )
+from parallelise.model import throttled_async_client_class
 
 if TYPE_CHECKING:
     from parallelise.config import Settings
@@ -38,12 +47,9 @@ class State:
 def _import_framework():
     """Import the pieces of Pydantic AI that are needed, or raise AgentUnavailable."""
     try:
+        import httpx2
         import pydantic_ai
-        from pydantic_ai.exceptions import (
-            ModelHTTPError,
-            UnexpectedModelBehavior,
-            UsageLimitExceeded,
-        )
+        from pydantic_ai.exceptions import UsageLimitExceeded
         from pydantic_ai.models.openai import OpenAIChatModel
         from pydantic_ai.providers.openai import OpenAIProvider
         from pydantic_ai.settings import ModelSettings
@@ -53,7 +59,8 @@ def _import_framework():
     return pydantic_ai, {
         "RunContext": pydantic_ai.RunContext,
         "ModelRetry": pydantic_ai.ModelRetry,
-        "errors": (ModelHTTPError, UnexpectedModelBehavior, UsageLimitExceeded),
+        "UsageLimitExceeded": UsageLimitExceeded,
+        "httpx2": httpx2,
         "OpenAIChatModel": OpenAIChatModel,
         "OpenAIProvider": OpenAIProvider,
         "ModelSettings": ModelSettings,
@@ -61,27 +68,40 @@ def _import_framework():
     }
 
 
+def build_http_client(settings: "Settings", recorder: LatencyRecorder | None = None):
+    """Build the asynchronous HTTP client through which the agent reaches the model.
+
+    It is an ``httpx2`` client, as Pydantic AI asks, that waits out HTTP 429 answers for up to
+    ``settings.throttle_wait_s`` seconds per request and, when a ``recorder`` is given, times
+    every request.
+    """
+    _, parts = _import_framework()
+    client_class = throttled_async_client_class(parts["httpx2"].AsyncClient)
+    return client_class(
+        throttle_wait_s=settings.throttle_wait_s,
+        timeout=settings.request_timeout_s,
+        event_hooks=recorder.async_hooks() if recorder else None,
+    )
+
+
 def build_agent(
     work_dir: Path,
     settings: "Settings",
     recorder: LatencyRecorder | None = None,
     check_command: tuple[str, ...] = tools.DEFAULT_CHECK_COMMAND,
+    http_client: Any = None,
 ):
     """Build the Pydantic AI agent for one work folder.
 
-    The model is reached through its own HTTP client at ``settings.gateway_url``. When a
-    ``recorder`` is given, it times every request.
+    The model is reached through an HTTP client at ``settings.gateway_url``: the one given as
+    ``http_client`` (which the caller then closes), or else one made by ``build_http_client``.
     """
-    import httpx
-
     framework, parts = _import_framework()
     work_dir = Path(work_dir)
     run_context = parts["RunContext"]
     model_retry = parts["ModelRetry"]
-    http_client = httpx.AsyncClient(
-        timeout=settings.request_timeout_s,
-        event_hooks=recorder.async_hooks() if recorder else None,
-    )
+    if http_client is None:
+        http_client = build_http_client(settings, recorder)
     provider = parts["OpenAIProvider"](
         base_url=settings.gateway_url,
         api_key=settings.api_key or "not-needed",
@@ -140,6 +160,52 @@ def build_agent(
     return agent
 
 
+@dataclass
+class Progress:
+    """What a run has done so far, kept outside the run so that a failure cannot lose it."""
+
+    run: Any = None
+    time_limit_reached: bool = False
+    budget_spent: bool = False
+    error: str = ""
+
+
+def usage_counts(progress: Progress) -> tuple[int, int, int]:
+    """Return (requests, prompt tokens, completion tokens) for the run so far."""
+    if progress.run is None:
+        return 0, 0, 0
+    # Older releases of the framework expose usage as a method, newer ones as a property.
+    usage = progress.run.usage() if callable(progress.run.usage) else progress.run.usage
+    return int(usage.requests), int(usage.input_tokens), int(usage.output_tokens)
+
+
+async def drive(agent, framework, parts, task, state, step_budget, deadline, progress, http_client):
+    """Run the agent's graph one node at a time, and record how it ended in ``progress``.
+
+    Before each node that calls the model, the time limit is checked; if it has passed, the run
+    stops there. A failure of the model service or the framework is recorded in ``progress``
+    and not raised, so that the caller can still report the counts of what was done.
+    """
+    try:
+        limits = parts["UsageLimits"](request_limit=step_budget)
+        async with agent.iter(task, deps=state, usage_limits=limits) as agent_run:
+            progress.run = agent_run
+            node = agent_run.next_node
+            while not framework.Agent.is_end_node(node):
+                if framework.Agent.is_model_request_node(node) and deadline.expired():
+                    progress.time_limit_reached = True
+                    break
+                node = await agent_run.next(node)
+    except parts["UsageLimitExceeded"] as exc:
+        log.warning("pydantic agent stopped: %s", exc)
+        progress.budget_spent = True
+    except Exception as exc:  # a failed model service must not hide the counts or the check
+        log.warning("pydantic agent stopped: %s: %s", type(exc).__name__, exc)
+        progress.error = f"{type(exc).__name__}: {exc}"
+    finally:
+        await http_client.aclose()
+
+
 class PydanticAgent:
     """Pydantic AI with an output validator that holds the exit until the checks pass."""
 
@@ -153,32 +219,38 @@ class PydanticAgent:
         client: "ModelClient",
         step_budget: int = 80,
     ) -> AgentResult:
-        """Run the agent; ``step_budget`` limits the number of model requests."""
-        _, parts = _import_framework()
+        """Run the agent; ``step_budget`` limits the number of model requests.
+
+        The run ends when the checks pass, when the step budget or the time limit in
+        ``settings`` is spent, or when the model service or the framework fails; in every
+        case the result holds the counts of the requests that were made.
+        """
+        framework, parts = _import_framework()
         recorder = LatencyRecorder()
-        agent = build_agent(Path(work_dir), settings, recorder)
+        deadline = Deadline(settings.time_limit_s)
+        http_client = build_http_client(settings, recorder)
+        agent = build_agent(Path(work_dir), settings, recorder, http_client=http_client)
         state = State()
-        try:
-            outcome = agent.run_sync(
-                task,
-                deps=state,
-                usage_limits=parts["UsageLimits"](request_limit=step_budget),
-            )
-        except parts["errors"] as exc:
-            # The model did not produce a passing conversion within budget. Report a clean
-            # failure; whatever files it wrote are still on disk for grading.
-            log.warning("pydantic agent stopped: %s: %s", type(exc).__name__, exc)
-            return AgentResult(
-                False, 0, 0, 0, 0, list(recorder.latencies_s), f"{type(exc).__name__}: {exc}"
-            )
-        # Older releases of the framework expose usage as a method, newer ones as a property.
-        usage = outcome.usage() if callable(outcome.usage) else outcome.usage
+        progress = Progress()
+        asyncio.run(
+            drive(agent, framework, parts, task, state, step_budget, deadline, progress,
+                  http_client)
+        )
+        requests, prompt, completion = usage_counts(progress)
+        if state.checks_passed:
+            notes = "the checks passed"
+        elif progress.budget_spent:
+            notes = "stopped: the step budget was spent without passing checks"
+        else:
+            notes = "ended without passing checks"
         return AgentResult(
             finished=state.checks_passed,
-            steps=usage.requests,
-            requests=usage.requests,
-            prompt_tokens=usage.input_tokens,
-            completion_tokens=usage.output_tokens,
+            steps=requests,
+            requests=requests,
+            prompt_tokens=prompt,
+            completion_tokens=completion,
             latencies_s=list(recorder.latencies_s),
-            notes="the checks passed" if state.checks_passed else "ended without passing checks",
+            notes=notes,
+            time_limit_reached=progress.time_limit_reached,
+            error=progress.error,
         )

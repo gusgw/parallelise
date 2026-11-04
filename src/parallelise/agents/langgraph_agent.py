@@ -5,10 +5,17 @@ until the model stops asking for tools. That alone would let the model finish by
 a fix, so each full pass of the graph is followed by a run of the checks; if they fail, the
 conversation continues with the failure appended, up to a fixed number of passes.
 The frameworks are imported lazily so that the package works without them.
+
+The graph is streamed state by state, which lets the agent stop between steps when the time
+limit has passed, and keeps the messages (and with them the counts of requests and tokens)
+when a run ends in an error. The model is reached through HTTP clients that wait out HTTP 429
+answers like the other agents; the OpenAI library's own retries are off so that they do not
+repeat that waiting.
 """
 
 from __future__ import annotations
 
+import contextlib
 import logging
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -17,10 +24,12 @@ from parallelise.agents import tools
 from parallelise.agents.base import (
     AgentResult,
     AgentUnavailable,
+    Deadline,
     LatencyRecorder,
     build_system_prompt,
     check_feedback,
 )
+from parallelise.model import ThrottledAsyncClient, ThrottledClient
 
 if TYPE_CHECKING:
     from parallelise.config import Settings
@@ -35,18 +44,19 @@ MAX_PASSES = 8
 def build_model(settings: Settings, recorder: LatencyRecorder | None = None):
     """Build the LangChain chat model that talks to ``settings.gateway_url``."""
     try:
-        import httpx
         from langchain_openai import ChatOpenAI
         from pydantic import SecretStr
     except ImportError as exc:
         raise AgentUnavailable(
             f"the langgraph agent needs langchain-openai; {INSTALL_HINT}"
         ) from exc
-    sync_client = httpx.Client(
+    sync_client = ThrottledClient(
+        throttle_wait_s=settings.throttle_wait_s,
         timeout=settings.request_timeout_s,
         event_hooks=recorder.sync_hooks() if recorder else None,
     )
-    async_client = httpx.AsyncClient(
+    async_client = ThrottledAsyncClient(
+        throttle_wait_s=settings.throttle_wait_s,
         timeout=settings.request_timeout_s,
         event_hooks=recorder.async_hooks() if recorder else None,
     )
@@ -110,6 +120,22 @@ def _count_usage(messages: list) -> tuple[int, int, int]:
     return requests, prompt, completion
 
 
+def _model_is_called_next(state: dict) -> bool:
+    """Say whether the graph, after reaching ``state``, goes on to call the model.
+
+    It does unless the last message is the model's answer with no tool calls, which ends the
+    pass. The time limit is only enforced when it would stop a model call, so a pass that is
+    already ending is not reported as stopped by it.
+    """
+    messages = state.get("messages") or []
+    if not messages:
+        return True
+    last = messages[-1]
+    if getattr(last, "type", "") != "ai":
+        return True
+    return bool(getattr(last, "tool_calls", None))
+
+
 class LangGraphAgent:
     """LangChain's tool-calling graph with a loop that re-runs the checks."""
 
@@ -123,34 +149,55 @@ class LangGraphAgent:
         client: ModelClient,
         step_budget: int = 80,
     ) -> AgentResult:
-        """Run up to ``MAX_PASSES`` passes of the graph, each limited to ``step_budget`` steps."""
+        """Run up to ``MAX_PASSES`` passes of the graph, each limited to ``step_budget`` steps.
+
+        The graph is streamed state by state. Between states the time limit in ``settings`` is
+        checked, so a run past its limit stops before its next model call. A failure of the
+        model service or the framework ends the run, and the result holds the error with the
+        counts of the requests that were made before it.
+        """
         try:
             from langgraph.errors import GraphRecursionError
         except ImportError as exc:
             raise AgentUnavailable(f"the langgraph agent needs langgraph; {INSTALL_HINT}") from exc
         work_dir = Path(work_dir)
+        deadline = Deadline(settings.time_limit_s)
         recorder = LatencyRecorder()
         agent = build_agent(work_dir, settings, recorder)
 
         messages: list = [{"role": "user", "content": task}]
         notes = ""
+        error = ""
         finished = False
+        time_limit_reached = False
         passes = 0
         for passes in range(1, MAX_PASSES + 1):
             state: dict = {"messages": messages}
             try:
-                # Streaming the full state keeps the messages even if the step limit is hit.
-                for state in agent.stream(  # noqa: B007 - the last state is used below
+                stream = agent.stream(
                     {"messages": messages},
                     config={"recursion_limit": step_budget},
                     stream_mode="values",
-                ):
-                    pass
+                )
+                # Streaming the full state keeps the messages even if the step limit is hit.
+                with contextlib.closing(stream):
+                    for state in stream:  # noqa: B007 - the last state is used below
+                        if deadline.expired() and _model_is_called_next(state):
+                            time_limit_reached = True
+                            break
             except GraphRecursionError:
                 messages = list(state["messages"])
                 notes = "stopped: a pass reached the step limit"
                 break
+            except Exception as exc:  # a failed model service must not hide the counts
+                messages = list(state["messages"])
+                error = f"{type(exc).__name__}: {exc}"
+                log.warning("langgraph agent stopped: %s", error)
+                break
             messages = list(state["messages"])
+            if time_limit_reached:
+                log.warning("pass %d: the time limit has passed; stopping the agent", passes)
+                break
             passed, output = tools.run_check(work_dir)
             if passed:
                 finished = True
@@ -175,4 +222,6 @@ class LangGraphAgent:
             completion_tokens=completion,
             latencies_s=list(recorder.latencies_s),
             notes=notes,
+            time_limit_reached=time_limit_reached,
+            error=error,
         )

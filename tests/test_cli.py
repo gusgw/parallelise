@@ -1,6 +1,8 @@
 """Tests for the command line: exit codes, messages, and the run flow with stand-in parts."""
 
 import json
+import re
+import time
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -8,6 +10,7 @@ import pytest
 
 from parallelise import cli
 from parallelise.agents.base import AgentResult
+from parallelise.model import CallRecord
 from parallelise.results import ResultsStore
 
 GOOD = (
@@ -84,6 +87,7 @@ def test_missing_work_folder_and_csv(tmp_path, capsys):
 
 class FakeAgent:
     name = "basic"
+    seen: dict = {}
 
     def __init__(self, behaviour, routine="integrate"):
         self.behaviour = behaviour
@@ -91,15 +95,29 @@ class FakeAgent:
 
     def run(self, work_dir, task, settings, client, step_budget=80):
         assert "make check" in task and f"{self.routine}.h" in task
+        FakeAgent.seen = {"settings": settings, "step_budget": step_budget}
         if self.behaviour == "crash":
             raise RuntimeError("boom")
-        return AgentResult(
+        if self.behaviour == "crash-after-calls":
+            client.calls.append(CallRecord(1.0, 100, 20, "ok"))
+            client.calls.append(CallRecord(3.0, 100, 20, "ok"))
+            raise RuntimeError("boom")
+        if self.behaviour == "slow":
+            time.sleep(0.15)
+        result = AgentResult(
             finished=True, steps=4, requests=3, prompt_tokens=300,
             completion_tokens=60, latencies_s=[1.0, 2.0, 3.0], notes="used the notebook tool",
         )
+        if self.behaviour == "time-limit":
+            result.finished, result.time_limit_reached = False, True
+        if self.behaviour == "error-result":
+            result.finished, result.error = False, "ModelHTTPError: status 429"
+        return result
 
 
-def install_fakes(monkeypatch, tmp_path, behaviour="ok", check_pass=True, routine="integrate"):
+def install_fakes(
+    monkeypatch, tmp_path, behaviour="ok", check_pass=True, routine="integrate", check_delay=0.0
+):
     problems = tmp_path / "problems" / "integrate"
     problems.mkdir(parents=True)
     calls = {}
@@ -113,6 +131,7 @@ def install_fakes(monkeypatch, tmp_path, behaviour="ok", check_pass=True, routin
 
     def run_check(work_dir, problem_dir, backend, timeout_s=300, speedup_floor=None):
         calls["checked"] = (Path(work_dir), Path(problem_dir), backend)
+        time.sleep(check_delay)
         return SimpleNamespace(
             passed=check_pass,
             failure_stage="none" if check_pass else "benchmark",
@@ -191,11 +210,94 @@ def test_masked_run_is_checked_against_the_masked_problem(monkeypatch, tmp_path)
     assert calls["required"][0] == masked_dir
 
 
-def test_run_agent_crash_is_recorded_as_agent_error(monkeypatch, tmp_path):
-    install_fakes(monkeypatch, tmp_path, behaviour="crash")
+def test_run_agent_crash_is_still_checked_and_both_are_recorded(monkeypatch, tmp_path):
+    calls = install_fakes(monkeypatch, tmp_path, behaviour="crash", check_pass=False)
     assert cli.main(run_args(tmp_path)) == 1
     (record,) = ResultsStore(tmp_path / "runs.jsonl").load()
-    assert record.failure_stage == "agent-error" and "RuntimeError: boom" in record.notes
+    assert "checked" in calls, "an agent crash must not skip the check"
+    assert record.result == "FAIL" and record.failure_stage == "benchmark"  # the check's stage
+    assert "RuntimeError: boom" in record.notes
+    assert (calls["assembled"][2] / "check.log").read_text() == "check log text"
+
+
+def test_run_whatever_is_on_disk_after_a_crash_can_still_pass(monkeypatch, tmp_path):
+    install_fakes(monkeypatch, tmp_path, behaviour="crash", check_pass=True)
+    assert cli.main(run_args(tmp_path)) == 0
+    (record,) = ResultsStore(tmp_path / "runs.jsonl").load()
+    assert record.result == "PASS" and record.failure_stage == "none"
+    assert "RuntimeError: boom" in record.notes
+
+
+def test_run_error_reported_in_the_result_is_noted_and_checked(monkeypatch, tmp_path):
+    calls = install_fakes(monkeypatch, tmp_path, behaviour="error-result", check_pass=False)
+    assert cli.main(run_args(tmp_path)) == 1
+    (record,) = ResultsStore(tmp_path / "runs.jsonl").load()
+    assert "checked" in calls and record.failure_stage == "benchmark"
+    assert "ModelHTTPError: status 429" in record.notes
+    assert "step budget" not in record.notes  # the error, not the budget, ended the run
+    assert (record.requests, record.prompt_tokens) == (3, 300)  # what the agent counted is kept
+
+
+def test_run_keeps_the_usage_the_client_recorded_when_the_agent_crashes(monkeypatch, tmp_path):
+    install_fakes(monkeypatch, tmp_path, behaviour="crash-after-calls")
+    cli.main(run_args(tmp_path))
+    (record,) = ResultsStore(tmp_path / "runs.jsonl").load()
+    assert (record.requests, record.prompt_tokens, record.completion_tokens) == (2, 200, 40)
+    assert record.latency_mean_s == 2.0 and record.tokens_per_second == 10.0
+
+
+def test_run_time_limit_stop_is_noted_and_the_check_decides_the_stage(monkeypatch, tmp_path):
+    install_fakes(monkeypatch, tmp_path, behaviour="time-limit", check_pass=False)
+    assert cli.main([*run_args(tmp_path), "--time-limit", "90"]) == 1
+    (record,) = ResultsStore(tmp_path / "runs.jsonl").load()
+    assert record.failure_stage == "benchmark"  # the check's stage, not a stage of its own
+    assert "The time limit of 90 seconds stopped the agent." in record.notes
+    assert record.time_limit_s == 90
+    assert "step budget" not in record.notes
+
+
+def test_run_time_limit_comes_from_the_option_then_the_environment(monkeypatch, tmp_path):
+    install_fakes(monkeypatch, tmp_path)
+    cli.main(run_args(tmp_path))
+    assert FakeAgent.seen["settings"].time_limit_s == 1800  # the default
+    monkeypatch.setenv("PARALLELISE_TIME_LIMIT", "700")
+    cli.main([*run_args(tmp_path), "--force"])
+    assert FakeAgent.seen["settings"].time_limit_s == 700
+    cli.main([*run_args(tmp_path), "--force", "--time-limit", "45"])
+    assert FakeAgent.seen["settings"].time_limit_s == 45
+
+
+def test_run_records_the_agent_time_and_the_check_time_separately(monkeypatch, tmp_path):
+    install_fakes(monkeypatch, tmp_path, behaviour="slow", check_delay=0.3)
+    cli.main(run_args(tmp_path))
+    (record,) = ResultsStore(tmp_path / "runs.jsonl").load()
+    assert 0.15 <= record.agent_time_s < 0.3
+    assert 0.3 <= record.check_time_s < 0.6
+    assert record.wall_time_s >= record.agent_time_s + record.check_time_s - 0.02
+
+
+def test_run_record_carries_the_settings_and_the_environment(monkeypatch, tmp_path):
+    import parallelise
+
+    install_fakes(monkeypatch, tmp_path)
+    monkeypatch.setenv("PARALLELISE_TEMPERATURE", "0.5")
+    cli.main([*run_args(tmp_path), "--step-budget", "7"])
+    (record,) = ResultsStore(tmp_path / "runs.jsonl").load()
+    assert record.temperature == 0.5
+    assert record.step_budget == 7 and FakeAgent.seen["step_budget"] == 7
+    assert record.time_limit_s == 1800
+    assert record.package_version == parallelise.__version__
+    assert re.fullmatch(r"[0-9a-f]{12}", record.source_hash)
+    assert record.cpu_count and record.cpu_count >= 1
+    assert re.fullmatch(r"\d+\.\d+.*", record.framework_versions["httpx"])
+    assert set(record.framework_versions) <= {
+        "httpx", "httpx2", "pydantic-ai", "langgraph", "langchain", "langchain-openai", "openai"}
+
+
+def test_run_step_budget_must_be_a_whole_number_of_one_or_more(monkeypatch, tmp_path, capsys):
+    install_fakes(monkeypatch, tmp_path)
+    assert cli.main([*run_args(tmp_path), "--step-budget", "0"]) == 1
+    assert "step budget" in capsys.readouterr().err
 
 
 def test_run_unknown_problem(monkeypatch, tmp_path, capsys):

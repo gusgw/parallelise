@@ -299,7 +299,7 @@ def test_problem_without_a_known_good_test_cannot_be_checked(tmp_path):
 
 
 def test_unknown_backend_is_refused_plainly(tmp_path):
-    with pytest.raises(AssembleError, match="unknown backend"):
+    with pytest.raises(AssembleError, match="is not one of"):
         run_check(folder(tmp_path), FIXTURE, "fortran")
 
 

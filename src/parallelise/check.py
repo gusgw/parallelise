@@ -82,6 +82,7 @@ from parallelise.bench_check import (
     check_gpu_table,
 )
 from parallelise.config import without_secrets
+from parallelise.errors import CheckError
 
 log = logging.getLogger("parallelise.check")
 
@@ -136,7 +137,9 @@ def require_reference_test(problem_dir: Path, backend: str) -> Path:
     """
     problem_dir = Path(problem_dir)
     if backend not in BACKENDS:
-        raise AssembleError(f"unknown backend {backend!r}; choose one of {', '.join(BACKENDS)}")
+        raise AssembleError(
+            f"The backend {backend!r} is not one of {', '.join(BACKENDS)}. Choose one of them."
+        )
     name = routine_name(problem_dir)
     path = problem_dir / backend / "reference" / unit_test_filename(name)
     if not path.is_file():
@@ -455,15 +458,35 @@ def run_check(
     first examined for broken rules, which gives the stage ``tampered`` (see the module
     description). The judging folder is deleted if the check passes and kept as ``check-fail``
     in the work folder if it fails. Raises ``AssembleError`` if the problem folder cannot
-    be used, for example when it lacks the known-good test.
+    be used, for example when it lacks the known-good test, and ``CheckError`` if the check
+    cannot run at all, as when the computer will not let it make a temporary folder. A
+    routine that fails the check is a result, not an error.
 
     The speed-up floor normally comes from the problem's Makefile. When ``speedup_floor``
     is given, the benchmark table is checked against it as well, so a stricter floor than
     the Makefile's takes effect (a looser one cannot, because the Makefile's own check
     runs first).
     """
-    work_dir = Path(work_dir).resolve()
-    problem_dir = Path(problem_dir).resolve()
+    try:
+        return _run_check(Path(work_dir), Path(problem_dir), backend, timeout_s, speedup_floor)
+    except OSError as exc:
+        raise CheckError(
+            f"The check could not run in {work_dir} ({exc.strerror or exc}). Free the disk "
+            "space or fix the permissions, then judge the work folder again with "
+            "'parallelise check'."
+        ) from exc
+
+
+def _run_check(
+    work_dir: Path,
+    problem_dir: Path,
+    backend: str,
+    timeout_s: int,
+    speedup_floor: float | None,
+) -> CheckResult:
+    """Do the work of ``run_check``; an operating-system error escapes to its caller."""
+    work_dir = work_dir.resolve()
+    problem_dir = problem_dir.resolve()
     name = routine_name(problem_dir)
     require_reference_test(problem_dir, backend)
     record: list[str] = []

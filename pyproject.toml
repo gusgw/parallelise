@@ -15,14 +15,20 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-# the two framework-based agent designs; the plain httpx agent needs nothing extra
+# The two framework-based agent designs; the plain httpx agent needs nothing extra. These are
+# pinned to exact versions, the ones the tests were run with, because a new release of a
+# framework can change how an agent behaves and so what a run measures. The container image
+# installs from this file, so the pins apply there too. To upgrade, change the versions
+# together, run the whole test suite, and record the change. httpx2 is the HTTP library that
+# Pydantic AI and the OpenAI library use, and that the Pydantic AI agent uses directly.
 agents = [
-    "pydantic-ai>=1.0",
-    "openai>=1.50",
-    "langgraph>=1.0",
-    "langchain>=1.0",
-    "langchain-openai>=1.0",
-    "langchain-core>=1.0",
+    "pydantic-ai==2.55.0",
+    "openai==3.29.0",
+    "httpx2==2.13.1",
+    "langgraph==1.2.14",
+    "langchain==1.4.4",
+    "langchain-openai==1.7.1",
+    "langchain-core==1.6.10",
 ]
 # the report generator's chart
 report = ["matplotlib>=3.8"]
@@ -42,6 +48,11 @@ markers = [
     "slow: builds and runs C code; needs gcc with OpenMP",
     "mpi: needs mpicc and mpirun",
     "cuda: needs nvcc and a GPU",
+]
+# A notice from Pydantic AI that something we use will be removed in its version 3 is an error
+# in the tests, so that it is dealt with when it first appears.
+filterwarnings = [
+    "error:.*removed in v3.*:UserWarning",
 ]
 
 [tool.mypy]

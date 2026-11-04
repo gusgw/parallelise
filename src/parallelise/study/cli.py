@@ -22,7 +22,7 @@ def cmd_mask(args: argparse.Namespace) -> int:
     """Write a copy of a problem with the algorithm's name and hints removed."""
     mask = lazy_import("study.mask")
     problem_dir = resolve_problem(args.problem, args.problems_dir)
-    report = mask.mask_problem(problem_dir, Path(args.dest), args.alias)
+    report = mask.mask_problem(problem_dir, Path(args.dest), args.alias, force=args.force)
     print(f"Masked {problem_dir.name} as {args.alias!r} in {args.dest}.")
     substitutions = getattr(report, "substitutions", None)
     if substitutions is not None:
@@ -43,12 +43,28 @@ def cmd_report(args: argparse.Namespace) -> int:
     prices = report.load_prices(args.prices) if args.prices else None
     print(report.build_tables(records, prices=prices))
     if args.chart:
-        report.build_chart(records, Path(args.chart))
+        _draw(report.build_chart, records, args.chart)
         print(f"Chart written to {args.chart}.")
     if args.masked_chart:
-        report.build_comparison_chart(records, Path(args.masked_chart))
+        _draw(report.build_comparison_chart, records, args.masked_chart)
         print(f"Masked-against-unmasked chart written to {args.masked_chart}.")
     return 0
+
+
+def _draw(build: Callable[..., Path], records: list[Any], dest: str) -> None:
+    """Draw one chart, turning a missing library or an unwritable file into a plain error."""
+    try:
+        build(records, Path(dest))
+    except ImportError as exc:
+        raise ParalleliseError(
+            "The charts need the Python package matplotlib, which is not installed. Install "
+            "it with: pip install 'parallelise[report]'."
+        ) from exc
+    except OSError as exc:
+        raise ParalleliseError(
+            f"The chart {dest} could not be written ({exc.strerror or exc}). Check the path and "
+            "its permissions."
+        ) from exc
 
 
 def _old_name(new_form: str, func: Callable[[argparse.Namespace], int]) -> Callable[
@@ -80,7 +96,10 @@ def _add_mask(sub: argparse._SubParsersAction[HelpParser],
     )
     p.add_argument("problem", help=PROBLEM_HELP)
     p.add_argument("alias", help="the neutral name to use instead, such as problem_a")
-    p.add_argument("dest", help="the folder to write the masked copy into")
+    p.add_argument("dest", help="the folder to write the masked copy into; it must not exist "
+                                "or must be empty, unless --force is given")
+    p.add_argument("--force", action="store_true",
+                   help="delete what is in the destination folder first, instead of refusing")
     p.set_defaults(func=func)
 
 

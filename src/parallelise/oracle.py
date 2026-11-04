@@ -162,6 +162,19 @@ def run_notebook(notebook: Path, timeout_s: float = DEFAULT_TIMEOUT_S) -> dict[s
     notebook = Path(notebook)
     if not notebook.is_file():
         raise OracleError(f"The notebook {notebook} does not exist. Check the path.")
+    try:
+        parsed = json.loads(notebook.read_text(encoding="utf-8"))
+        if not isinstance(parsed, dict):
+            raise ValueError("its top level is not an object")
+    except OSError as exc:
+        raise OracleError(
+            f"The notebook {notebook} cannot be read ({exc.strerror or exc}). Check the path."
+        ) from exc
+    except ValueError as exc:
+        raise OracleError(
+            f"The file {notebook.name} is not a Jupyter notebook ({exc}). Give the path of an "
+            ".ipynb file."
+        ) from exc
     with tempfile.TemporaryDirectory(prefix="oracle-") as tmp:
         out = Path(tmp) / "oracle.json"
         command = [sys.executable, "-c", _RUNNER, str(notebook.resolve()), str(out)]
@@ -379,8 +392,14 @@ def write_reference(oracle: Oracle, dest: Path) -> tuple[Path, Path]:
     dest = Path(dest)
     json_text = render_json(oracle)
     header_text = render_header(oracle)
-    dest.mkdir(parents=True, exist_ok=True)
     json_path, header_path = dest / "reference.json", dest / "reference.h"
-    _write_atomic(json_path, json_text)
-    _write_atomic(header_path, header_text)
+    try:
+        dest.mkdir(parents=True, exist_ok=True)
+        _write_atomic(json_path, json_text)
+        _write_atomic(header_path, header_text)
+    except OSError as exc:
+        raise OracleError(
+            f"The reference files cannot be written to {dest} ({exc.strerror or exc}). Choose "
+            "another folder with --out, or check its permissions."
+        ) from exc
     return json_path, header_path

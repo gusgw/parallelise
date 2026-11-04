@@ -4,7 +4,11 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+import pytest
+
 from parallelise.cli import main
+from parallelise.errors import ResultsError
+from parallelise.results import ResultsStore, RunRecord
 from parallelise.study.report import (
     build_chart,
     build_comparison_chart,
@@ -137,3 +141,44 @@ def test_report_command_takes_store_and_prices(tmp_path: Path, capsys) -> None:
     out = capsys.readouterr().out
     assert "Serving" in out and "Cost (US dollars)" in out
     assert chart.exists()
+
+
+def test_tables_ignore_the_fields_added_to_records_later() -> None:
+    newer = RunRecord(
+        problem="integrate", backend="openmp", model="m1", agent="basic", result="PASS",
+        requests=10, prompt_tokens=1000, completion_tokens=500, wall_time_s=60.0,
+        latency_mean_s=2.0, tokens_per_second=50.0, temperature=0.2, step_budget=80,
+        time_limit_s=1800.0, agent_time_s=50.0, check_time_s=10.0,
+        framework_versions={"httpx": "0.28.1"}, cpu_count=12, package_version="0.1.0",
+        source_hash="0123456789ab",
+    )
+    older = make(problem="matmul", model="m1")  # a dictionary with only the original fields
+    for records in ([newer], [older], [newer.to_dict(), older], [newer, older]):
+        text = build_tables(records)
+        assert "### Passes by model and backend" in text
+    assert "Serving" in build_tables([newer, older])
+
+
+def test_report_command_reads_a_store_of_new_records(tmp_path: Path, capsys) -> None:
+    store = ResultsStore(tmp_path / "runs.jsonl")
+    store.append(RunRecord(problem="a", backend="openmp", model="m", agent="basic",
+                           result="PASS", framework_versions={"openai": "3.29.0"}, cpu_count=4))
+    assert main(["study", "report", "--results", str(store.path)]) == 0
+    assert "1/1 (100%)" in capsys.readouterr().out
+
+
+def test_a_bad_timestamp_or_number_is_a_results_error() -> None:
+    with pytest.raises(ResultsError, match="yesterday"):
+        latest_cells([make(when="yesterday")])
+    with pytest.raises(ResultsError, match="requests"):
+        build_serving_table([served(requests="lots")])
+
+
+@pytest.mark.parametrize("text", [None, "{oops", "[1, 2]", '{"m": {"input": 1}}',
+                                  '{"m": {"input": "x", "output": 2}}'])
+def test_a_malformed_price_file_is_a_results_error(tmp_path: Path, text) -> None:
+    path = tmp_path / "prices.json"
+    if text is not None:
+        path.write_text(text)
+    with pytest.raises(ResultsError, match="prices.json"):
+        load_prices(path)

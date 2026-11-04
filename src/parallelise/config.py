@@ -11,6 +11,7 @@ import os
 from collections.abc import Mapping
 from dataclasses import dataclass, fields
 from typing import Any
+from urllib.parse import urlsplit
 
 from .errors import ConfigError
 
@@ -28,6 +29,8 @@ _ENV_NAMES: dict[str, tuple[str, str | None]] = {
     "temperature": ("PARALLELISE_TEMPERATURE", "MODEL_TEMPERATURE"),
     "api_key": ("PARALLELISE_API_KEY", "MODEL_API_KEY"),
     "request_timeout_s": ("PARALLELISE_TIMEOUT", None),
+    "time_limit_s": ("PARALLELISE_TIME_LIMIT", None),
+    "throttle_wait_s": ("PARALLELISE_THROTTLE_WAIT", None),
     "work_root": ("PARALLELISE_WORK_ROOT", None),
     "results_path": ("PARALLELISE_RESULTS", None),
 }
@@ -42,6 +45,11 @@ class Settings:
     temperature: float = 0.2
     api_key: str = ""
     request_timeout_s: float = 600.0
+    #: Seconds of wall-clock time an agent may spend on one run before it is stopped.
+    time_limit_s: float = 1800.0
+    #: Most seconds to spend waiting, in total, for one model request that is refused with
+    #: HTTP 429 (too many requests). Zero means do not wait.
+    throttle_wait_s: float = 120.0
     work_root: str = "work"
     results_path: str = "results/runs.jsonl"
 
@@ -54,6 +62,13 @@ class Settings:
                 f"The gateway URL {self.gateway_url!r} must start with http:// or https://. "
                 "Set PARALLELISE_GATEWAY_URL, for example to http://localhost:4000/v1."
             )
+        try:
+            urlsplit(self.gateway_url).port  # noqa: B018 - reading it checks that it is a port
+        except ValueError as exc:
+            raise ConfigError(
+                f"The gateway URL {self.gateway_url!r} is not a usable web address ({exc}). "
+                "Set PARALLELISE_GATEWAY_URL, for example to http://localhost:4000/v1."
+            ) from exc
         if not self.model:
             raise ConfigError("The model name is empty. Set PARALLELISE_MODEL or pass --model.")
         if not 0.0 <= self.temperature <= 2.0:
@@ -65,6 +80,21 @@ class Settings:
             raise ConfigError(
                 f"The request timeout {self.request_timeout_s} must be positive. "
                 "Set PARALLELISE_TIMEOUT to a number of seconds above zero."
+            )
+        if not self.time_limit_s > 0:
+            raise ConfigError(
+                f"The time limit {self.time_limit_s} must be positive. Set PARALLELISE_TIME_LIMIT "
+                "or pass --time-limit with a number of seconds above zero."
+            )
+        if not self.throttle_wait_s >= 0:
+            raise ConfigError(
+                f"The throttle wait {self.throttle_wait_s} must not be negative. Set "
+                "PARALLELISE_THROTTLE_WAIT to a number of seconds, or to 0 to never wait."
+            )
+        if not self.api_key.isascii():
+            raise ConfigError(
+                "The API key holds characters that cannot be sent in an HTTP header. Check "
+                "PARALLELISE_API_KEY: a key is made of plain letters, digits and punctuation."
             )
         return self
 
@@ -97,7 +127,7 @@ class Settings:
                 )
             if value is not None:
                 values[name] = value
-        for name in ("temperature", "request_timeout_s"):
+        for name in ("temperature", "request_timeout_s", "time_limit_s", "throttle_wait_s"):
             if name in values:
                 try:
                     values[name] = float(values[name])
