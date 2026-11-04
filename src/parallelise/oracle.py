@@ -342,12 +342,25 @@ def render_header(oracle: Oracle) -> str:
     return "\n".join(lines) + "\n"
 
 
+def _ordinary_file_mode() -> int:
+    """Return the permissions an ordinary new file gets under the current umask."""
+    mask = os.umask(0)
+    os.umask(mask)
+    return 0o666 & ~mask
+
+
 def _write_atomic(path: Path, text: str) -> None:
-    """Write through a uniquely named temporary file, so concurrent writers cannot collide."""
+    """Write through a uniquely named temporary file, so concurrent writers cannot collide.
+
+    The temporary file is created readable by its owner only; it is given ordinary
+    permissions before it replaces the target, so that other users, such as the ordinary
+    user inside a container that mounts the folder, can read it.
+    """
     fd, tmp = tempfile.mkstemp(dir=path.parent, suffix=".tmp")
     try:
         with os.fdopen(fd, "w", encoding="utf-8") as handle:
             handle.write(text)
+        os.chmod(tmp, _ordinary_file_mode())
         os.replace(tmp, path)
     except BaseException:
         try:

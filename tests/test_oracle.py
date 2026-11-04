@@ -154,3 +154,21 @@ def test_shipped_problems_regenerate_unchanged():
     oracle = extract_oracle(notebook)
     assert render_header(oracle) == (root / "integrate" / "reference.h").read_text()
     assert render_json(oracle) == (root / "integrate" / "reference.json").read_text()
+
+
+def test_written_files_have_ordinary_permissions(tmp_path):
+    """Other users must be able to read the oracle files, as a container's user does."""
+    import os as _os
+
+    from parallelise.oracle import Oracle, write_reference
+
+    oracle = Oracle(
+        source="x.ipynb", params={"N": 4}, expected={"E": 1.0}, tol=0.5
+    )
+    old_mask = _os.umask(0o022)
+    try:
+        json_path, header_path = write_reference(oracle, tmp_path)
+    finally:
+        _os.umask(old_mask)
+    for path in (json_path, header_path):
+        assert path.stat().st_mode & 0o777 == 0o644
