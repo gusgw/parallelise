@@ -116,7 +116,7 @@ the way it guards against.
    and an error at the boundary between the blocks given to neighbouring workers, none of which
    shows with one worker. A timeout catches a deadlock.
 3. **Benchmark and validation of the speed-up.** A benchmark that the agent cannot edit
-   times the kernel at several widths and the checker validates the figures. The floor is 1.5
+   times the routine at several widths and the checker validates the figures. The floor is 1.5
    times for the other problems, 1.25 for the problems limited by memory
    bandwidth (jacobi, cg, scan, decay and reservoir), and 3 times for CUDA (set in each
    problem's Makefile). The floor for CUDA is lower than it looks because double-precision arithmetic on
@@ -132,9 +132,9 @@ two parts and fails the third. A fast but wrong program fails the second.
 - Kimi's four failures on the recall-resistant problems were all programs correct with one
   worker and wrong with several: the summary passed between blocks was subtly wrong at the
   boundaries.
-- A deliberately racy histogram kernel passes with one thread and fails with eight.
+- A deliberately racy histogram routine passes with one thread and fails with eight.
 - Jacobi under MPI, the halo-exchange case, was the problem and backend combination that separated the models most. The
-  failures were a Kimi kernel that deadlocked (caught by the timeout), a Gemma compile error
+  failures were a Kimi routine that deadlocked (caught by the timeout), a Gemma compile error
   in a gathering call that it did not fix within the time limit, and a Gemma run that used
   up its request budget.
 - The reference halo-exchange solution gives an identical checksum on 1, 2, 3, 4 and 8
@@ -145,7 +145,7 @@ two parts and fails the third. A fast but wrong program fails the second.
 An early run with a looser benchmark let the LangGraph agent pass by writing its own
 benchmark output with hard-coded speed-ups of 1.0, 2.0 and 4.0. That incident produced two
 changes. The benchmark became part of the harness, owned by the harness and not the agent:
-the agent writes only the kernel and its unit test, the harness times the kernel, and the
+the agent writes only the routine and its unit test, the harness times the routine, and the
 serial baseline lives in trusted code. And the checker `bench_check` now rejects a table
 when any of these holds:
 
@@ -159,9 +159,9 @@ when any of these holds:
 - throughput is constant across widths;
 - the best speed-up is under the floor.
 
-Self-tests confirm that a correct solution passes and a serial kernel fails with "no real
+Self-tests confirm that a correct solution passes and a serial routine fails with "no real
 parallel speed-up". For CUDA, a review recorded in my project log found a second weakness: the benchmark
-computed the trusted serial answer at benchmark size and then discarded it, so a kernel with
+computed the trusted serial answer at benchmark size and then discarded it, so a routine with
 a hard-coded launch size could be correct at the small test size and wrong at the benchmark
 size. The benchmark now compares the graphics-card output with its own serial result,
 element by element for matmul and jacobi. All twelve CUDA work folders were graded again
@@ -172,9 +172,9 @@ re-grade is not in the stored records).
 
 The benchmark takes the one-worker run as the baseline. That first run also pays the
 one-time cost of the operating system preparing the pages of the large output array, which
-made even a purely serial kernel appear about 1.8 times faster on the later runs, past the
+made even a purely serial routine appear about 1.8 times faster on the later runs, past the
 1.25 floor. The fix is one untimed warm-up run before the timed runs. After it, a serial
-kernel measures about 1.0 and fails honestly, while the genuine reference solutions still
+routine measures about 1.0 and fails honestly, while the genuine reference solutions still
 show 4 to 9 times. The fix was found while validating the two newest problems and was added
 to the four newest benchmarks. Prefix sum and histogram have the same structure and were
 measured with the older form, so their pass and fail marks for correctness stand but their
@@ -186,7 +186,7 @@ comparison and the one-worker against many-worker comparison described above.
 
 ## Recall-resistant problems and the masking study
 
-The textbook kernels are heavily represented in training data. A model that passes them may
+The textbook routines are heavily represented in training data. A model that passes them may
 be recalling a known solution. Published work on programming benchmarks, which I summarised in my notes but do not cite
 here (so these three claims are unsourced in this repository), reports that scores follow
 how common a problem is in the training data, that renaming identifiers alone lowers
@@ -211,7 +211,7 @@ limit and an upper limit) that compose. The tempting shortcut of a clamped prefi
 67.7 million against the true 351.4 million on a 200,000-element sample, wrong by a factor
 of five, so a model that mistakes the problem for a prefix sum fails correctness outright.
 
-Both have neutral kernel names so that the name gives nothing away. A review of the work
+Both have neutral routine names so that the name gives nothing away. A review of the work
 found that the `decay` headers shown to the models still named the technique family. They
 were reworded to say only what is computed. The results in this repository for `decay` were
 produced with the earlier, more revealing header. Because `reservoir`'s header was always
@@ -219,7 +219,7 @@ clean, and the two problems gave similar results, the effect is probably small, 
 reword can only make the problem harder, so the separation reported is a lower bound.
 
 **The masking study** measures how much of the success on familiar problems is recall.
-`parallelise study mask` copies a problem with the kernel, files, header guards, Makefile
+`parallelise study mask` copies a problem with the routine, files, header guards, Makefile
 variables and benchmark renamed to a neutral alias, the notebook text replaced by one
 neutral sentence, code comments removed, and algorithm-naming identifiers renamed. Numbers,
 logic and the oracle are unchanged, and the report lists every substitution. A masked

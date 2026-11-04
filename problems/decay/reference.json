@@ -1,6 +1,5 @@
 {
   "source": "decay.ipynb",
-  "kernel": "decay",
   "params": {
     "N": 1000000
   },

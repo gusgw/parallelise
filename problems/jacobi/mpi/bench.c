@@ -9,7 +9,7 @@
  * grid (n = argv[1] default 1024, iters = argv[2] default 120) and print "ranks,time_s"
  * from rank 0. More sweeps => longer, steadier timing (Jacobi is memory-bandwidth-bound,
  * so its speedup is modest and noise-sensitive). bench_sweep.sh runs this at several rank
- * counts and derives the speedup, so a kernel that is not really decomposed shows none. */
+ * counts and derives the speedup, so a routine that is not really decomposed shows none. */
 int main(int argc, char **argv)
 {
     MPI_Init(&argc, &argv);

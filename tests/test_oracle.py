@@ -1,6 +1,7 @@
 """Tests for oracle extraction, validation and the reference files."""
 
 import json
+import logging
 from pathlib import Path
 
 import pytest
@@ -29,7 +30,7 @@ def make_notebook(path: Path, *cells: str) -> Path:
 GOOD = (
     "N = 1000\n"
     "terms = [1.0 / (i + 1) for i in range(N)]\n",
-    "ORACLE = {'kernel': 'harmonic', 'params': {'N': N},\n"
+    "ORACLE = {'params': {'N': N},\n"
     "          'expected': {'TOTAL': sum(terms)}, 'terms': {'TOTAL': terms}, 'tol': 1e-6}\n",
 )
 
@@ -37,7 +38,7 @@ GOOD = (
 def test_extract_and_write_reference(tmp_path):
     nb = make_notebook(tmp_path / "harmonic.ipynb", *GOOD)
     oracle = extract_oracle(nb)
-    assert oracle.kernel == "harmonic" and oracle.source == "harmonic.ipynb"
+    assert oracle.source == "harmonic.ipynb"
     assert oracle.reorder_spread["TOTAL"] >= 0
     out = tmp_path / "out"
     json_path, header_path = write_reference(oracle, out)
@@ -51,7 +52,7 @@ def test_extract_and_write_reference(tmp_path):
     assert "#define REF_TOL 1e-06" in header
     assert header[-1] == "#endif"
     data = json.loads(json_path.read_text())
-    assert list(data) == ["source", "kernel", "params", "expected", "tol", "reorder_spread"]
+    assert list(data) == ["source", "params", "expected", "tol", "reorder_spread"]
     assert data["params"] == {"N": 1000}
 
 
@@ -69,9 +70,9 @@ def test_reorder_spread_is_zero_for_exact_terms():
     assert reorder_spread([1e16, 1.0, -1e16, 1.0] * 4) > 0
 
 
-def oracle_src(params="{'N': 1}", expected="{'X': 1.0}", tol="1", kernel="'k'", extra=""):
+def oracle_src(params="{'N': 1}", expected="{'X': 1.0}", tol="1", extra=""):
     return (
-        f"ORACLE = {{'kernel': {kernel}, 'params': {params}, "
+        f"ORACLE = {{'params': {params}, "
         f"'expected': {expected}, 'tol': {tol}{extra}}}"
     )
 
@@ -80,8 +81,8 @@ def oracle_src(params="{'N': 1}", expected="{'X': 1.0}", tol="1", kernel="'k'", 
     "source, words",
     [
         ("ORACLE = 3", "dictionary"),
-        ("ORACLE = {'kernel': 'k', 'params': {'N': 1}, 'expected': {'X': 1.0}}", "'tol'"),
-        (oracle_src(kernel="''"), "kernel"),
+        ("ORACLE = {'params': {'N': 1}, 'expected': {'X': 1.0}}", "'tol'"),
+        ("ORACLE = {'expected': {'X': 1.0}, 'tol': 1}", "'params'"),
         (oracle_src(expected="{'N': 1.0}"), "repeated"),
         (oracle_src(params="{'TOL': 1}"), "repeated"),
         (oracle_src(params="{'1N': 1}"), "macro"),
@@ -99,6 +100,29 @@ def test_validation_rules(tmp_path, source, words):
     nb = make_notebook(tmp_path / "bad.ipynb", source)
     with pytest.raises(OracleError, match=words):
         extract_oracle(nb)
+
+
+def test_a_notebook_without_the_kernel_key_is_accepted(tmp_path, caplog):
+    nb = make_notebook(tmp_path / "harmonic.ipynb", *GOOD)
+    with caplog.at_level(logging.INFO, logger="parallelise.oracle"):
+        oracle = extract_oracle(nb)
+    assert oracle.params == {"N": 1000}
+    assert not hasattr(oracle, "kernel")
+    assert "no longer used" not in caplog.text
+
+
+@pytest.mark.parametrize("value", ["'harmonic'", "''", "3"])
+def test_an_old_notebook_with_the_kernel_key_is_still_accepted(tmp_path, caplog, value):
+    old_oracle = GOOD[1].replace("ORACLE = {", f"ORACLE = {{'kernel': {value}, ")
+    nb = make_notebook(tmp_path / "harmonic.ipynb", GOOD[0], old_oracle)
+    with caplog.at_level(logging.INFO, logger="parallelise.oracle"):
+        oracle = extract_oracle(nb)
+    assert oracle.params == {"N": 1000}
+    assert oracle.source == "harmonic.ipynb"
+    notices = [r for r in caplog.records if "no longer used" in r.getMessage()]
+    assert len(notices) == 1 and notices[0].levelno == logging.INFO
+    json_path, _ = write_reference(oracle, tmp_path / "out")
+    assert "kernel" not in json.loads(json_path.read_text())
 
 
 def test_missing_oracle_and_failing_cell(tmp_path):

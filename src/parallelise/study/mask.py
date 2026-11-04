@@ -8,8 +8,8 @@ A masked problem must still pass its reference check; the tests check that.
 
 What changes:
 
-- the kernel name becomes the alias in file names, header guards, function names, the
-  Makefile ``KERNEL`` variable, the benchmark and the reference solution;
+- the routine name becomes the alias in file names, header guards, function names, the
+  Makefile ``ROUTINE`` variable, the benchmark and the reference solution;
 - notebook markdown is replaced by one neutral sentence, and cell outputs are cleared;
 - comments (and Python docstrings) are removed from code cells and from C and Makefile
   sources;
@@ -75,7 +75,7 @@ class Substitution:
 class MaskReport:
     """Everything that ``mask_problem`` changed, so that the masking can be audited."""
 
-    kernel: str
+    routine: str
     alias: str
     substitutions: list[Substitution] = field(default_factory=list)
     renamed_files: list[tuple[str, str]] = field(default_factory=list)
@@ -85,7 +85,7 @@ class MaskReport:
 
     def summary(self) -> str:
         """Return a plain-text description of all changes, one per line."""
-        lines = [f"masked {self.kernel!r} as {self.alias!r}"]
+        lines = [f"masked {self.routine!r} as {self.alias!r}"]
         lines += [f"renamed file {old} to {new}" for old, new in self.renamed_files]
         lines += [
             f"{s.file}: {s.original} -> {s.replacement} ({s.count} times)"
@@ -108,12 +108,12 @@ def _match_case(sample: str, replacement: str) -> str:
 class _Renamer:
     """Decides the neutral name of an identifier and records what it changed."""
 
-    def __init__(self, kernel: str, alias: str, prefix: str) -> None:
-        self.kernel = kernel
+    def __init__(self, routine: str, alias: str, prefix: str) -> None:
+        self.routine = routine
         self.alias = alias
         self.prefix = prefix
-        self.kernel_re = re.compile(
-            r"(?<![A-Za-z0-9])" + re.escape(kernel) + r"(?![A-Za-z0-9])", re.IGNORECASE
+        self.routine_re = re.compile(
+            r"(?<![A-Za-z0-9])" + re.escape(routine) + r"(?![A-Za-z0-9])", re.IGNORECASE
         )
         self.neutral = {w: f"{prefix}{i}" for i, w in enumerate(WORD_LIST)}
         self.counts: Counter[tuple[str, str, str]] = Counter()
@@ -123,9 +123,9 @@ class _Renamer:
         if original != replacement:
             self.counts[(self.current_file, original, replacement)] += 1
 
-    def kernel_only(self, text: str) -> str:
-        """Replace only the kernel name, wherever it stands as a word or word part."""
-        return self.kernel_re.sub(
+    def routine_only(self, text: str) -> str:
+        """Replace only the routine name, wherever it stands as a word or word part."""
+        return self.routine_re.sub(
             lambda m: self._note(m.group(0), _match_case(m.group(0), self.alias)), text
         )
 
@@ -137,7 +137,7 @@ class _Renamer:
         """Return the neutral form of one identifier (or the identifier unchanged)."""
         if token.startswith(_PROTECTED_PREFIXES):
             return token
-        out = self.kernel_re.sub(lambda m: _match_case(m.group(0), self.alias), token)
+        out = self.routine_re.sub(lambda m: _match_case(m.group(0), self.alias), token)
         if words:
             pieces = []
             for part in _PARTS.findall(out):
@@ -297,7 +297,7 @@ class _PythonMasker(ast.NodeTransformer):
 
     def visit_Constant(self, node: ast.Constant) -> ast.AST:  # noqa: N802
         if isinstance(node.value, str):
-            node.value = self.renamer.kernel_only(node.value)
+            node.value = self.renamer.routine_only(node.value)
         return node
 
 
@@ -324,12 +324,12 @@ def _mask_python(sources: list[str], renamer: _Renamer, report: MaskReport) -> l
     for src, tree in zip(sources, trees, strict=True):
         if tree is None:
             report.notes.append(
-                "a code cell could not be parsed; only its kernel name and "
+                "a code cell could not be parsed; only its routine name and "
                 "whole-line comments were handled"
             )
             kept = [ln for ln in src.splitlines() if not ln.lstrip().startswith("#")]
             report.comments_removed += len(src.splitlines()) - len(kept)
-            out.append(renamer.kernel_only("\n".join(kept)))
+            out.append(renamer.routine_only("\n".join(kept)))
             continue
         masker = _PythonMasker(renamer, keep, local_args)
         new_tree = ast.fix_missing_locations(masker.visit(tree))
@@ -392,7 +392,7 @@ def mask_problem(problem_dir: Path, dest: Path, alias: str) -> MaskReport:
     """Write a masked copy of ``problem_dir`` to ``dest`` and report every change.
 
     ``alias`` must be a plain identifier that is not itself in the word list. ``dest`` is
-    emptied first if it exists. The kernel name is taken from the problem's notebook.
+    emptied first if it exists. The routine name is taken from the problem's notebook.
     """
     problem_dir, dest = Path(problem_dir), Path(dest)
     if not re.fullmatch(r"[A-Za-z][A-Za-z0-9_]*", alias):
@@ -402,10 +402,10 @@ def mask_problem(problem_dir: Path, dest: Path, alias: str) -> MaskReport:
     notebooks = sorted(problem_dir.glob("*.ipynb"))
     if len(notebooks) != 1:
         raise ValueError(f"{problem_dir} must contain exactly one notebook")
-    kernel = notebooks[0].stem
+    routine = notebooks[0].stem
 
-    renamer = _Renamer(kernel, alias, _choose_prefix(problem_dir))
-    report = MaskReport(kernel=kernel, alias=alias)
+    renamer = _Renamer(routine, alias, _choose_prefix(problem_dir))
+    report = MaskReport(routine=routine, alias=alias)
     if dest.exists():
         shutil.rmtree(dest)
     dest.mkdir(parents=True)
@@ -438,7 +438,7 @@ def mask_problem(problem_dir: Path, dest: Path, alias: str) -> MaskReport:
             text = renamer.text(text, words=False)
         else:
             removed = 0
-            text = renamer.kernel_only(text)
+            text = renamer.routine_only(text)
         report.comments_removed += removed
         target.write_text(text, encoding="utf-8")
         if os_executable(source):
@@ -446,7 +446,7 @@ def mask_problem(problem_dir: Path, dest: Path, alias: str) -> MaskReport:
 
     for (file, original, replacement), count in sorted(renamer.counts.items()):
         report.substitutions.append(Substitution(file, original, replacement, count))
-    log.info("masked %s as %s: %d substitutions", kernel, alias, len(report.substitutions))
+    log.info("masked %s as %s: %d substitutions", routine, alias, len(report.substitutions))
     return report
 
 

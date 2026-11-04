@@ -3,7 +3,7 @@
 Run from bindings/ after building:  .venv/bin/python demo_matmul_use.py
 
 Builds the notebook's matrices with numpy, multiplies them three ways -- the notebook's
-pure-Python triple loop, numpy's optimised A @ B, and the wrapped parallel C kernel --
+pure-Python triple loop, numpy's optimised A @ B, and the wrapped parallel C routine --
 and checks all three against the notebook-derived oracle checksum.
 """
 import json

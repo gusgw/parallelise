@@ -2,7 +2,7 @@
 
 The work folder is flat and self-contained. It holds everything an agent is allowed to
 read and the trusted files the check depends on: the shared test header and benchmark
-script from the package, a notebook, the oracle in C form, the kernel header with the
+script from the package, a notebook, the oracle in C form, the routine header with the
 signature to implement, the benchmark the agent cannot change, and the Makefile.
 """
 
@@ -25,7 +25,7 @@ PROBLEM_LEVEL_FILES = ("reference.h", "reference.json", "problem.h")
 #: Name of the file in the work folder that records the digests of the trusted files.
 TRUSTED_MANIFEST = ".trusted.json"
 #: Files the agent must not change. The check compares them with ``TRUSTED_MANIFEST``.
-#: The kernel header ``<name>.h`` is added to this list for each problem.
+#: The routine header ``<name>.h`` is added to this list for each problem.
 TRUSTED_FILES = (
     "bench.c", "Makefile", "testing.h", "bench_sweep.sh", "check_bench.py",
     "check_bench_cuda.py", "reference.h", "problem.h",
@@ -46,8 +46,8 @@ class AssembleError(Exception):
     """Raised when a problem folder is missing something the work folder needs."""
 
 
-def kernel_name(problem_dir: Path) -> str:
-    """Return the kernel name of a problem folder: the stem of its notebook."""
+def routine_name(problem_dir: Path) -> str:
+    """Return the routine name of a problem folder: the stem of its notebook."""
     notebooks = sorted(problem_dir.glob("*.ipynb"))
     if len(notebooks) != 1:
         raise AssembleError(
@@ -56,8 +56,8 @@ def kernel_name(problem_dir: Path) -> str:
     return notebooks[0].stem
 
 
-def kernel_filename(name: str, backend: str) -> str:
-    """Return the name of the kernel source file: .cu for CUDA, .c otherwise."""
+def routine_filename(name: str, backend: str) -> str:
+    """Return the name of the routine source file: .cu for CUDA, .c otherwise."""
     return f"{name}.cu" if backend == "cuda" else f"{name}.c"
 
 
@@ -76,7 +76,7 @@ def file_digest(path: Path) -> str:
 
 
 def trusted_file_names(name: str) -> tuple[str, ...]:
-    """Return the names of the trusted files for a kernel called ``name``."""
+    """Return the names of the trusted files for a routine called ``name``."""
     return (*TRUSTED_FILES, f"{name}.h")
 
 
@@ -98,7 +98,7 @@ def assemble_work_dir(
     """Build a flat work folder at ``dest`` and return it.
 
     ``dest`` is emptied first if it already exists. With ``include_reference`` the
-    known-good kernel and unit test are copied in too, which is how the machinery is tested
+    known-good routine and unit test are copied in too, which is how the machinery is tested
     without a model. Raises ``AssembleError`` if a required file is missing.
     """
     problem_dir, dest = Path(problem_dir), Path(dest)
@@ -107,7 +107,7 @@ def assemble_work_dir(
     backend_dir = problem_dir / backend
     if not backend_dir.is_dir():
         raise AssembleError(f"{problem_dir.name} has no {backend} backend ({backend_dir})")
-    name = kernel_name(problem_dir)
+    name = routine_name(problem_dir)
 
     if dest.exists():
         shutil.rmtree(dest)
@@ -130,7 +130,7 @@ def assemble_work_dir(
 
     if include_reference:
         reference = backend_dir / "reference"
-        for filename in (kernel_filename(name, backend), f"test_{name}.c"):
+        for filename in (routine_filename(name, backend), f"test_{name}.c"):
             source = reference / filename
             if not source.is_file():
                 raise AssembleError(f"missing reference file {source}")

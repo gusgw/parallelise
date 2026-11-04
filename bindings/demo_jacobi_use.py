@@ -3,7 +3,7 @@
 Run from bindings/ after building:  .venv/bin/python demo_jacobi_use.py
 
 Builds the notebook's initial grid, runs its pure-Python sweeps and the wrapped
-parallel C kernel, and checks both final checksums against the notebook-derived
+parallel C routine, and checks both final checksums against the notebook-derived
 oracle within its tolerance.
 """
 import json

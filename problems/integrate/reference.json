@@ -1,6 +1,5 @@
 {
   "source": "integrate.ipynb",
-  "kernel": "integrate",
   "params": {
     "A": 0.0,
     "B": 1.0,

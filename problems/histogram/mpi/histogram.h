@@ -2,7 +2,7 @@
 #define HISTOGRAM_H
 
 /* Histogram of n values x[0..n-1], all in [0, 1), into nbins equal-width bins. The
- * kernel first zeroes counts[0..nbins-1], then for each value increments
+ * routine first zeroes counts[0..nbins-1], then for each value increments
  * counts[(int)(x[i] * nbins)], clamping the bin index to nbins - 1.
  *
  * Implement THIS EXACT signature in histogram.c. It is a COLLECTIVE routine: every MPI

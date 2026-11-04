@@ -8,7 +8,7 @@
 FROM python:3.12-slim AS cpu
 
 # The compilers and the Message Passing Interface (MPI) implementation that the
-# generated C kernels are built with.
+# generated C routines are built with.
 RUN apt-get update \
     && apt-get install -y --no-install-recommends gcc make openmpi-bin libopenmpi-dev \
     && rm -rf /var/lib/apt/lists/*

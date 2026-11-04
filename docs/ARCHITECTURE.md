@@ -13,15 +13,18 @@ the only form of input the harness accepts. The oracle extractor runs the notebo
 cells in a child process and reads the dictionary named `ORACLE` that the last cell defines.
 
 The **oracle** is the notebook's own answer with a tolerance, which the C code must
-reproduce. The notebook computes the answer itself and may also hand over the terms of the
-sum behind it, so that the extractor can measure how far a correct program may legitimately
-differ by adding the terms in another order.
+reproduce. `ORACLE` holds the parameters, the expected values and the tolerance, and
+optionally the terms of a sum. The notebook computes the expected values itself, and the
+terms let the extractor measure how far a correct program may legitimately differ by adding
+them in another order.
 
 A **routine** is the one C or CUDA function that does the computation, with exactly the
 signature that the problem's header states. The agent writes it, together with a small test
-of it; the benchmark and the test both call it. (CUDA uses the word kernel for a function
-that runs on the graphics card. This note says routine for the function the agent writes
-under every backend, and uses kernel only in that CUDA sense.)
+of it; the benchmark and the test both call it. The routine, its files and the notebook are
+named after the problem folder. (CUDA uses the word kernel for a function that runs on the
+graphics card; under CUDA the routine is the function that starts such kernels. This note
+says routine for the function the agent writes under every backend, and uses kernel only in
+that CUDA sense.)
 
 A **model** is a large language model reached through the gateway by name, for example
 `kimi-k2.5`. The harness sends it the conversation and the tool definitions and receives
@@ -238,6 +241,13 @@ problems/<name>/<backend>/bench.c      the trusted benchmark (the agent never ed
 problems/<name>/<backend>/Makefile     build, check (one worker and several), benchmark
 problems/<name>/<backend>/reference/   known-good <name>.c and test_<name>.c
 ```
+
+The routine, its files and the notebook are named after the problem folder. In the folder
+`integrate`, the notebook is `integrate.ipynb`, the header is `integrate.h`, the routine is
+written in `integrate.c` (`integrate.cu` for CUDA) and its test in `test_integrate.c`. The
+header gives the name and signature of the function itself, which may be longer than the
+folder name, as in `nbody_accel` for the folder `nbody`. `ORACLE` holds the parameters, the expected values and the tolerance, and
+optionally the terms of a sum; it does not name the routine.
 
 The nine problems are integrate, matmul, jacobi, nbody, cg, scan, histogram, decay and
 reservoir. The decay header must not describe the parallelisation technique; it states

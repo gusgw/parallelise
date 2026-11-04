@@ -8,7 +8,7 @@
 /* Trusted benchmark (agents do not touch this): time one collective matmul at size n
  * (argv[1], default 1024) and print a single CSV row "ranks,time_s" from rank 0. The
  * slowest rank's wall time is used. bench_sweep.sh runs this at several rank counts and
- * derives the speedup, so a kernel that is not really decomposed shows no speedup. */
+ * derives the speedup, so a routine that is not really decomposed shows no speedup. */
 int main(int argc, char **argv)
 {
     MPI_Init(&argc, &argv);

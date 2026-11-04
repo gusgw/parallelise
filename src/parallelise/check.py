@@ -41,7 +41,7 @@ import time
 from dataclasses import dataclass
 from pathlib import Path
 
-from parallelise.assemble import TRUSTED_MANIFEST, file_digest, kernel_filename
+from parallelise.assemble import TRUSTED_MANIFEST, file_digest, routine_filename
 from parallelise.bench_check import (
     DEFAULT_CUDA_FLOOR,
     DEFAULT_FLOOR,
@@ -86,11 +86,11 @@ class _Timeout(Exception):
     pass
 
 
-def _find_kernel_name(work_dir: Path) -> str | None:
-    """Work out the kernel name from the Makefile, the notebook or the test target."""
+def _find_routine_name(work_dir: Path) -> str | None:
+    """Work out the routine name from the Makefile, the notebook or the test target."""
     makefile = work_dir / "Makefile"
     text = makefile.read_text(encoding="utf-8", errors="replace") if makefile.is_file() else ""
-    match = re.search(r"^KERNEL\s*[:?]?=\s*(\w+)", text, re.MULTILINE)
+    match = re.search(r"^ROUTINE\s*[:?]?=\s*(\w+)", text, re.MULTILINE)
     if match:
         return match.group(1)
     notebooks = sorted(work_dir.glob("*.ipynb"))
@@ -220,11 +220,11 @@ def run_check(
         record.extend(f"[check]   {line}" for line in changed)
         return result("tampered")
 
-    name = _find_kernel_name(work_dir)
+    name = _find_routine_name(work_dir)
     if name is None or not (work_dir / "Makefile").is_file():
-        record.append("[check] no Makefile or kernel name found in the work folder")
+        record.append("[check] no Makefile or routine name found in the work folder")
         return result("no-files")
-    needed = [kernel_filename(name, backend), f"test_{name}.c"]
+    needed = [routine_filename(name, backend), f"test_{name}.c"]
     missing = [f for f in needed if not (work_dir / f).is_file()]
     if missing:
         record.append("[check] missing files: " + ", ".join(missing))

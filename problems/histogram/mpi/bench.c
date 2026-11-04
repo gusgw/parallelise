@@ -9,7 +9,7 @@
  * values (argv[1], default 200000000 -- a 1.6 GB input array per rank) into nbins bins
  * (argv[2], default 256) and print a single CSV row "ranks,time_s" from rank 0. The
  * slowest rank's wall time is used. bench_sweep.sh runs this at several rank counts and
- * derives the speedup, so a kernel that is not really decomposed shows no speedup. */
+ * derives the speedup, so a routine that is not really decomposed shows no speedup. */
 int main(int argc, char **argv)
 {
     MPI_Init(&argc, &argv);

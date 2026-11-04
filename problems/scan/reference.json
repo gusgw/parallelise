@@ -1,6 +1,5 @@
 {
   "source": "scan.ipynb",
-  "kernel": "scan",
   "params": {
     "N": 1000000
   },

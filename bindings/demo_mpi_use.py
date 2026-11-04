@@ -4,7 +4,7 @@ Launch with several processes -- the only difference from the OpenMP case:
 
     mpirun -np 4 .venv/bin/python demo_mpi_use.py
 
-Importing mpi4py starts MPI; every process calls the wrapped collective kernel
+Importing mpi4py starts MPI; every process calls the wrapped collective routine
 together; each computes only its share and the combined result comes back to all of
 them. Rank 0 checks it against the notebook-derived oracle.
 """

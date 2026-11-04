@@ -9,7 +9,7 @@
  * CSV row per count:  threads,time_s,speedup,efficiency,melems_per_s
  * Array length n is argv[1] (default 134217728; the scan is memory-bandwidth-bound, so
  * a large array gives steady timing). Speedup and efficiency are relative to the
- * single-thread run, so a kernel that is not really parallel shows no speedup. */
+ * single-thread run, so a routine that is not really parallel shows no speedup. */
 int main(int argc, char **argv)
 {
     long n = (argc > 1) ? atol(argv[1]) : 134217728L;

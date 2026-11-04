@@ -1,6 +1,5 @@
 {
   "source": "reservoir.ipynb",
-  "kernel": "reservoir",
   "params": {
     "N": 1000000,
     "CAP": 20000

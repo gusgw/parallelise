@@ -9,7 +9,7 @@
  * CSV row per count:  threads,time_s,speedup,efficiency,melems_per_s
  * Value count n is argv[1] (default 200000000 -- a 1.6 GB input array), bin count
  * argv[2] (default 256). Speedup and efficiency are relative to the single-thread
- * run, so a kernel that is not really parallel shows no speedup. */
+ * run, so a routine that is not really parallel shows no speedup. */
 int main(int argc, char **argv)
 {
     long n = (argc > 1) ? atol(argv[1]) : 200000000L;

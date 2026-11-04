@@ -79,11 +79,11 @@ int main(int argc, char **argv)
     cgsolve(x, b, m, iters);
     double t_gpu = now() - t0;
 
-    /* the kernel must be RIGHT at the benchmark size, not just at the unit-test size:
+    /* the routine must be RIGHT at the benchmark size, not just at the unit-test size:
      * compare every entry against the trusted serial result. The GPU's dot products
      * legitimately sum in a different order and CG carries that difference through all
      * the iterations, so we allow a small RELATIVE disagreement (scaled by the largest
-     * entry); a kernel that skips part of the grid or never converges is off by order
+     * entry); a routine that skips part of the grid or never converges is off by order
      * one relative and fails. */
     double worst = 0.0, biggest = 0.0;
     for (long t = 0; t < m * m; t++) {

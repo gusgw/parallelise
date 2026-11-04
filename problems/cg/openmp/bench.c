@@ -10,7 +10,7 @@
  * Grid side m is argv[1] (default 1024), CG iterations argv[2] (default 100). Each
  * measurement solves the same fixed-iteration system from scratch (cgsolve starts from
  * x = 0, so no re-fill is needed). Speedup and efficiency are relative to the
- * single-thread run, so a kernel that is not really parallel shows no speedup.
+ * single-thread run, so a routine that is not really parallel shows no speedup.
  * mcells_per_s counts grid-cell updates per second: m*m*iters/time/1e6. */
 int main(int argc, char **argv)
 {

@@ -55,7 +55,7 @@ name otherwise only shows up as a failed run.
   | `failure_stage`     | Meaning |
   |---------------------|---------|
   | `none`              | The run passed. |
-  | `no-files`          | The agent did not write the kernel or the unit test. |
+  | `no-files`          | The agent did not write the routine or the unit test. |
   | `build`             | The code did not compile, or compiled with warnings, which count as errors. |
   | `test-one-worker`   | The unit test failed with a single worker. |
   | `test-many-workers` | It passed with one worker but failed with several; usually a race or a wrong partition of the work. |
@@ -158,7 +158,7 @@ For stronger isolation use a cluster network policy that allows only the gateway
 
 The GitHub Actions workflow runs the linter, the unit tests, every reference check for
 OpenMP and MPI, and a build of the CPU container image on every push. The hosted runner
-has only a few shared processor cores, so a genuinely parallel kernel often shows no
+has only a few shared processor cores, so a genuinely parallel routine often shows no
 speed-up there. The reference checks on the runner therefore prove correctness: the code
 builds with warnings treated as errors and gives the right answer at one worker and at
 several. A reference that is correct but misses the speed-up floor is reported as skipped,

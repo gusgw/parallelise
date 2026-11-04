@@ -1,27 +1,27 @@
-KERNEL  := midpoint
+ROUTINE := midpoint
 CC      ?= gcc
 CFLAGS  ?= -O2 -fopenmp -Wall -Wextra -std=c11
 LDLIBS  ?= -lm
 
-all: test_$(KERNEL) bench
+all: test_$(ROUTINE) bench
 
-$(KERNEL).o: $(KERNEL).c $(KERNEL).h
-	$(CC) $(CFLAGS) -c $(KERNEL).c -o $(KERNEL).o
+$(ROUTINE).o: $(ROUTINE).c $(ROUTINE).h
+	$(CC) $(CFLAGS) -c $(ROUTINE).c -o $(ROUTINE).o
 
-test_$(KERNEL): test_$(KERNEL).c $(KERNEL).o $(KERNEL).h reference.h testing.h
-	$(CC) $(CFLAGS) test_$(KERNEL).c $(KERNEL).o -o test_$(KERNEL) $(LDLIBS)
+test_$(ROUTINE): test_$(ROUTINE).c $(ROUTINE).o $(ROUTINE).h reference.h testing.h
+	$(CC) $(CFLAGS) test_$(ROUTINE).c $(ROUTINE).o -o test_$(ROUTINE) $(LDLIBS)
 
-bench: bench.c $(KERNEL).o $(KERNEL).h
-	$(CC) $(CFLAGS) bench.c $(KERNEL).o -o bench $(LDLIBS)
+bench: bench.c $(ROUTINE).o $(ROUTINE).h
+	$(CC) $(CFLAGS) bench.c $(ROUTINE).o -o bench $(LDLIBS)
 
 # The full check: the unit test at one thread and at many, then the benchmark check.
-check: test_$(KERNEL) bench
-	OMP_NUM_THREADS=1 ./test_$(KERNEL)
-	OMP_NUM_THREADS=$$(nproc) ./test_$(KERNEL)
+check: test_$(ROUTINE) bench
+	OMP_NUM_THREADS=1 ./test_$(ROUTINE)
+	OMP_NUM_THREADS=$$(nproc) ./test_$(ROUTINE)
 	./bench 20000000 > bench.csv
 	SPEEDUP_FLOOR=1.3 python3 check_bench.py bench.csv
 
 clean:
-	rm -f $(KERNEL).o test_$(KERNEL) bench bench.csv
+	rm -f $(ROUTINE).o test_$(ROUTINE) bench bench.csv
 
 .PHONY: all check clean

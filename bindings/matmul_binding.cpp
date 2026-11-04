@@ -1,6 +1,6 @@
-// nanobind binding for the converted matmul kernel: numpy arrays cross the boundary.
+// nanobind binding for the converted matmul routine: numpy arrays cross the boundary.
 // C = matmul(A, B) takes two n x n float64 C-contiguous arrays and returns a new one.
-// The kernel (matmul.c, OpenMP) is compiled alongside; the GIL is released so the
+// The routine (matmul.c, OpenMP) is compiled alongside; the GIL is released so the
 // OpenMP threads own the cores while Python waits.
 #include <nanobind/nanobind.h>
 #include <nanobind/ndarray.h>
@@ -35,6 +35,6 @@ static Matrix matmul_py(Matrix A, Matrix B)
 NB_MODULE(matmul_par, m)
 {
     m.def("matmul", &matmul_py, "A"_a, "B"_a,
-          "C = A @ B computed by the parallel (OpenMP) C kernel; "
+          "C = A @ B computed by the parallel (OpenMP) C routine; "
           "takes and returns n x n float64 numpy arrays.");
 }

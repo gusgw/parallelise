@@ -37,7 +37,7 @@ a registry the cluster can reach and change `image:` in the file). Then run
   capability and makes the root file system read-only. The generated code therefore cannot
   change the installed programs.
 - **`resources`** gives the scheduler the request and caps the container at the limit.
-  Four processor cores and 4 GiB of memory are enough for the OpenMP and MPI kernels; a
+  Four processor cores and 4 GiB of memory are enough for the OpenMP and MPI routines; a
   runaway program is throttled on processor time and killed if it exceeds the memory limit.
 - **Volume `work`** is an empty scratch directory mounted at `/work`, limited to 2 GiB.
   It is the only writable place. It holds the agent's work folder, temporary files and the

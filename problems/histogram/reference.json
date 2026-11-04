@@ -1,6 +1,5 @@
 {
   "source": "histogram.ipynb",
-  "kernel": "histogram",
   "params": {
     "N": 1000000,
     "NBINS": 256

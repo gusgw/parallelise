@@ -12,7 +12,7 @@ from parallelise.results import ResultsStore
 
 GOOD = (
     "N = 1000\nterms = [1.0 / (i + 1) for i in range(N)]\n",
-    "ORACLE = {'kernel': 'harmonic', 'params': {'N': N},\n"
+    "ORACLE = {'params': {'N': N},\n"
     "          'expected': {'TOTAL': sum(terms)}, 'terms': {'TOTAL': terms}, 'tol': 1e-6}\n",
 )
 
@@ -229,3 +229,4 @@ def test_mask_and_report_old_names_print_a_notice(tmp_path, capsys):
     assert "There are no run records" in capsys.readouterr().err
     assert cli.main(["mask", str(tmp_path / "x"), "problem_a", str(tmp_path / "y")]) == 1
     assert "parallelise study mask" in capsys.readouterr().err
+

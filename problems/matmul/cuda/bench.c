@@ -55,9 +55,9 @@ int main(int argc, char **argv)
     matmul(A, B, C, n);
     double t_gpu = now() - t0;
 
-    /* the kernel must be RIGHT at the benchmark size, not just at the unit-test size:
+    /* the routine must be RIGHT at the benchmark size, not just at the unit-test size:
      * compare every entry against the trusted serial result (entries are exact
-     * integers in double, so correct kernels agree exactly; garbage does not) */
+     * integers in double, so correct routines agree exactly; garbage does not) */
     double worst = 0.0;
     for (long t = 0; t < n * n; t++) {
         double d = C[t] - R[t];

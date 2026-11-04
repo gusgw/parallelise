@@ -17,11 +17,11 @@ from parallelise.model import ModelClient
 
 pytestmark = pytest.mark.skipif(shutil.which("make") is None, reason="make is not installed")
 
-MAKEFILE = "check:\n\ttest -f kernel.c\n"
+MAKEFILE = "check:\n\ttest -f routine.c\n"
 
 
 def make_work_dir(root: Path) -> Path:
-    """A work folder whose check target passes once kernel.c exists."""
+    """A work folder whose check target passes once routine.c exists."""
     (root / "Makefile").write_text(MAKEFILE)
     notebook = {"cells": [{"cell_type": "markdown", "source": "# title"}]}
     (root / "n.ipynb").write_text(json.dumps(notebook))
@@ -87,14 +87,14 @@ def test_unknown_agent_name_is_rejected():
 def test_basic_agent_runs_end_to_end(tmp_path):
     work = make_work_dir(tmp_path)
     steps = [
-        tool_call_step("write_file", {"path": "kernel.c", "content": "/* kernel */"}, 100, 20),
+        tool_call_step("write_file", {"path": "routine.c", "content": "/* routine */"}, 100, 20),
         tool_call_step("run_shell", {"command": "make check"}, 150, 10),
         finish_step("done", 200, 5),
     ]
     result, server = scripted_run(work, steps)
     assert isinstance(result, AgentResult)
     assert result.finished
-    assert (work / "kernel.c").read_text() == "/* kernel */"
+    assert (work / "routine.c").read_text() == "/* routine */"
     assert result.requests == 3 == len(server.requests)
     assert result.prompt_tokens == 450 == server.expected_prompt_tokens
     assert result.completion_tokens == 35 == server.expected_completion_tokens
@@ -102,7 +102,7 @@ def test_basic_agent_runs_end_to_end(tmp_path):
 
 
 def test_failing_checks_are_fed_back_until_the_budget_ends(tmp_path):
-    work = make_work_dir(tmp_path)  # kernel.c is never written, so the checks keep failing
+    work = make_work_dir(tmp_path)  # routine.c is never written, so the checks keep failing
     result, server = scripted_run(work, [finish_step("done", 10, 1)])
     assert not result.finished
     assert result.requests == 10

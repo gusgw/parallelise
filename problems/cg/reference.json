@@ -1,6 +1,5 @@
 {
   "source": "cg.ipynb",
-  "kernel": "cg",
   "params": {
     "M": 64,
     "ITERS": 100

@@ -67,9 +67,9 @@ int main(int argc, char **argv)
     nbody_accel(px, py, ax, ay, n);
     double t_gpu = now() - t0;
 
-    /* the kernel must be RIGHT at the benchmark size, not just at the unit-test size:
+    /* the routine must be RIGHT at the benchmark size, not just at the unit-test size:
      * compare every acceleration against the trusted serial result (each is a plain sum
-     * of ~n bounded terms in the same order, so correct kernels agree to ~1e-9 even
+     * of ~n bounded terms in the same order, so correct routines agree to ~1e-9 even
      * with FMA contraction on the device; garbage does not) */
     double worst = 0.0;
     for (long i = 0; i < n; i++) {

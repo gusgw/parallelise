@@ -8,7 +8,7 @@
 /* Trusted benchmark (agents do not touch this). Sweeps thread counts and prints one
  * CSV row per count:  threads,time_s,speedup,efficiency,gflops
  * Matrix size n is argv[1] (default 1024). Speedup and efficiency are relative to the
- * single-thread run, so a kernel that is not really parallel shows no speedup. */
+ * single-thread run, so a routine that is not really parallel shows no speedup. */
 int main(int argc, char **argv)
 {
     long n = (argc > 1) ? atol(argv[1]) : 1024L;

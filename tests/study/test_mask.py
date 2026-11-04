@@ -60,7 +60,7 @@ def test_no_trace_of_the_original_name_or_comments(masked):
             assert "//" not in text and "/*" not in text, path
         if path.name == "Makefile":
             assert "#" not in text, path
-    assert "KERNEL  := problem_a" in (dest / "openmp/Makefile").read_text()
+    assert "ROUTINE := problem_a" in (dest / "openmp/Makefile").read_text()
     assert "#ifndef PROBLEM_A_H" in (dest / "openmp/problem_a.h").read_text()
 
 
@@ -81,8 +81,6 @@ def test_notebook_markdown_and_oracle(masked):
     assert "".join(markdown[0]["source"]) == NEUTRAL_SENTENCE
     original = run_notebook_oracle(FIXTURE / "midpoint.ipynb")
     after = run_notebook_oracle(dest / "problem_a.ipynb")
-    assert after.pop("kernel") == ALIAS
-    assert original.pop("kernel") == "midpoint"
     assert after == original  # numbers, parameters and tolerance are unchanged
 
 
@@ -100,7 +98,7 @@ def test_library_names_survive(masked):
 
 def test_report_lists_substitutions(masked):
     _, report = masked
-    assert report.kernel == "midpoint" and report.alias == ALIAS
+    assert report.routine == "midpoint" and report.alias == ALIAS
     assert report.comments_removed > 0 and report.markdown_cells_replaced == 1
     text = report.summary()
     assert "midpoint -> problem_a" in text

@@ -8,7 +8,7 @@
 /* Trusted benchmark (agents do not touch this): time one collective reservoir at length
  * n (argv[1], default 134217728) and print a single CSV row "ranks,time_s" from rank 0.
  * The slowest rank's wall time is used. bench_sweep.sh runs this at several rank counts
- * and derives the speedup, so a kernel that is not really decomposed shows no speedup. */
+ * and derives the speedup, so a routine that is not really decomposed shows no speedup. */
 int main(int argc, char **argv)
 {
     MPI_Init(&argc, &argv);
@@ -23,7 +23,7 @@ int main(int argc, char **argv)
     for (long i = 0; i < n; i++) a[i] = change_of(i);
 
     /* one untimed warm-up run so first-write page faults on out are paid before timing;
-     * otherwise a purely serial kernel would show a false speed-up. */
+     * otherwise a purely serial routine would show a false speed-up. */
     reservoir(a, out, n);
 
     MPI_Barrier(MPI_COMM_WORLD);

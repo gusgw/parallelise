@@ -45,7 +45,7 @@ unit test must match the oracle at one worker and at several, and the benchmark 
 speed-up. This campaign's check also has a new first step that checks the trusted files, described
 below. Every record carries the request count, the prompt and completion tokens, the wall time,
 the mean latency per call and the completion tokens per second. Per-run files (the check log, the
-kernel and test the agent wrote, and the digests taken at assembly) are under
+routine and test the agent wrote, and the digests taken at assembly) are under
 `results/campaign-2026-10/runs/`, and the log of each run is under `results/campaign-2026-10/logs/`.
 The records were not edited.
 
@@ -242,8 +242,8 @@ completed normally. No run of any model met an access or account error.
   are needed to put error bars on it.
 - **The masking is incomplete.** The tool deliberately leaves library call names, such as
   `MPI_Scan`, `MPI_Exscan` and `omp_` functions, because the model needs them to write
-  correct code. Of the 12 masked MPI runs of scan, 8 kernels call `MPI_Scan` or
-  `MPI_Exscan` (5 of them `MPI_Exscan`; counted by searching the kernel files). A model that
+  correct code. Of the 12 masked MPI runs of scan, 8 routines call `MPI_Scan` or
+  `MPI_Exscan` (5 of them `MPI_Exscan`; counted by searching the routine files). A model that
   sees `MPI_Exscan` named in the task or recalls it from a prefix-sum pattern is still
   helped. The measured drop is therefore a lower bound on the recall component.
 - **A different Sonnet.** This campaign used Claude Sonnet 4.5 and July used Claude Sonnet

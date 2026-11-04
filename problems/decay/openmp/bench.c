@@ -8,7 +8,7 @@
 /* Trusted benchmark (agents do not touch this). Sweeps thread counts and prints one
  * CSV row per count:  threads,time_s,speedup,efficiency,melems_per_s
  * Array length n is argv[1] (default 134217728). Speedup and efficiency are relative to
- * the single-thread run, so a kernel that is not really parallel shows no speedup. */
+ * the single-thread run, so a routine that is not really parallel shows no speedup. */
 int main(int argc, char **argv)
 {
     long n = (argc > 1) ? atol(argv[1]) : 134217728L;
@@ -19,7 +19,7 @@ int main(int argc, char **argv)
 
     /* one untimed warm-up run so the first-write page faults on out are paid before the
      * timed sweep begins; otherwise the single-thread baseline is charged for them and a
-     * purely serial kernel shows a false speed-up on the later (warm) runs. */
+     * purely serial routine shows a false speed-up on the later (warm) runs. */
     decay(w, out, n);
 
     int maxt = omp_get_max_threads();

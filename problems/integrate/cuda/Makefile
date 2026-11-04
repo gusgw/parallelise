@@ -1,32 +1,32 @@
-KERNEL  := integrate
+ROUTINE := integrate
 NVCC    ?= /opt/cuda/bin/nvcc
 NVFLAGS ?= -O2 -Xcompiler -Wall,-Wextra,-Werror
 LDLIBS  ?= -lm
 BENCH_N ?= 200000000
 
-all: test_$(KERNEL) bench
+all: test_$(ROUTINE) bench
 
-$(KERNEL).o: $(KERNEL).cu $(KERNEL).h
-	$(NVCC) $(NVFLAGS) -c $(KERNEL).cu -o $(KERNEL).o
+$(ROUTINE).o: $(ROUTINE).cu $(ROUTINE).h
+	$(NVCC) $(NVFLAGS) -c $(ROUTINE).cu -o $(ROUTINE).o
 
-test_$(KERNEL): test_$(KERNEL).c $(KERNEL).o $(KERNEL).h reference.h testing.h
-	$(NVCC) $(NVFLAGS) test_$(KERNEL).c $(KERNEL).o -o test_$(KERNEL) $(LDLIBS)
+test_$(ROUTINE): test_$(ROUTINE).c $(ROUTINE).o $(ROUTINE).h reference.h testing.h
+	$(NVCC) $(NVFLAGS) test_$(ROUTINE).c $(ROUTINE).o -o test_$(ROUTINE) $(LDLIBS)
 
-bench: bench.c $(KERNEL).o $(KERNEL).h
-	$(NVCC) $(NVFLAGS) bench.c $(KERNEL).o -o bench $(LDLIBS)
+bench: bench.c $(ROUTINE).o $(ROUTINE).h
+	$(NVCC) $(NVFLAGS) bench.c $(ROUTINE).o -o bench $(LDLIBS)
 
 # the full check: build + unit test (agreement with the notebook oracle) + serial-vs-GPU
-# benchmark validation (the trusted serial baseline lives in bench.c, so a kernel that
+# benchmark validation (the trusted serial baseline lives in bench.c, so a routine that
 # does not really run on the GPU cannot show the required speedup). Floor 3x: this is a
 # double-precision workload and consumer/laptop GPUs run FP64 at a small fraction of
-# their FP32 rate (measured 4.45x on an RTX 2000 Ada); a CPU-only kernel measures ~1x,
+# their FP32 rate (measured 4.45x on an RTX 2000 Ada); a CPU-only routine measures ~1x,
 # so 3x still cleanly separates real GPU execution from fake.
-check: test_$(KERNEL) bench
-	./test_$(KERNEL)
+check: test_$(ROUTINE) bench
+	./test_$(ROUTINE)
 	./bench $(BENCH_N) > bench.csv
 	SPEEDUP_FLOOR=3 python3 check_bench_cuda.py bench.csv
 
 clean:
-	rm -f $(KERNEL).o test_$(KERNEL) bench bench.csv
+	rm -f $(ROUTINE).o test_$(ROUTINE) bench bench.csv
 
 .PHONY: all check clean

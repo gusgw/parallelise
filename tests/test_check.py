@@ -1,4 +1,4 @@
-"""Tests for the check, using the synthetic OpenMP fixture and deliberately broken kernels."""
+"""Tests for the check, using the synthetic OpenMP fixture and deliberately broken routines."""
 
 import json
 import shutil
@@ -32,10 +32,10 @@ pytestmark = [
 ]
 
 
-def folder(tmp_path: Path, kernel_source: str | None = None) -> Path:
+def folder(tmp_path: Path, routine_source: str | None = None) -> Path:
     work = assemble_work_dir(FIXTURE, "openmp", tmp_path / "w", include_reference=True)
-    if kernel_source is not None:
-        (work / "midpoint.c").write_text(kernel_source)
+    if routine_source is not None:
+        (work / "midpoint.c").write_text(routine_source)
     return work
 
 
@@ -59,7 +59,7 @@ def test_reference_solution_passes(tmp_path):
     assert "bench stats OK" in result.log
 
 
-def test_missing_kernel_is_no_files(tmp_path):
+def test_missing_routine_is_no_files(tmp_path):
     work = folder(tmp_path)
     (work / "midpoint.c").unlink()
     result = run_check(work, "openmp")
@@ -90,7 +90,7 @@ def test_answer_wrong_only_with_threads_fails_at_many_workers(tmp_path):
     assert result.failure_stage == "test-many-workers", result.log
 
 
-def test_serial_kernel_fails_the_benchmark(tmp_path):
+def test_serial_routine_fails_the_benchmark(tmp_path):
     reference = (FIXTURE / "openmp/reference/midpoint.c").read_text()
     serial = reference.replace("#pragma omp parallel for reduction(+ : integral_sum)\n", "")
     assert serial != reference
@@ -144,7 +144,7 @@ def test_missing_manifest_is_tampered(tmp_path):
     assert result.failure_stage == "tampered"
 
 
-def test_agent_tool_can_still_write_the_kernel(tmp_path):
+def test_agent_tool_can_still_write_the_routine(tmp_path):
     from parallelise.agents.tools import write_file
 
     work = folder(tmp_path)

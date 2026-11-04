@@ -115,8 +115,8 @@ _BACKEND_GUIDANCE = {
         "with gcc -fopenmp."
     ),
     "mpi": (
-        "Target MPI. The kernel is collective: assume MPI is already initialised in main(), "
-        "and do NOT call MPI_Init or MPI_Finalize inside the kernel. Decompose the work "
+        "Target MPI. The routine is collective: assume MPI is already initialised in main(), "
+        "and do NOT call MPI_Init or MPI_Finalize inside the routine. Decompose the work "
         "across ranks so that each rank computes only its own share (a block of loop "
         "iterations, output rows or grid rows: lo = total*rank/size, hi = "
         "total*(rank+1)/size). Then combine the shares with the right MPI operation for this "
@@ -124,24 +124,24 @@ _BACKEND_GUIDANCE = {
         "MPI_Allgather(v) when each rank produces a distinct slice of the output that must "
         "end up on all ranks; an MPI_Sendrecv halo exchange when each step needs the "
         "neighbouring ranks' boundary values. In the test, call MPI_Init in main, make every "
-        "rank call the kernel the same number of times (otherwise mpirun hangs), let only "
+        "rank call the routine the same number of times (otherwise mpirun hangs), let only "
         "rank 0 assert against reference.h within REF_TOL and print, then call "
         "MPI_Finalize. Build with mpicc and run the tests with mpirun -np 4."
     ),
     "cuda": (
-        "Target CUDA. Write the kernel in the .cu file: a __global__ grid-stride kernel "
-        "where each thread accumulates its share of the work, a shared-memory reduction "
-        "within each block, and a host function with the exact signature from the header "
-        '(declared extern "C") that launches the kernel, synchronises, checks errors '
-        "(cudaGetLastError, cudaDeviceSynchronize), combines the per-block partial results "
-        "and returns the answer. The test file is plain C, with no MPI and no OpenMP: its "
-        "main() checks the result against reference.h within REF_TOL. Build with make, which "
-        "uses nvcc. The trusted benchmark times one processor core against your GPU kernel, "
-        "and the checks require a real GPU speed-up."
+        "Target CUDA. In the .cu file write a __global__ grid-stride kernel where each "
+        "thread accumulates its share of the work, with a shared-memory reduction within "
+        "each block, and the routine itself: a host function with the exact signature from "
+        'the header (declared extern "C") that launches the kernel, synchronises, checks '
+        "errors (cudaGetLastError, cudaDeviceSynchronize), combines the per-block partial "
+        "results and returns the answer. The test file is plain C, with no MPI and no "
+        "OpenMP: its main() checks the result against reference.h within REF_TOL. Build "
+        "with make, which uses nvcc. The trusted benchmark times one processor core against "
+        "your routine running on the GPU, and the checks require a real GPU speed-up."
     ),
 }
 
-_NOT_KERNEL_HEADERS = {"reference.h", "problem.h", "testing.h"}
+_NOT_ROUTINE_HEADERS = {"reference.h", "problem.h", "testing.h"}
 
 
 def _detect_backend(work_dir: Path) -> str:
@@ -157,31 +157,31 @@ def _detect_backend(work_dir: Path) -> str:
     return "openmp"
 
 
-def _detect_kernel(work_dir: Path) -> str:
-    """Name the kernel from the one header in the work folder that is not a helper."""
+def _detect_routine(work_dir: Path) -> str:
+    """Name the routine from the one header in the work folder that is not a helper."""
     headers = sorted(
-        p.stem for p in work_dir.glob("*.h") if p.name not in _NOT_KERNEL_HEADERS
+        p.stem for p in work_dir.glob("*.h") if p.name not in _NOT_ROUTINE_HEADERS
     )
-    return headers[0] if headers else "kernel"
+    return headers[0] if headers else "routine"
 
 
 def build_system_prompt(work_dir: Path) -> str:
     """Return the instructions given to the model, identical for all three designs.
 
-    The backend and the kernel name are read from the work folder, so the caller does not
+    The backend and the routine name are read from the work folder, so the caller does not
     have to pass them separately.
     """
     backend = _detect_backend(work_dir)
-    kernel = _detect_kernel(work_dir)
-    source = kernel + (".cu" if backend == "cuda" else ".c")
+    routine = _detect_routine(work_dir)
+    source = routine + (".cu" if backend == "cuda" else ".c")
     return (
         "You convert a research Jupyter notebook that implements a numerical algorithm into "
-        "a parallel C kernel. Read the notebook with read_notebook to learn the algorithm. "
-        f"Read {kernel}.h, which gives the exact signature to implement, and reference.h, "
+        "a parallel C routine. Read the notebook with read_notebook to learn the algorithm. "
+        f"Read {routine}.h, which gives the exact signature to implement, and reference.h, "
         "which gives the expected values and REF_TOL. If problem.h is present, read it and "
         "use its shared helpers (the input fill and the checksum). Then write two files: "
-        f"{source}, the parallel kernel that implements {kernel}.h, and test_{kernel}.c, a "
-        "unit test that checks the kernel against reference.h within REF_TOL. A benchmark "
+        f"{source}, the parallel routine that implements {routine}.h, and test_{routine}.c, a "
+        "unit test that checks the routine against reference.h within REF_TOL. A benchmark "
         "(bench.c) and its driver (bench_sweep.sh) are already provided: do not write or "
         "modify them. Split the work across the parallel workers so that each does only its "
         "own share, and combine the results appropriately; never make every worker repeat "

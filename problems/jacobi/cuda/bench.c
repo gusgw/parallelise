@@ -64,9 +64,9 @@ int main(int argc, char **argv)
     jacobi(u, n, iters);
     double t_gpu = now() - t0;
 
-    /* the kernel must be RIGHT at the benchmark size, not just at the unit-test size:
+    /* the routine must be RIGHT at the benchmark size, not just at the unit-test size:
      * compare every cell against the trusted serial result (the per-cell arithmetic is
-     * identical, so correct kernels differ only by contraction noise ~1e-13; a kernel
+     * identical, so correct routines differ only by contraction noise ~1e-13; a routine
      * that skips part of the grid differs by ~1) */
     double worst = 0.0;
     for (long t = 0; t < n * n; t++) {

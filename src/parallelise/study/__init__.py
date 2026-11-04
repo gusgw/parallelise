@@ -2,7 +2,7 @@
 
 These are kept apart from the conversion path (configuration, model client, oracle,
 assembly, agents, check, results store, assessment). The conversion path turns one notebook
-into a checked kernel and records the run. The study tools are used afterwards, to prepare
+into a checked routine and records the run. The study tools are used afterwards, to prepare
 the masking experiment and to turn the stored records into tables and charts. Nothing in
 the conversion path needs this subpackage, except that `parallelise run --masked` calls the
 masking tool.

@@ -8,7 +8,7 @@
 
 /* Reference unit test (validates the harness). scan() is collective and leaves the
  * result DISTRIBUTED (each rank's own block of out is correct); the TEST gathers the
- * blocks to rank 0 -- outside the kernel, as the contract requires -- and rank 0
+ * blocks to rank 0 -- outside the routine, as the contract requires -- and rank 0
  * checks the full checksum against the oracle. */
 int main(int argc, char **argv)
 {

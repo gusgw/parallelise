@@ -1,6 +1,5 @@
 {
   "source": "nbody.ipynb",
-  "kernel": "nbody",
   "params": {
     "N": 1024
   },

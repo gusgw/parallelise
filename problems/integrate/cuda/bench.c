@@ -10,7 +10,7 @@
  *     serial,<t>,1.0
  *     gpu,<t>,<t_serial/t_gpu>
  * n is argv[1] (default 2e8). The serial baseline lives HERE, in trusted code, so the
- * agent's kernel cannot influence it. The GPU is warmed up once before timing (first
+ * agent's routine cannot influence it. The GPU is warmed up once before timing (first
  * call pays context/JIT costs). Wall time via clock_gettime(CLOCK_MONOTONIC). */
 
 static double now(void)
@@ -45,9 +45,9 @@ int main(int argc, char **argv)
     double rg = integrate(0.0, 1.0, n);
     double t_gpu = now() - t0;
 
-    /* the kernel must be RIGHT at the benchmark size, not just at the unit-test size:
+    /* the routine must be RIGHT at the benchmark size, not just at the unit-test size:
      * correct implementations differ from the trusted serial value only by summation
-     * order (~1e-12); a kernel that skips part of the range is off by far more */
+     * order (~1e-12); a routine that skips part of the range is off by far more */
     double diff = rg - rs;
     if (diff < 0) diff = -diff;
     if (diff > 1e-6) {

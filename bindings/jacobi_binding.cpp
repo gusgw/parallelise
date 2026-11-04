@@ -1,7 +1,7 @@
-// nanobind binding for the converted jacobi kernel: a numpy grid crosses the boundary.
+// nanobind binding for the converted jacobi routine: a numpy grid crosses the boundary.
 // u_final = jacobi(u, iters) takes an n x n float64 C-contiguous array and returns a
 // NEW array holding the grid after `iters` sweeps (the input is not modified). The
-// kernel (jacobi.c, OpenMP) is compiled alongside; the GIL is released while it runs.
+// routine (jacobi.c, OpenMP) is compiled alongside; the GIL is released while it runs.
 #include <nanobind/nanobind.h>
 #include <nanobind/ndarray.h>
 
@@ -38,5 +38,5 @@ NB_MODULE(jacobi_par, m)
 {
     m.def("jacobi", &jacobi_py, "u"_a, "iters"_a,
           "Run `iters` Jacobi sweeps on the n x n grid with the parallel (OpenMP) C "
-          "kernel; returns the final grid as a new array.");
+          "routine; returns the final grid as a new array.");
 }

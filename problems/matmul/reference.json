@@ -1,6 +1,5 @@
 {
   "source": "matmul.ipynb",
-  "kernel": "matmul",
   "params": {
     "N": 256
   },

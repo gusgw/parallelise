@@ -5,7 +5,7 @@ build-backend = "hatchling.build"
 [project]
 name = "parallelise"
 version = "0.1.0"
-description = "Turn a serial Python notebook into a verified parallel C kernel with a language-model agent, and measure how well different models and agent designs do it."
+description = "Turn a serial Python notebook into a verified parallel C routine with a language-model agent, and measure how well different models and agent designs do it."
 readme = "README.md"
 license = {file = "LICENSE"}
 authors = [{name = "Angus Gray-Weale", email = "gusgw@gusgw.net"}]

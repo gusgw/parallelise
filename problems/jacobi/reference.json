@@ -1,6 +1,5 @@
 {
   "source": "jacobi.ipynb",
-  "kernel": "jacobi",
   "params": {
     "N": 128,
     "ITERS": 200

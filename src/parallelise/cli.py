@@ -43,7 +43,7 @@ AGENTS = ("basic", "pydantic", "langgraph")
 
 _BACKEND_ADVICE = {
     "openmp": (
-        "Use OpenMP (shared-memory threads). The unit test is plain C and the kernel is "
+        "Use OpenMP (shared-memory threads). The unit test is plain C and the routine is "
         "built with -fopenmp."
     ),
     "mpi": (
@@ -51,7 +51,7 @@ _BACKEND_ADVICE = {
         "one and at several processes; only rank 0 may report results."
     ),
     "cuda": (
-        "Use CUDA (a graphics processor). The kernel is a .cu file built with nvcc, and the "
+        "Use CUDA (a graphics processor). The routine is a .cu file built with nvcc, and the "
         "check requires a real speed-up over one processor core."
     ),
 }
@@ -59,15 +59,15 @@ _BACKEND_ADVICE = {
 
 def build_task(name: str, backend: str) -> str:
     """Return the instructions given to the agent for a problem called `name`."""
-    kernel_file = name + (".cu" if backend == "cuda" else ".c")
+    routine_file = name + (".cu" if backend == "cuda" else ".c")
     return (
         "You convert a research Jupyter notebook that implements a numerical algorithm in "
-        f"serial Python into a parallel C kernel. Read the notebook with the notebook tool to "
+        f"serial Python into a parallel C routine. Read the notebook with the notebook tool to "
         f"learn the algorithm. Read {name}.h, which gives the exact signature to implement, "
         "and reference.h, which gives the expected values and the tolerance REF_TOL. If "
         "problem.h is present, read it and use its shared helpers. Then write two files: "
-        f"{kernel_file}, the parallel kernel implementing {name}.h, and test_{name}.c, a unit "
-        "test that checks the kernel against reference.h within REF_TOL. The benchmark "
+        f"{routine_file}, the parallel routine implementing {name}.h, and test_{name}.c, a unit "
+        "test that checks the routine against reference.h within REF_TOL. The benchmark "
         "bench.c is already provided; do not write or change it. Divide the work among the "
         "parallel workers so that each does only its share, and combine the partial results "
         "correctly; never make every worker repeat the whole computation. The build treats "
@@ -126,7 +126,7 @@ def cmd_oracle(args: argparse.Namespace) -> int:
     oracle = extract_oracle(notebook, timeout_s=args.timeout)
     dest = Path(args.out) if args.out else notebook.resolve().parent
     json_path, header_path = write_reference(oracle, dest)
-    print(f"Wrote {json_path} and {header_path} for kernel {oracle.kernel!r}.")
+    print(f"Wrote {json_path} and {header_path} from the notebook {notebook.name}.")
     return 0
 
 

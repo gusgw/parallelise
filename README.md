@@ -25,7 +25,8 @@ holding the algorithm's parameters, the answer the notebook itself computed, and
 tolerance. That answer is the **oracle**: the C program must reproduce it within the
 tolerance. The **routine** is the one C or CUDA function that does the computation, with
 exactly the signature the problem's header states. (CUDA uses the word kernel for a
-function that runs on the graphics card; this document uses routine throughout.)
+function that runs on the graphics card; the routine of a CUDA problem is the function that
+starts such kernels, and this document says routine throughout.)
 
 A **problem** is a folder holding the notebook and, for each backend it supports, a header
 with the routine's signature, a benchmark program and a Makefile. Nine problems are
@@ -149,12 +150,20 @@ shipped problems have: a header giving the routine's exact signature, a benchmar
 that builds inputs of a chosen size, calls the routine at several worker counts after an
 untimed warm-up call, and writes a timing table, and a Makefile whose `check` target builds
 the routine and the test program, runs the test with one worker and with several, runs the
-benchmark and judges its table against the problem's speed-up floor. The notebook's last
-cell defines `ORACLE` with the parameters, the expected values and the tolerance, and may
-hand over the terms of any sum so that the tolerance can be set from how far a correct
-program may legitimately differ by adding them in another order. The shipped problems are
-the models to copy; `problems/integrate` is the smallest. Generating the per-backend files
-from the notebook alone is planned and not yet done.
+benchmark and judges its table against the problem's speed-up floor.
+
+The routine, its files and the notebook are named after the problem folder. In a folder
+called `integrate`, the notebook is `integrate.ipynb`, the header is `integrate.h`, the
+routine is written in `integrate.c` (`integrate.cu` for CUDA) and its test in
+`test_integrate.c`. The header gives the name and signature of the function itself, which
+may be longer than the folder name, as in `nbody_accel` for the folder `nbody`.
+
+The notebook's last cell defines `ORACLE`. It holds the parameters, the expected values and
+the tolerance, and optionally the terms of a sum, so that the tolerance can be set from how
+far a correct program may legitimately differ by adding them in another order. It does not
+name the routine. The shipped problems are the models to copy; `problems/integrate` is the
+smallest. Generating the per-backend files from the notebook alone is planned and not yet
+done.
 
 ## Results
 

@@ -25,7 +25,7 @@ count, ``time_s``, ``speedup``, ``efficiency`` and optionally ``throughput``:
   cannot disagree with the times it is supposed to come from.
 - measured: the parallel times are not all exactly t1 divided by the width, which real
   timings never are, and the throughput, if given, changes with the width.
-- range: the best speed-up reaches the floor (a serial kernel repeated on every worker
+- range: the best speed-up reaches the floor (a serial routine repeated on every worker
   only wobbles near 1.0) and does not exceed 1.5 times the widest worker count.
 
 The CUDA table has one row for the serial baseline and one for the GPU, both timed by the
@@ -186,7 +186,7 @@ def check_cpu_table(path: str | Path, floor: float | None = None) -> BenchVerdic
 
     if best is not None and best < floor:
         reasons.append(
-            f"no real parallel speedup (best {best:.2f}x is below {floor:g}x): the kernel is "
+            f"no real parallel speedup (best {best:.2f}x is below {floor:g}x): the routine is "
             f"probably not decomposed across {unit} (serial work repeated on every worker)"
         )
     if best is not None and best > max(widths) * PLAUSIBLE_FACTOR:
@@ -233,7 +233,7 @@ def check_gpu_table(path: str | Path, floor: float | None = None) -> BenchVerdic
         )
     if su_gpu < floor:
         reasons.append(
-            f"gpu speedup {su_gpu:.2f}x is below the floor {floor:g}x: the kernel is probably "
+            f"gpu speedup {su_gpu:.2f}x is below the floor {floor:g}x: the routine is probably "
             "not really running on the GPU"
         )
     return BenchVerdict(not reasons, reasons, su_gpu)

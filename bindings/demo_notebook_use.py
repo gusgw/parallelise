@@ -2,7 +2,7 @@
 
 Compares three ways of computing the same integral:
   1. the notebook's own pure-Python midpoint loop (what the researcher had),
-  2. the parallel C kernel imported through nanobind (what the conversion produces),
+  2. the parallel C routine imported through nanobind (what the conversion produces),
 and checks both agree with the notebook-derived oracle (reference.json) within its
 tolerance. In a notebook the only change for the researcher is:
 

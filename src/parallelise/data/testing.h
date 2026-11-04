@@ -1,6 +1,6 @@
 /* testing.h — a minimal, dependency-free C unit-test harness.
  *
- * Just enough to assert and count, so the kernel under test is unit-tested without
+ * Just enough to assert and count, so the routine under test is unit-tested without
  * pulling in a framework. Include it, write CHECK / CHECK_CLOSE assertions in a
  * main(), and return TEST_SUMMARY() (non-zero exit = some test failed).
  */

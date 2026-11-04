@@ -2,7 +2,7 @@
 """Build results/runs.jsonl from the July 2026 run manifest and the saved evidence.
 
 The July study recorded each graded run as one row of a tab-separated manifest, and kept
-a short SUMMARY.txt per model and cell, plus the benchmark table and the kernel written
+a short SUMMARY.txt per model and cell, plus the benchmark table and the routine written
 by each agent. This script turns those into one structured record per manifest row, in
 the same shape that the package's ResultsStore uses, so that the report code treats the
 July runs and later runs alike.
@@ -50,8 +50,8 @@ SERVING = {
 }
 
 STAGE_NOTES = {
-    "no-files": "The agent did not write the kernel or its test.",
-    "build": "The kernel or its test failed to build with warnings treated as errors.",
+    "no-files": "The agent did not write the routine or its test.",
+    "build": "The routine or its test failed to build with warnings treated as errors.",
     "test-one-worker": "The unit test failed with a single worker.",
     "test-many-workers": "The unit test passed with one worker but failed with several.",
     "benchmark": "The benchmark failed or the speed-up was rejected.",

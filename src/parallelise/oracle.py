@@ -2,12 +2,15 @@
 
 The notebook's last code cell defines a plain dictionary named ORACLE:
 
-    ORACLE = {"kernel": "matmul",                  # name of the C function and files
-              "params": {"N": 256},                # inputs the C test must use
+    ORACLE = {"params": {"N": 256},                # inputs the C test must use
               "expected": {"CHECKSUM": checksum},  # the notebook's own computed output
               "tol": 0.5}                          # how closely the C must agree
 
-It may also carry, for any expected value, the raw terms whose sum produced it:
+The dictionary does not name the routine. The routine, its files and the notebook are all
+named after the problem folder. An older notebook may still carry a "kernel" entry; it is
+ignored, and a line in the log says so.
+
+The dictionary may also carry, for any expected value, the raw terms whose sum produced it:
 
     ORACLE = {..., "terms": {"CHECKSUM": [t0, t1, ...]}}
 
@@ -94,7 +97,6 @@ with open(out, "w", encoding="utf-8") as handle:
 class Oracle:
     """A validated oracle, plus where it came from and the measured reordering spreads."""
 
-    kernel: str
     params: dict[str, int | float]
     expected: dict[str, int | float]
     tol: float
@@ -216,11 +218,15 @@ def validate(raw: object, source: str = "the notebook") -> Oracle:
     """
     if not isinstance(raw, dict):
         raise OracleError("ORACLE must be a dictionary.")
-    for key in ("kernel", "params", "expected", "tol"):
+    for key in ("params", "expected", "tol"):
         if key not in raw:
             raise OracleError(f"ORACLE is missing the key {key!r}.")
-    if not isinstance(raw["kernel"], str) or not raw["kernel"]:
-        raise OracleError("ORACLE['kernel'] must be a non-empty string.")
+    if "kernel" in raw:
+        log.info(
+            "%s: ORACLE['kernel'] is no longer used and is ignored; the routine takes "
+            "its name from the problem folder.",
+            source,
+        )
     seen = {"TOL"}  # REF_TOL is written by this module, so no other name may clash with it
     for section in ("params", "expected"):
         entries = raw[section]
@@ -275,7 +281,6 @@ def validate(raw: object, source: str = "the notebook") -> Oracle:
                 "programs that add in a different order would fail. Raise the tolerance."
             )
     return Oracle(
-        kernel=raw["kernel"],
         params=dict(raw["params"]),
         expected=dict(raw["expected"]),
         tol=tol,
@@ -290,7 +295,7 @@ def extract_oracle(notebook: Path, timeout_s: float = DEFAULT_TIMEOUT_S) -> Orac
     notebook = Path(notebook)
     namespace = run_notebook(notebook, timeout_s)
     oracle = validate(namespace["ORACLE"], source=notebook.name)
-    log.info("extracted oracle for %r from %s", oracle.kernel, notebook)
+    log.info("extracted oracle from %s", notebook)
     return oracle
 
 
@@ -317,7 +322,6 @@ def render_json(oracle: Oracle) -> str:
     """Return the text of reference.json."""
     record = {
         "source": oracle.source,
-        "kernel": oracle.kernel,
         "params": oracle.params,
         "expected": oracle.expected,
         "tol": oracle.tol,
