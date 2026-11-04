@@ -14,19 +14,28 @@ development image and is for the CUDA backend on a machine with a graphics card.
 
     make image                                     # builds the cpu stage as parallelise:cpu
     docker run --rm parallelise:cpu health
-    docker run --rm -v "$PWD/out:/work" \
+    mkdir -p out
+    docker run --rm --user "$(id -u):$(id -g)" -v "$PWD/out:/work" \
       -e PARALLELISE_GATEWAY_URL=http://host.docker.internal:4000/v1 \
       -e PARALLELISE_MODEL=local \
+      -e PARALLELISE_RESULTS=/work/runs.jsonl \
       parallelise:cpu run integrate openmp --agent basic
 
 The image's entry point is the `parallelise` command, so everything after the image name
 is a sub-command. The work folders go to `/work`; mount a directory there if you want to
-keep them. The container's user has identifier 10001, so a mounted directory must be
-writable by it.
+keep them. Without `--user`, the container runs as its own user, which has identifier
+10001, so a mounted directory must be writable by that user, and the files written into it
+belong to it. With `--user "$(id -u):$(id -g)"` the container runs as the calling user and
+the files belong to that user; make the mounted folder yourself first, because Docker would
+otherwise make it owned by the root user. The results file is put in the mounted folder as
+well, since its default place is inside the image, where only the image's own user may
+write. `scripts/smoke-test.sh` runs the image this way where Docker is available.
 
 The settings come from environment variables: `PARALLELISE_GATEWAY_URL`,
 `PARALLELISE_MODEL`, `PARALLELISE_TEMPERATURE`, `PARALLELISE_API_KEY`,
-`PARALLELISE_TIMEOUT`, `PARALLELISE_WORK_ROOT` and `PARALLELISE_RESULTS`.
+`PARALLELISE_TIMEOUT`, `PARALLELISE_TIME_LIMIT`, `PARALLELISE_THROTTLE_WAIT`,
+`PARALLELISE_WORK_ROOT` and `PARALLELISE_RESULTS`. The framework versions that the image
+installs are the exact ones pinned in `pyproject.toml`, from which the image is installed.
 
 ## Deploying with Kubernetes
 
@@ -45,6 +54,41 @@ it offers and the round-trip time. It exits with status 1 if something is wrong,
 message says what to do next. Run it before a long batch, since a wrong address or model
 name otherwise only shows up as a failed run.
 
+## Throttling, time limits and deleting
+
+**Throttling.** A shared model service often refuses requests for a while when it is busy,
+answering with HTTP (the protocol of the web) status 429, which means too many requests.
+parallelise waits and asks again instead of giving up. The wait is the number of seconds
+in the `Retry-After` header when the answer has one; otherwise it starts at 2 seconds and
+doubles with each refusal, up to 30 seconds, and it is never less than 1 second. The waits
+for one request add up to at most `PARALLELISE_THROTTLE_WAIT` seconds (default 120; 0 means
+never wait). If a `Retry-After` is longer than what is left, or the allowance is spent, the
+request fails and the message names this setting. Every wait is written to the log at
+warning level ("the endpoint answered HTTP 429 ... waiting 4 seconds ..."). All three agent
+designs wait in the same way, so that a throttled service does not favour one of them. A
+header that gives a date instead of a number of seconds is ignored, and the doubling wait is
+used. Waiting counts against the time limit below, but a wait is not cut short by it.
+
+**The time limit.** One agent run may take at most `--time-limit` seconds of wall-clock time
+(or `PARALLELISE_TIME_LIMIT`; default 1800, which is 30 minutes). Each agent design looks at
+the clock before every call to the model and, once the limit has passed, stops there, between
+steps. It does not interrupt a step already under way, so a run can pass the limit by the
+length of its last model call, build command or wait. The check then judges what is on disk.
+The record's failure stage is the check's stage, and the notes say "The time limit of N
+seconds stopped the agent." The limit covers the agent only; the check has its own limit,
+`--check-timeout` (default 300 seconds). The limit that applied is stored as `time_limit_s`.
+
+**Deleting.** No command deletes a folder it did not make unless you add `--force`.
+`parallelise assemble`, `parallelise study mask` and `parallelise run` accept a destination
+that does not exist or is empty. If it holds files they stop, name the folder, and tell you
+to choose another folder or add `--force`, which deletes what is there first. A path that is
+a file is always refused. `run` makes one work folder for each cell (a problem on a backend
+with a model and an agent design), at `<work root>/<problem>/<backend>/<model>/<agent>`, and a
+masked copy of the problem at `<work root>/_masked/<problem>`. It writes a marker file,
+`.parallelise-made`, into each. A later run of the same cell deletes and replaces a folder
+that has the marker, with no option needed; a folder without it (for example one made by an
+earlier version of the program, or by hand) is refused until you move it or add `--force`.
+
 ## Where the logs are and why a conversion failed
 
 - Messages from the program go to the standard error stream, which is the container log
@@ -61,10 +105,38 @@ name otherwise only shows up as a failed run.
   | `test-one-worker`   | The problem's own unit test failed with a single worker. |
   | `test-many-workers` | It passed with one worker but failed with several; usually a race or a wrong partition of the work. |
   | `benchmark`         | The benchmark failed, or the speed-up figures were rejected or below the floor. |
-  | `timeout`           | A step took longer than its limit. |
-  | `agent-error`       | The agent or the model client raised an error, for example the gateway was unreachable. |
+  | `timeout`           | A step of the check took longer than its limit. |
+  | `agent-error`       | Older records only: the agent or the model client raised an error, and no check was run. A new run never writes this stage; see below. |
 
   To list failures: `grep '"result": "FAIL"' results/runs.jsonl`.
+
+  The check runs whatever became of the agent. If the agent raised an error, if the model
+  service failed in the middle of the run, or if the time limit stopped the agent, the
+  routine that is on disk is judged all the same, and the record holds the check's result and
+  stage. The notes then carry a sentence that says what stopped the agent: "The agent stopped
+  with" followed by the error, or "The time limit of 1800 seconds stopped the agent." So a
+  run can pass although its agent ended in an error, if the routine written before the error
+  is good. To find the runs whose agent was interrupted, search the notes:
+  `grep -E 'agent stopped with|time limit of' results/runs.jsonl`.
+- Each record also says how the run was made, so that two records can be compared fairly.
+  The fields after `notes` were added later; a record written before they existed has `null`,
+  an empty text or an empty mapping in their place, and the report tools read both kinds.
+
+  | Field | Meaning |
+  |-------|---------|
+  | `temperature` | The sampling temperature the model was asked to use. |
+  | `step_budget` | The most model steps the agent was allowed (`--step-budget`). |
+  | `time_limit_s` | The wall-clock limit on the agent, in seconds. |
+  | `agent_time_s` | Seconds from the start of the agent's run until it stopped. |
+  | `check_time_s` | Seconds the check took afterwards. `wall_time_s` is the two together. |
+  | `framework_versions` | The installed version of each of httpx, httpx2, pydantic-ai, langgraph, langchain, langchain-openai and openai, those that are installed. |
+  | `cpu_count` | The number of processor cores the process could use, which limits the speed-ups the benchmark can show. |
+  | `package_version` | The version of parallelise itself. |
+  | `source_hash` | Twelve hexadecimal digits of a hash of every Python file in the installed package and of the C and shell helpers copied into work folders. Two records with the same value came from the same code, and any change to the code changes it. |
+
+  The counts of `requests`, `prompt_tokens` and `completion_tokens` are kept when a run ends in
+  an error: they cover every model call made before the failure, for all three agent designs.
+  A count of zero in a record made before this was kept can mean "lost", not "none".
 - The check's own log, which holds the compiler output, the test output, the benchmark
   table and one line about the agent's own test program, is written to `check.log` in the
   work folder, and is kept as evidence under
@@ -150,9 +222,25 @@ only the gateway.
 - **`health` says the model is not listed.** Compare `PARALLELISE_MODEL` with the names
   in the model list that `health` prints.
 - **Authentication errors (HTTP 401 or 403).** Set `PARALLELISE_API_KEY`. Client errors
-  are not retried; server errors and connection failures are retried three times.
-- **Runs end in `agent-error` after long waits.** The model is slow; raise
-  `PARALLELISE_TIMEOUT` or lower the load on the gateway.
+  other than 429 are not retried; server errors and connection failures are retried three
+  times.
+- **The log says "the endpoint answered HTTP 429 ... waiting".** The model service is
+  throttling requests, and parallelise is waiting as described above. If runs still fail with
+  a message about 429, lower the load on the gateway, or raise `PARALLELISE_THROTTLE_WAIT`.
+- **A run's notes say "The agent stopped with ..." after long waits.** The model is slow or
+  failing; raise `PARALLELISE_TIMEOUT` or lower the load on the gateway. The check still ran,
+  so the record shows whether the routine on disk passed.
+- **A notes entry says the time limit stopped the agent.** Raise `--time-limit` if you want
+  runs to continue longer, bearing in mind that the limit is also what bounds the cost of a
+  run that is going nowhere.
+- **`parallelise: The folder ... already holds files` or `... was not made by 'parallelise
+  run'`.** The command refused to delete a folder it did not make. Choose another folder (for
+  `run`, another `--work-root`), move the old one away, or add `--force` if you are sure it
+  can go.
+- **`parallelise: The results file ... cannot be made` or `cannot be written to`.** `run`
+  checks before it starts that the record can be saved. Set `--results` (or
+  `PARALLELISE_RESULTS`) to a file in a folder that you may write to, such as the mounted
+  folder under Docker.
 - **`mpicc` or `mpirun` not found.** The MPI packages are missing. The image contains them;
   on your own machine install `openmpi-bin` and `libopenmpi-dev`. The MPI tests skip
   themselves when they are absent.
@@ -161,8 +249,10 @@ only the gateway.
   elsewhere.
 - **Open MPI complains when run as the root user.** Run as an ordinary user, as the image
   does. Do not work around it.
-- **Permission denied writing `/work`.** The mounted directory is not writable by user
-  10001. Change its owner or its group permissions.
+- **Permission denied writing `/work`.** The mounted directory is not writable by the user
+  that the container runs as. Run the container with `--user "$(id -u):$(id -g)"` and make the
+  folder yourself first, or, without `--user`, change the folder's owner or group permissions
+  so that user 10001 may write to it.
 - **Pod killed with reason `OOMKilled` (out of memory).** The memory limit was exceeded; raise it in
   `k8s/job.yaml` if the problem needs it.
 - **Job failed with `DeadlineExceeded`.** The Job reached `activeDeadlineSeconds`.

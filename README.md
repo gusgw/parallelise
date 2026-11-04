@@ -38,7 +38,7 @@ and addition, and a tank level that can neither overflow nor run dry.
 The **agent** drives the model through one conversion. It hands the model tools to read the
 notebook, read and write files, and run build commands; keeps the conversation going until
 the model says it has finished; runs the checks itself at that point; and feeds any failure
-back until a step budget runs out. There are three **agent designs**, which give the model
+back until a step budget or a time limit runs out. There are three **agent designs**, which give the model
 the same tools and differ in how firmly they refuse to let it finish before the checks
 pass: a plain loop written on `httpx`, one built on Pydantic AI, and one built on
 LangGraph.
@@ -72,10 +72,13 @@ which `make` would read instead of the Makefile. It compares each trusted file w
 fingerprint taken when the folder was assembled and with the fresh copy made from the
 problem, so rewriting the fingerprints does not hide an edit. If the check fails, the fresh
 folder that it judged is kept as `check-fail` inside the work folder; if it passes, that
-folder is deleted. Every judged run is written as one record to a results store, one
-JSON object per line: the problem, backend, model and agent design, the outcome and the
-stage of any failure, the best speed-up, and the requests, tokens, latency and throughput of
-the model calls.
+folder is deleted. The check judges whatever routine is on disk when the agent stops, however
+it stopped: finished, out of steps, out of time, or after an error. Every judged run is
+written as one record to a results store, one JSON object per line: the problem, backend,
+model and agent design, the outcome and the stage of any failure, the best speed-up, the
+requests, tokens, latency and throughput of the model calls, the time the agent and the check
+each took, the settings of the run (temperature, step budget, time limit), and the versions
+of parallelise and of the libraries that carried the requests.
 
 ## How to use it
 
@@ -112,9 +115,16 @@ one way to provide one.
    problem folder, or the name of a shipped example under `problems/`. The run assembles a
    work folder under `work/` (or under `PARALLELISE_WORK_ROOT`), runs the agent, judges the
    result with the check, and appends a record to `results/runs.jsonl` (or to
-   `PARALLELISE_RESULTS`).
+   `PARALLELISE_RESULTS`). The agent is stopped after 30 minutes by default; `--time-limit`
+   (or `PARALLELISE_TIME_LIMIT`) sets another limit in seconds, and the routine on disk is
+   judged all the same. A request that the model service refuses with HTTP 429 (too many
+   requests) is waited out, for up to two minutes by default, before the run gives up.
 
         parallelise run integrate openmp --agent basic
+
+   Running the same cell again replaces the work folder that the earlier run made. No
+   command deletes a folder that it did not make: `run`, `assemble` and `study mask` refuse
+   a destination that already holds files, and say so, unless you add `--force`.
 
 5. Judge a finished work folder again, without the agent or the model. The check needs the
    problem the work folder was built from, as a path or as the name of a shipped example
@@ -147,10 +157,18 @@ With Docker, the image holds the compilers and Open MPI and runs as an ordinary 
 
     make image
     docker run --rm parallelise:cpu health
-    docker run --rm -v "$PWD/out:/work" \
+    mkdir -p out
+    docker run --rm --user "$(id -u):$(id -g)" -v "$PWD/out:/work" \
       -e PARALLELISE_GATEWAY_URL=http://host.docker.internal:4000/v1 \
       -e PARALLELISE_MODEL=kimi-k2.5 \
+      -e PARALLELISE_RESULTS=/work/runs.jsonl \
       parallelise:cpu run integrate openmp --agent basic
+
+The option `--user "$(id -u):$(id -g)"` runs the container as the calling user, so that the
+files it writes into the mounted folder belong to that user and not to the image's own user.
+Make the `out` folder yourself first, as above, because Docker would otherwise make it owned by
+the root user. The results file is placed in the mounted folder too, because the image's default
+place for it is inside the image, where only the image's own user may write.
 
 A Kubernetes job for one conversion is in `k8s/job.yaml`. Deployment, logs,
 troubleshooting and the memory rules for running benchmarks in containers are in
@@ -265,7 +283,7 @@ fresh copy, or which holds a `GNUmakefile` or `makefile`, because an agent that 
 rules should fail. The routine is still compiled and run by the check, with the same
 secret-free environment, so the container is also what contains a routine that is itself
 harmful. Every subprocess, whether a build, a test, a benchmark or a notebook run, has a
-timeout, and so does every model request. The container runs as an ordinary user; under
+timeout, and so does every model request; the agent's whole run has a time limit as well. The container runs as an ordinary user; under
 Kubernetes it drops all capabilities, has a read-only file system, and runs under processor
 and memory limits and a hard deadline. The generated code can reach the network unless the
 deployment forbids it, for example with a network policy;

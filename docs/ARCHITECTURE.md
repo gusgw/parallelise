@@ -34,8 +34,8 @@ text or tool calls; it knows nothing else about the model.
 An **agent** is the program that drives a model through one conversion. It hands the model
 tools to read the notebook, read and write files and run build commands, keeps the
 conversation going until the model says it has finished, runs `make check` in the work
-folder itself at that point, and feeds failures back until a step budget runs out. An **agent design** is one way
-of building that program. There are three: a plain loop written on `httpx`, one built on
+folder itself at that point, and feeds failures back until a step budget or a time limit
+runs out. An **agent design** is one way of building that program. There are three: a plain loop written on `httpx`, one built on
 Pydantic AI, and one built on LangGraph. They give the model the same tools and differ in
 how firmly they refuse to let it finish before the checks pass.
 
@@ -90,7 +90,11 @@ order, and the check stops at the first failure:
    table, and judge the table by the rules against invented or merely serial speed-ups,
    including a floor on the best speed-up.
 
-A run that fails is recorded with the stage at which it failed. When the check fails, the
+A run that fails is recorded with the stage at which it failed. The check always runs, and
+always judges the routine that is on disk when the agent stops, however the agent stopped: when
+it declared itself finished, when it spent its step budget, when the time limit stopped it,
+and when it raised an error. In the last two cases the record holds the check's result and
+stage, and the notes say what stopped the agent. When the check fails, the
 judging folder is kept as `check-fail` inside the work folder, so that a reader can see
 exactly what was judged, with the compiler output, the binaries and the benchmark table;
 when the check passes, the judging folder is deleted. The mathematics of the problem does
@@ -113,7 +117,7 @@ or `no-files` has no such line.
 ```
 README.md                 what it does, results for a general reader, how to run it
 LICENSE                   MIT
-pyproject.toml            package metadata, dependencies, pytest and ruff settings
+pyproject.toml            package metadata, dependencies (the framework versions are pinned), settings
 Makefile                  convenience targets: install, lint, test, check-references, image
 Dockerfile                CPU stage (gcc, OpenMPI, Python) and an optional CUDA stage
 k8s/job.yaml              run one conversion cell as a Kubernetes Job
@@ -149,15 +153,19 @@ a timeout. No module reads the network except `model.py`.
 
 - `config.py` — `Settings` dataclass and `Settings.from_env(overrides)`. Fields:
   `gateway_url` (default `http://localhost:4000/v1`), `model` (default `local`),
-  `temperature` (default 0.2), `api_key` (default empty), `request_timeout_s`
-  (default 600), `work_root` (default `work`), `results_path` (default
+`temperature` (default 0.2), `api_key` (default empty), `request_timeout_s`
+  (default 600), `time_limit_s` (default 1800: the wall-clock limit on one agent run),
+  `throttle_wait_s` (default 120: the most seconds to wait, in total, for one request that is
+  refused with HTTP 429), `work_root` (default `work`), `results_path` (default
   `results/runs.jsonl`). Environment variables: `PARALLELISE_GATEWAY_URL`,
   `PARALLELISE_MODEL`, `PARALLELISE_TEMPERATURE`, `PARALLELISE_API_KEY`,
-  `PARALLELISE_TIMEOUT`, `PARALLELISE_WORK_ROOT`, `PARALLELISE_RESULTS`. The older
+  `PARALLELISE_TIMEOUT`, `PARALLELISE_TIME_LIMIT`, `PARALLELISE_THROTTLE_WAIT`,
+  `PARALLELISE_WORK_ROOT`, `PARALLELISE_RESULTS`. The older
   names `MODEL_BASE_URL`, `MODEL_NAME`, `MODEL_TEMPERATURE` and `MODEL_API_KEY` are
   accepted as fallbacks. Validation raises `ConfigError` with a plain message: the URL
-  must start with http or https, the temperature must lie in [0, 2], the timeout must
-  be positive. `without_secrets(environ=None)` returns a copy of the environment without
+  must start with http or https, the temperature must lie in [0, 2], the timeout and the
+  time limit must be positive, the throttle wait must not be negative, and the API key must
+  be plain ASCII text, since it is sent in an HTTP header. `without_secrets(environ=None)` returns a copy of the environment without
   any variable whose name contains KEY, TOKEN, SECRET or PASSWORD (in any capitals) and
   without any variable whose name begins `PARALLELISE_`; the agents' tools and the check
   give that copy to every program they start.
@@ -170,24 +178,65 @@ a timeout. No module reads the network except `model.py`.
   completion tokens per second of generation time. `health_check` calls `/models`,
   confirms the configured model is listed, makes one tiny chat call, and reports
   reachability, the model list, and the round-trip time. Retries: three attempts with
-  back-off on connection errors and HTTP 5xx; none on 4xx.
+  back-off on connection errors and HTTP 5xx; none on other 4xx. An HTTP 429 answer (too many
+  requests) is not an attempt used up but is waited out: the wait is the number of seconds in
+  the `Retry-After` header when it holds one (a date is ignored), and otherwise doubles from 2
+  seconds with each answer up to 30 seconds; no wait is shorter than 1 second. The waits for
+  one request add up to at most `throttle_wait_s`; a `Retry-After` longer than what is left
+  ends the waiting at once. Each wait is logged at warning level, and when the allowance is
+  spent `ModelError` says so and names `PARALLELISE_THROTTLE_WAIT`. `Throttle` holds this
+  rule. `ThrottledClient` and `ThrottledAsyncClient` (and `throttled_async_client_class`,
+  which makes the same class from another library's asynchronous client) apply it inside
+  the HTTP clients that the two framework agents hand to their frameworks. They send a refused
+  request again from within `send`, so that the request and response hooks which time requests
+  run once per attempt, and they mark the last 429 answer with `x-should-retry: false` so
+  that the OpenAI library under both frameworks does not repeat the waiting.
 - `results.py` — `RunRecord` dataclass and `ResultsStore(path)` with `append(record)`
   and `load() -> list[RunRecord]`, one JSON object per line. Fields of `RunRecord`:
   `when` (ISO 8601), `problem`, `backend`, `model`, `agent`, `agent_version`
   (short hash of the agent source), `masked` (bool), `result` ("PASS" or "FAIL"),
   `failure_stage` (one of `none`, `no-files`, `tampered`, `build`, `test-one-worker`,
-  `test-many-workers`, `benchmark`, `timeout`, `agent-error`), `speedup_best`
-  (float or null), `wall_time_s`, `requests`, `prompt_tokens`, `completion_tokens`,
+  `test-many-workers`, `benchmark`, `timeout`, `agent-error`; the last is kept so that
+  older records load, and a new run never writes it, because a run whose agent raised an
+  error is judged by the check like any other), `speedup_best`
+  (float or null), `wall_time_s` (from the start of the agent's run to the end of the check),
+  `requests`, `prompt_tokens`, `completion_tokens`,
   `latency_mean_s`, `tokens_per_second`, `serving` (provider identifier or
   "not recorded"), `quantisation` (string or "not disclosed"), `notes`.
+  Fields added later, each with a default so that older records still load (the default
+  means "not recorded"): `temperature`, `step_budget`, `time_limit_s` (the limit that applied
+  to the agent), `agent_time_s` and `check_time_s` (seconds, kept apart), `framework_versions`
+  (a mapping from package name to installed version, for httpx, httpx2, pydantic-ai,
+  langgraph, langchain, langchain-openai and openai, whichever are installed), `cpu_count`
+  (processor cores the process could use), `package_version` (the version of parallelise) and
+  `source_hash` (twelve hexadecimal digits of a hash of every `.py` file of the installed
+  package and of the C and shell helpers in `data/`, so that any code change shows). Defaults:
+  `None` for the numbers, an empty text for the two strings, an empty mapping for the
+  versions. `from_dict` ignores keys it does not know and reads a null `framework_versions`
+  as empty, so records written by other versions load. `ResultsStore.ensure_writable()`
+  raises `ResultsError` if a record could not be added, without creating anything; `run`
+  calls it before the agent starts. `append` and `load` turn an unwritable or unreadable
+  file, or one that is not UTF-8 text, into `ResultsError`.
+- `provenance.py` — `framework_versions()`, `package_version()`, `cpu_count()` and
+  `source_hash(package_dir=None)`, which supply the last five fields above. The core count is
+  the number of cores the process may run on (`os.sched_getaffinity`), falling back to
+  `os.cpu_count()`.
+- `folders.py` — the rules about deleting. `prepare_destination(dest, force)` accepts a
+  destination that is absent or empty and refuses one that holds files, with a message that
+  names the folder and `--force`; with `force` it deletes the folder; a path that is a file is
+  always refused. `prepare_own_folder(folder, force)` is for the folders that `run` makes: it
+  deletes one that carries the marker file `.parallelise-made` (written by `write_marker` when
+  `run` made it), and refuses any other folder that holds files unless `force` is given.
+  `ensure_folder(folder, what)` makes a folder or says plainly why it cannot.
 - `oracle.py` — `extract_oracle(notebook: Path) -> Oracle` executes the notebook's
   code cells in a fresh namespace with a timeout and reads `ORACLE`; validates that
   every expected value is finite and that, where `terms` are given, their sum
   reproduces the expected value within tolerance; `write_reference(oracle, dest)`
   writes `reference.json` and `reference.h`. It rejects an oracle whose values are not finite or whose terms do not sum to the
   expected value.
-- `assemble.py` — `assemble_work_dir(problem_dir, backend, dest, include_reference=False)`
-  builds a flat work folder: package data files, the notebook, `reference.*`,
+- `assemble.py` — `assemble_work_dir(problem_dir, backend, dest, include_reference=False,
+  force=False)` builds a flat work folder (`dest` must be absent or empty unless `force` is
+  true; the problem is examined first, so a bad problem never costs the destination): package data files, the notebook, `reference.*`,
   `problem.h` if present, the backend's header, `bench.c` and `Makefile`, and the record of
   fingerprints `.trusted.json`; with `include_reference=True` it also copies the known-good
   solution and test, which is how the machinery is tested without a model. The check calls
@@ -205,7 +254,9 @@ a timeout. No module reads the network except `model.py`.
   `check-fail` in the work folder on failure. Last, for the log only, it builds and runs the
   agent's own test program at one worker. `require_reference_test(problem_dir, backend)`
   raises `AssembleError` if the problem has no known-good test, and `run` calls it before the
-  agent starts. The code under judgement runs with an environment from which every variable
+  agent starts. If the check cannot run at all (the computer will not give it a temporary
+  folder, for instance), `run_check` raises `CheckError`, which is the only use of that class;
+  a routine that fails is a result and not an error. The code under judgement runs with an environment from which every variable
   that may hold a secret has been removed. The floor is the least best speed-up that the
   table must reach. It comes from the problem's Makefile (`SPEEDUP_FLOOR`) and falls back to
   1.5 for OpenMP and MPI or 3 for CUDA; the module docstring explains it in full.
@@ -223,10 +274,23 @@ a timeout. No module reads the network except `model.py`.
   sentence; whose code comments are removed; and whose identifiers that name the
   algorithm are renamed from a word list kept in the module. Numbers, logic and the
   oracle values are unchanged, and the report lists every substitution made. A masked
-  problem must still pass its reference check.
+  problem must still pass its reference check. `mask_problem(problem_dir, dest, alias,
+  force=False)` refuses a destination that holds files unless `force` is true. Every problem
+  with its arguments (an alias that is not an identifier or names an algorithm, a folder
+  without exactly one notebook, a notebook that is not valid JSON, a destination that cannot be
+  written) is found before anything is deleted and raised as `InputError`.
 - `agents/base.py` — `Agent` protocol: `run(work_dir: Path, task: str, settings:
   Settings, client: ModelClient, step_budget: int) -> AgentResult(finished,
-  steps, notes)`. `agents/__init__.py` exposes `get_agent(name)` for `basic`,
+  steps, requests, prompt_tokens, completion_tokens, latencies_s, notes,
+  time_limit_reached, error)`. `Deadline(seconds)` is the wall-clock limit: each agent makes
+  one from `settings.time_limit_s` when its run starts and asks `expired()` before every call
+  to the model, so that a run past its limit stops cleanly between steps. A step already
+  under way is not interrupted, so a run may overrun by the length of its last step, and a
+  wait for a throttled request (see `model.py`) is not cut short. A run stopped this way
+  returns `time_limit_reached=True`. A failure of the model service or the framework ends the
+  run too, but is returned as `error` (the exception's name and message) with the counts of
+  the requests made before it, instead of being raised; an agent that does raise is also
+  handled by `run`. Counts are therefore kept when a run fails. `agents/__init__.py` exposes `get_agent(name)` for `basic`,
   `pydantic` and `langgraph`; the two framework agents import their frameworks lazily
   and raise `AgentUnavailable` with an installation hint if the extra is missing.
   All three share one tool surface (`agents/tools.py`): read the notebook, read a file,
@@ -240,10 +304,17 @@ a timeout. No module reads the network except `model.py`.
   `SIGKILL`, so that no child survives. All three run `make check` in the work folder
   themselves when the model says it has finished, and feed failures back, but they stop
   differently. That command uses the work folder's own Makefile and the agent's own test
-  program and is the agent's guide only; the verdict comes from `check.py`. `basic` stops when the
+  program and is the agent's guide only; the verdict comes from `check.py`. All three also stop
+  when the time limit has passed. `basic` stops when the
   checks pass or after `step_budget` model calls (default 80). `langgraph` makes up to
   `MAX_PASSES` (8) passes, each limited to `step_budget` steps. `pydantic` stops when the
-  checks pass or when the framework's request limit, set to `step_budget`, is reached.
+  checks pass or when the framework's request limit, set to `step_budget`, is reached; it
+  drives the framework's graph one node at a time (`agent.iter`) so that it can check the time
+  before each model call and read the usage after a failure, and it reaches the model through
+  an `httpx2` client, which is what Pydantic AI asks for (the older `httpx` client is
+  deprecated there and warns). The tests treat a notice that something will be removed in
+  version 3 as an error. `langgraph` streams each pass state by state and stops, between
+  states, when the time limit has passed and the next step would call the model.
   `docs/DESIGN.md` explains the differences.
 - `study/report.py` — `build_tables(records, masked=False, prices=None) -> str` (Markdown: pass
   counts by model and backend, by agent design, by problem; when the records hold masked and
@@ -252,7 +323,12 @@ a timeout. No module reads the network except `model.py`.
   dest_svg)` (grouped bars of pass rate by model and backend) and
   `build_comparison_chart(records, dest_svg)` (pass rate by model, unmasked beside masked),
   both drawn with matplotlib. `parallelise study report` takes `--store`, `--prices`, `--chart` and
-  `--masked-chart`.
+  `--masked-chart`. The report reads only the fields it needs, so the fields added to records
+  later change nothing in its tables, and older records, which lack them, are read as before. A
+  timestamp that is not a date, a numeric field that holds text, or a price file that is missing,
+  is not JSON, has the wrong shape or lacks a price raises `ResultsError`, whose message names
+  the record or the file. A chart that cannot be drawn or written is reported in one line, with
+  an installation hint when matplotlib is missing.
 - `assess.py` — `assess_notebook(notebook: Path, client: ModelClient) -> Verdict` gives the
   whole notebook to the model and asks for an analysis of the dependency structure, the
   arithmetic intensity, the communication a distributed version would need, and a
@@ -267,10 +343,12 @@ a timeout. No module reads the network except `model.py`.
   and `settings_from_args`.
 - `study/cli.py` — `register(sub, common, problems)` adds the `study` command, with its
   subcommands `mask` and `report`, to the main parser. It also registers the old top-level
-  `mask` and `report` as hidden aliases that print a notice and run the new form.
+  `mask` and `report` as hidden aliases that print a notice and run the new form. `mask` takes
+  `--force`.
 - `cli.py` — `main(argv=None)` using argparse. The commands listed by `parallelise --help`
   are `health`, `assess <notebook> [--out verdict.json]`, `run <problem> <backend> [--agent]
-  [--model]`, `check <work_folder> --problem <problem> --backend <backend>` and `study`.
+  [--model] [--step-budget] [--time-limit SECONDS] [--check-timeout] [--force]`, `check
+  <work_folder> --problem <problem> --backend <backend>` and `study`.
   The argument named `<problem>` is the path to a problem folder (a notebook with the files
   for each backend) or the name of one of the shipped examples under `problems/`;
   `<work_folder>` is a finished work folder, not a problem. `check` needs the problem as
@@ -278,11 +356,38 @@ a timeout. No module reads the network except `model.py`.
   judges only the agent's routine, with the problem's own test; for a masked run the
   problem is the masked copy, which `run` keeps under `<work_root>/_masked/`. `run` passes
   the check the problem folder it assembled from, and refuses to start an agent on a
-  problem that has no known-good test. `assess` is a separate command and `run` never calls
-  it. Three maintenance commands work but are not listed: `oracle <notebook>`, `assemble
-  <problem> <backend> <dest>` and `bench-check <csv>`. The old name `grade` for `check` is a
+  problem that has no known-good test. Before the agent starts, `run` also checks that the
+  results file can be written and that the work root can be made, and refuses a step budget
+  below 1. It runs the agent, then the check, whatever became of the agent, and records the
+  agent's time and the check's time apart (`wall_time_s` is their sum, and the setting-up
+  before the agent is not counted). If the agent raised an error or returned one, or the time
+  limit stopped it, the notes say so and the failure stage is the check's. Counts come from
+  the agent's result, and from the model client's own record when the agent kept none, so an
+  agent that raised an error after making calls still reports them. `assess` is a separate
+  command and `run` never calls it. Three maintenance commands work but are not listed:
+  `oracle <notebook>`, `assemble <problem> <backend> <dest> [--force]` and `bench-check
+  <csv>`. `study mask` also takes `--force`. The old name `grade` for `check` is a
   hidden alias that prints a notice. Exit status is 0 on success, 1 on a failed check or a
-  reported error, and 2 on bad arguments. Every error message says what to do next.
+  reported error, and 2 on bad arguments.
+
+### Rules for errors and for deleting
+
+Every error that a user can cause is a `ParalleliseError` (or a subclass) with a message of one
+line that says what went wrong and what to do; the command line prints that line after
+`parallelise:` and returns status 1, and prints no stack trace. The subclasses are
+`ConfigError` (a setting), `InputError` (a name, a path, a folder or a file that the user
+gave; it is also a `ValueError`, so that older callers still catch it), `AssembleError`,
+`OracleError`, `ModelError`, `ResultsError` (records, the results file and price files),
+`AgentUnavailable` and `CheckError`. Code that reads or writes a path the user gave wraps an
+operating-system error in one of these, naming the path. As a last net, `main` reports any
+other `OSError` that reaches it as one line with the path and the words "Check the path and its
+permissions". A programming error still shows its trace.
+
+No command deletes a folder it did not make without `--force`. `assemble`, `study mask` and
+`run` refuse a destination that holds files, naming the folder and the option. `run` replaces
+its own earlier work folder for the same cell, and its masked copy under `<work_root>/_masked/`,
+only if the folder has the marker file `.parallelise-made`; work folders made before the marker
+existed need `--force` once.
 
 ## Problems
 
