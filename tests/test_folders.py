@@ -6,6 +6,12 @@ replace it, but only if it carries the marker file that `run` wrote when it made
 """
 
 import pytest
+from tests.test_assemble import FIXTURE
+from tests.test_cli import install_fakes, run_args
+
+from parallelise import cli
+from parallelise.assemble import AssembleError, assemble_work_dir
+from parallelise.errors import ParalleliseError
 from parallelise.folders import (
     MARKER_NAME,
     has_marker,
@@ -13,12 +19,6 @@ from parallelise.folders import (
     prepare_own_folder,
     write_marker,
 )
-from tests.test_assemble import FIXTURE
-from tests.test_cli import install_fakes, run_args
-
-from parallelise import cli
-from parallelise.assemble import AssembleError, assemble_work_dir
-from parallelise.errors import ParalleliseError
 from parallelise.results import ResultsStore
 
 
