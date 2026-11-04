@@ -119,10 +119,16 @@ if command -v docker >/dev/null 2>&1 && docker info >/dev/null 2>&1; then
 
     step "docker run parallelise:smoke run integrate openmp, with the work folders in a mounted folder" \
          "the last line begins 'PASS: integrate on openmp', and exit status 0."
+    # The stand-in model plays its scripted conversation once, and the run outside the
+    # container has already used it, so start a fresh one for the run inside.
+    start_server convert-docker convert --name integrate --backend openmp \
+        --reference-dir "$TMP/clone/problems/integrate/openmp/reference"
+    DOCKER_CONVERT_URL="$SERVER_URL"
     mkdir -p "$TMP/out"
-    chmod 777 "$TMP/out"  # the image runs as user 10001, which must be able to write here
-    docker run --rm --network host -v "$TMP/out:/work" \
-        -e PARALLELISE_GATEWAY_URL="$CONVERT_URL" -e PARALLELISE_MODEL=local \
+    # Run as the calling user, so that the files the container writes into the mounted
+    # folder belong to that user and can be removed afterwards.
+    docker run --rm --network host --user "$(id -u):$(id -g)" -v "$TMP/out:/work" \
+        -e PARALLELISE_GATEWAY_URL="$DOCKER_CONVERT_URL" -e PARALLELISE_MODEL=local \
         -e PARALLELISE_RESULTS=/work/runs.jsonl \
         parallelise:smoke run integrate openmp --agent basic
     docker rmi --force parallelise:smoke >/dev/null 2>&1 || true
