@@ -25,6 +25,14 @@ int main(int argc, char **argv)
     for (long i = 0; i < n; i++)
         for (long j = 0; j < n; j++) u[i * n + j] = u_init(i, j, n);
 
+    /* One untimed warm-up run, so that first-write page faults and other one-time
+     * costs are paid before the timed run begins. Otherwise the one-process
+     * baseline is charged for them and every speed-up measured against it is
+     * inflated. */
+    jacobi(u, n, iters);
+    /* the routine works in place, so restore the starting grid before timing */
+    for (long i = 0; i < n; i++)
+        for (long j = 0; j < n; j++) u[i * n + j] = u_init(i, j, n);
     MPI_Barrier(MPI_COMM_WORLD);
     double t0 = MPI_Wtime();
     jacobi(u, n, iters);

@@ -8,6 +8,10 @@
 int main(int argc, char **argv)
 {
     long n = (argc > 1) ? atol(argv[1]) : 20000000L;
+    /* One untimed warm-up run, so that one-time costs are paid before the timed run
+     * begins, as in the shipped benchmarks. */
+    (void)midpoint(0.0, 3.141592653589793, n);
+
     int maxt = omp_get_max_threads();
     int sweep[32];
     int ns = 0;

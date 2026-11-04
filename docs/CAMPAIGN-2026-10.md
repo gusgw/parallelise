@@ -216,6 +216,11 @@ cell. No other model had a run longer than 24 minutes.
 
 ## Limitations
 
+**The benchmarks had no warm-up call.** The OpenMP and MPI benchmarks of all four
+problems were changed on 4 November 2026 to make one untimed call before timing. This
+campaign was measured before that change, so its one-worker baselines included one-time
+costs, and its speed-up figures, though not its correctness results, may be inflated.
+
 **The host ran short of memory during the campaign.** The driver ran the three agents of a
 cell at once, each in its own container with no memory limit, and the MPI benchmark for the
 prefix sum allocates 2 GiB per rank at the production length. The host's memory was exhausted

@@ -22,6 +22,11 @@ int main(int argc, char **argv)
     if (!in || !out) { fprintf(stderr, "alloc failed\n"); MPI_Abort(MPI_COMM_WORLD, 1); }
     for (long i = 0; i < n; i++) in[i] = in_of(i);
 
+    /* One untimed warm-up run, so that first-write page faults and other one-time
+     * costs are paid before the timed run begins. Otherwise the one-process
+     * baseline is charged for them and every speed-up measured against it is
+     * inflated. */
+    scan(in, out, n);
     MPI_Barrier(MPI_COMM_WORLD);
     double t0 = MPI_Wtime();
     scan(in, out, n);

@@ -28,6 +28,11 @@ int main(int argc, char **argv)
         py[i] = py_of(i);
     }
 
+    /* One untimed warm-up run, so that first-write page faults and other one-time
+     * costs are paid before the timed run begins. Otherwise the one-process
+     * baseline is charged for them and every speed-up measured against it is
+     * inflated. */
+    nbody_accel(px, py, ax, ay, n);
     MPI_Barrier(MPI_COMM_WORLD);
     double t0 = MPI_Wtime();
     nbody_accel(px, py, ax, ay, n);

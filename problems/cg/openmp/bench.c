@@ -21,6 +21,12 @@ int main(int argc, char **argv)
     if (!x || !b) { fprintf(stderr, "alloc failed\n"); return 1; }
     for (long t = 0; t < m * m; t++) b[t] = b_of(t);
 
+    /* One untimed warm-up run, so that first-write page faults and other one-time
+     * costs are paid before the timed run begins. Otherwise the single-thread
+     * baseline is charged for them and every speed-up measured against it is
+     * inflated. */
+    cgsolve(x, b, m, iters);
+
     int maxt = omp_get_max_threads();
     int sweep[32];
     int ns = 0;

@@ -22,6 +22,12 @@ int main(int argc, char **argv)
         py[i] = py_of(i);
     }
 
+    /* One untimed warm-up run, so that first-write page faults and other one-time
+     * costs are paid before the timed run begins. Otherwise the single-thread
+     * baseline is charged for them and every speed-up measured against it is
+     * inflated. */
+    nbody_accel(px, py, ax, ay, n);
+
     int maxt = omp_get_max_threads();
     int sweep[32];
     int ns = 0;

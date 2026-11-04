@@ -22,6 +22,12 @@ int main(int argc, char **argv)
             B[i * n + j] = B_of(i, j);
         }
 
+    /* One untimed warm-up run, so that first-write page faults and other one-time
+     * costs are paid before the timed run begins. Otherwise the single-thread
+     * baseline is charged for them and every speed-up measured against it is
+     * inflated. */
+    matmul(A, B, C, n);
+
     int maxt = omp_get_max_threads();
     int sweep[32];
     int ns = 0;

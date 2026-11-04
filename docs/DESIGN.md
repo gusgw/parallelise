@@ -175,10 +175,11 @@ one-time cost of the operating system preparing the pages of the large output ar
 made even a purely serial routine appear about 1.8 times faster on the later runs, past the
 1.25 floor. The fix is one untimed warm-up run before the timed runs. After it, a serial
 routine measures about 1.0 and fails honestly, while the genuine reference solutions still
-show 4 to 9 times. The fix was found while validating the two newest problems and was added
-to the four newest benchmarks. Prefix sum and histogram have the same structure and were
-measured with the older form, so their pass and fail marks for correctness stand but their
-speed figures should be re-checked. This is a limitation, listed again below.
+show 4 to 9 times. The fix was found while validating the two newest problems. Since
+4 November 2026 every OpenMP and MPI benchmark makes the warm-up call; the CUDA benchmarks
+always did. The July study and the October campaign were measured before that date, so for
+every problem except decay and reservoir their CPU speed figures come from benchmarks
+without the warm-up. Their pass and fail marks for correctness are unaffected.
 
 No run of a sanitiser (a tool that detects memory errors and undefined behaviour) or of a
 debugger on the reference solutions is recorded. The correctness evidence is the oracle
@@ -310,7 +311,9 @@ for the first comparison were not recorded.
   under MPI. A uniform re-grade at capped memory settings of that problem and of histogram
   under MPI, for every model, did not confirm it. The tables use the recorded result, and
   the re-grade is not in the manifest.
-- **Older benchmark form** on prefix sum and histogram, described above.
+- **Older benchmark form**: the CPU speed figures of the July study and the October
+  campaign, except for decay and reservoir, were measured without the warm-up call,
+  described above.
 - **One benchmark machine**, with 22 processor cores and a laptop-class graphics card.
   Absolute speed-ups would differ elsewhere; the pass and fail verdicts should not.
 - **One sampling setting.** No temperature sweep has been run.

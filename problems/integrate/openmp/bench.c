@@ -13,6 +13,12 @@ int main(int argc, char **argv)
 {
     long n = (argc > 1) ? atol(argv[1]) : 1000000000L;
 
+    /* One untimed warm-up run, so that first-write page faults and other one-time
+     * costs are paid before the timed run begins. Otherwise the single-thread
+     * baseline is charged for them and every speed-up measured against it is
+     * inflated. */
+    (void)integrate(0.0, 1.0, n);
+
     int maxt = omp_get_max_threads();
     int sweep[32];
     int ns = 0;

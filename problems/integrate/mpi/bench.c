@@ -17,6 +17,11 @@ int main(int argc, char **argv)
 
     long n = (argc > 1) ? atol(argv[1]) : 200000000L;
 
+    /* One untimed warm-up run, so that first-write page faults and other one-time
+     * costs are paid before the timed run begins. Otherwise the one-process
+     * baseline is charged for them and every speed-up measured against it is
+     * inflated. */
+    (void)integrate(0.0, 1.0, n);
     MPI_Barrier(MPI_COMM_WORLD);
     double start = MPI_Wtime();
     volatile double r = integrate(0.0, 1.0, n);

@@ -18,6 +18,12 @@ int main(int argc, char **argv)
     if (!in || !out) { fprintf(stderr, "alloc failed\n"); return 1; }
     for (long i = 0; i < n; i++) in[i] = in_of(i);
 
+    /* One untimed warm-up run, so that first-write page faults and other one-time
+     * costs are paid before the timed run begins. Otherwise the single-thread
+     * baseline is charged for them and every speed-up measured against it is
+     * inflated. */
+    scan(in, out, n);
+
     int maxt = omp_get_max_threads();
     int sweep[32];
     int ns = 0;
