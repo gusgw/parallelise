@@ -263,16 +263,17 @@ only the gateway.
 
 ## What continuous integration does and does not prove
 
-The GitHub Actions workflow runs the linter, the unit tests, every reference check for
-OpenMP and MPI, and a build of the CPU container image on every push. The hosted runner
-has only a few shared processor cores, so a genuinely parallel routine often shows no
-speed-up there. The reference checks on the runner therefore prove correctness: the code
-builds with warnings treated as errors and gives the right answer at one worker and at
-several. A reference that is correct but misses the speed-up floor is reported as skipped,
-with the measured speed-up in the message, because the environment variable
-`PARALLELISE_SPEEDUP_UNRELIABLE=1` is set in the workflow. The speed-up requirement is
-checked on a multi-core host, where that variable is left unset and a missed floor is a
-failure. CUDA checks skip wherever there is no graphics card.
+The GitHub Actions workflow runs the linter, the type checker, the whole test suite with
+every reference check for OpenMP and MPI, a build of the CPU container image, and the smoke
+test, which repeats the documented steps from a fresh clone and inside Docker. It runs on
+shared test servers with a few busy processor cores, whose timings mean nothing, so the
+workflow sets `PARALLELISE_JUDGE_SPEED=0`. With that setting the check still builds each
+routine with warnings treated as errors, runs the harness's test at one worker and at
+several, and runs the benchmark program, so continuous integration proves that the code
+works; but it does not judge the speed-up, and the tests that are about the speed rules
+themselves are skipped. Speed is judged on a real multi-core machine with nothing else
+running, where the variable is left unset. CUDA checks skip wherever there is no graphics
+card.
 
 ## Memory when running benchmarks in containers
 

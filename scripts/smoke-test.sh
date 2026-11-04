@@ -129,7 +129,7 @@ if command -v docker >/dev/null 2>&1 && docker info >/dev/null 2>&1; then
     # folder belong to that user and can be removed afterwards.
     docker run --rm --network host --user "$(id -u):$(id -g)" -v "$TMP/out:/work" \
         -e PARALLELISE_GATEWAY_URL="$DOCKER_CONVERT_URL" -e PARALLELISE_MODEL=local \
-        -e PARALLELISE_RESULTS=/work/runs.jsonl \
+        -e PARALLELISE_RESULTS=/work/runs.jsonl -e PARALLELISE_JUDGE_SPEED \
         parallelise:smoke run integrate openmp --agent basic
     docker rmi --force parallelise:smoke >/dev/null 2>&1 || true
 else

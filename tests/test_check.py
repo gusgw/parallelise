@@ -11,7 +11,7 @@ import subprocess
 from pathlib import Path
 
 import pytest
-from tests.small_machine import skip_if_only_speedup_failed
+from tests.small_machine import SPEED_JUDGED, needs_speed
 
 from parallelise import check as check_module
 from parallelise.assemble import AssembleError, assemble_work_dir, file_digest
@@ -71,11 +71,13 @@ def test_failure_stage_names_match_the_contract():
 def test_reference_solution_passes(tmp_path):
     work = folder(tmp_path)
     result = check(work, timeout_s=240)
-    skip_if_only_speedup_failed(result, work, "the fixture reference")
     assert result.passed, result.log
     assert result.failure_stage == "none"
-    assert result.speedup_best and result.speedup_best > 1.3
-    assert "bench stats OK" in result.log
+    if SPEED_JUDGED:
+        assert result.speedup_best and result.speedup_best > 1.3
+        assert "bench stats OK" in result.log
+    else:
+        assert "speed not judged on this machine" in result.log
     assert not (work / KEPT_FOLDER).exists(), "a passing check must delete the judging folder"
     assert not (work / "bench.csv").exists(), "the benchmark must run in the judging folder"
 
@@ -109,6 +111,7 @@ def test_answer_wrong_only_with_threads_fails_at_many_workers(tmp_path):
     assert result.failure_stage == "test-many-workers", result.log
 
 
+@needs_speed
 def test_serial_routine_fails_the_benchmark(tmp_path):
     reference = (FIXTURE / "openmp/reference/midpoint.c").read_text()
     serial = reference.replace("#pragma omp parallel for reduction(+ : integral_sum)\n", "")
@@ -118,6 +121,7 @@ def test_serial_routine_fails_the_benchmark(tmp_path):
     assert "BENCH CHECK FAIL" in result.log
 
 
+@needs_speed
 def test_stricter_floor_than_the_makefile_fails(tmp_path):
     result = check(folder(tmp_path), timeout_s=240, speedup_floor=1000.0)
     assert result.failure_stage == "benchmark"
@@ -174,7 +178,6 @@ def test_agent_test_result_is_logged_and_never_changes_the_verdict(tmp_path):
         else:
             test_file.write_text(agent_test)
         result = check(work, timeout_s=240)
-        skip_if_only_speedup_failed(result, work, "the fixture reference")
         assert result.passed, result.log  # the routine is right, so the verdict is a pass
         assert wording in result.log
         assert "no effect on the verdict" in result.log
@@ -183,7 +186,6 @@ def test_agent_test_result_is_logged_and_never_changes_the_verdict(tmp_path):
 def test_passing_agent_test_is_logged(tmp_path):
     work = folder(tmp_path)
     result = check(work, timeout_s=240)
-    skip_if_only_speedup_failed(result, work, "the fixture reference")
     assert "test_midpoint.c built and passed at one worker" in result.log
 
 
@@ -192,7 +194,6 @@ def test_hanging_agent_test_is_logged_and_does_not_change_the_verdict(tmp_path, 
     work = folder(tmp_path)
     (work / "test_midpoint.c").write_text("int main(void) { for (;;) {} }\n")
     result = check(work, timeout_s=240)
-    skip_if_only_speedup_failed(result, work, "the fixture reference")
     assert result.passed, result.log
     assert "did not finish before the time limit" in result.log
 
@@ -204,7 +205,6 @@ def test_the_agents_own_test_is_built_with_the_problems_makefile(tmp_path, monke
     work = folder(tmp_path)
     (work / "Makefile").write_text("all:\n\t@false\n")
     result = check(work, timeout_s=240)
-    skip_if_only_speedup_failed(result, work, "the fixture reference")
     assert result.passed, result.log
     assert "test_midpoint.c built and passed at one worker" in result.log
 
@@ -231,7 +231,6 @@ def test_a_later_passing_check_removes_the_old_check_fail(tmp_path):
     assert not check(work).passed and (work / KEPT_FOLDER).is_dir()
     shutil.copy2(FIXTURE / "openmp/reference/midpoint.c", work / "midpoint.c")
     result = check(work, timeout_s=240)
-    skip_if_only_speedup_failed(result, work, "the fixture reference")
     assert result.passed, result.log
     assert not (work / KEPT_FOLDER).exists()
 
@@ -428,3 +427,23 @@ def test_agent_tool_can_still_write_the_routine(tmp_path):
     write_file(work, "midpoint.c", WRONG_ROUTINE)
     fresh = assemble_work_dir(FIXTURE, "openmp", tmp_path / "fresh")
     assert _tampered_files(work, fresh, "midpoint") == []
+
+
+def test_speed_is_not_judged_when_switched_off(tmp_path, monkeypatch):
+    """With PARALLELISE_JUDGE_SPEED=0 a correct serial routine passes: only correctness counts."""
+    monkeypatch.setenv("PARALLELISE_JUDGE_SPEED", "0")
+    reference = (FIXTURE / "openmp/reference/midpoint.c").read_text()
+    serial = reference.replace("#pragma omp parallel for reduction(+ : integral_sum)\n", "")
+    result = check(folder(tmp_path, serial), timeout_s=240)
+    assert result.passed, result.log
+    assert "speed not judged on this machine" in result.log
+
+
+def test_wrong_answers_still_fail_when_speed_is_not_judged(tmp_path, monkeypatch):
+    """Switching speed off must not switch off the correctness test."""
+    monkeypatch.setenv("PARALLELISE_JUDGE_SPEED", "0")
+    reference = (FIXTURE / "openmp/reference/midpoint.c").read_text()
+    wrong = reference.replace("return", "return 2.0 *", 1)
+    assert wrong != reference
+    result = check(folder(tmp_path, wrong), timeout_s=240)
+    assert result.failure_stage == "test-one-worker", result.log

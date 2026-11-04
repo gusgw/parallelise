@@ -77,6 +77,7 @@ from parallelise.assemble import (
 from parallelise.bench_check import (
     DEFAULT_CUDA_FLOOR,
     DEFAULT_FLOOR,
+    JUDGE_SPEED_VARIABLE,
     BenchVerdict,
     check_cpu_table,
     check_gpu_table,
@@ -299,6 +300,17 @@ def _run(command: list[str], cwd: Path, env: dict[str, str], deadline: float) ->
     return proc.returncode, output
 
 
+def speed_judged() -> bool:
+    """Return False when PARALLELISE_JUDGE_SPEED is 0, so that only correctness is judged.
+
+    Shared test servers, such as the ones continuous integration runs on, have too few and
+    too busy processor cores for their timings to mean anything. There the check still
+    builds, tests and runs the benchmark, so it proves that the code works, but it does not
+    judge the speed-up.
+    """
+    return os.environ.get("PARALLELISE_JUDGE_SPEED", "1").strip() != "0"
+
+
 def _environment(backend: str) -> dict[str, str]:
     """Return the environment for the build tools and for the code under judgement.
 
@@ -313,6 +325,9 @@ def _environment(backend: str) -> dict[str, str]:
     package_parent = str(Path(__file__).resolve().parent.parent)
     env["PYTHONPATH"] = package_parent + os.pathsep + env.get("PYTHONPATH", "")
     env.pop("SPEEDUP_FLOOR", None)
+    env.pop(JUDGE_SPEED_VARIABLE, None)
+    if not speed_judged():
+        env[JUDGE_SPEED_VARIABLE] = "0"
     return env
 
 
@@ -346,8 +361,13 @@ def _judge(
         verdict: BenchVerdict | None = None
         if csv_path.is_file():
             checker = check_gpu_table if backend == "cuda" else check_cpu_table
-            verdict = checker(csv_path, floor)
+            verdict = checker(csv_path, floor, judge_speed=speed_judged())
             best = verdict.speedup_best
+            if not speed_judged():
+                record.append(
+                    "[check] speed not judged on this machine (PARALLELISE_JUDGE_SPEED=0); "
+                    "the benchmark was run to show that it works"
+                )
         if code != 0:
             return _classify_check_failure(judging, out), best
         if verdict is None:

@@ -78,6 +78,17 @@ def floor_from_env(default: float) -> float:
         return default
 
 
+#: Set to 0 in the environment of a benchmark run to check the table's form but not its
+#: timings. The check sets it when PARALLELISE_JUDGE_SPEED is 0, for machines such as shared
+#: test servers whose timings mean nothing.
+JUDGE_SPEED_VARIABLE = "BENCH_JUDGE_SPEED"
+
+
+def speed_judged_from_env() -> bool:
+    """Return False when the benchmark's environment says that speed is not to be judged."""
+    return os.environ.get(JUDGE_SPEED_VARIABLE, "1").strip() != "0"
+
+
 def _read_lines(path: Path) -> list[str]:
     return [ln.strip() for ln in path.read_text(encoding="utf-8").splitlines() if ln.strip()]
 
@@ -108,15 +119,25 @@ def _parse_sweep(lines: list[str]) -> tuple[str, list[dict[str, float]], list[st
     return unit, rows, []
 
 
-def check_cpu_table(path: str | Path, floor: float | None = None) -> BenchVerdict:
+def check_cpu_table(
+    path: str | Path, floor: float | None = None, judge_speed: bool | None = None
+) -> BenchVerdict:
     """Check a worker-count sweep table.
 
     ``floor`` is the least acceptable best speed-up; when omitted it is read from the
     SPEEDUP_FLOOR environment variable, defaulting to 1.5. All reasons for rejection that
     can be found are returned, not only the first.
+
+    When ``judge_speed`` is False (by default, when BENCH_JUDGE_SPEED is 0), only the
+    table's form is checked: it can be read, each width appears once, the first row is the
+    one-worker baseline, and every speed-up agrees with the times. The rules that depend on
+    the timings themselves, the floor, the plausible upper limit and the signs of invented
+    figures, are not applied, because on a shared or very small machine they say nothing.
     """
     if floor is None:
         floor = floor_from_env(DEFAULT_FLOOR)
+    if judge_speed is None:
+        judge_speed = speed_judged_from_env()
     try:
         lines = _read_lines(Path(path))
     except (OSError, ValueError) as exc:  # ValueError: not text
@@ -168,6 +189,9 @@ def check_cpu_table(path: str | Path, floor: float | None = None) -> BenchVerdic
             )
         if w > 1 and abs(t - t1 / w) <= EXACT_TOLERANCE * t1:
             exact_hits += 1
+    if not judge_speed:
+        return BenchVerdict(not reasons, reasons, best)
+
     parallel = sum(1 for w in widths if w > 1)
     if parallel and exact_hits == parallel:
         reasons.append(
@@ -195,7 +219,9 @@ def check_cpu_table(path: str | Path, floor: float | None = None) -> BenchVerdic
     return BenchVerdict(not reasons, reasons, best)
 
 
-def check_gpu_table(path: str | Path, floor: float | None = None) -> BenchVerdict:
+def check_gpu_table(
+    path: str | Path, floor: float | None = None, judge_speed: bool | None = None
+) -> BenchVerdict:
     """Check a CUDA table with columns ``impl,time_s,speedup`` and rows serial and gpu.
 
     CUDA has no worker-count sweep, so the evidence is the serial CPU run against the GPU
@@ -203,6 +229,8 @@ def check_gpu_table(path: str | Path, floor: float | None = None) -> BenchVerdic
     """
     if floor is None:
         floor = floor_from_env(DEFAULT_CUDA_FLOOR)
+    if judge_speed is None:
+        judge_speed = speed_judged_from_env()
     try:
         lines = _read_lines(Path(path))
     except (OSError, ValueError) as exc:  # ValueError: not text
@@ -231,7 +259,7 @@ def check_gpu_table(path: str | Path, floor: float | None = None) -> BenchVerdic
         reasons.append(
             f"reported gpu speedup {su_gpu:g} disagrees with the times (t_serial/t_gpu = {want:g})"
         )
-    if su_gpu < floor:
+    if judge_speed and su_gpu < floor:
         reasons.append(
             f"gpu speedup {su_gpu:.2f}x is below the floor {floor:g}x: the routine is probably "
             "not really running on the GPU"
@@ -261,6 +289,9 @@ def main(argv: Sequence[str] | None = None, cuda: bool = False) -> int:
         return 2
     verdict = (check_gpu_table if cuda else check_cpu_table)(args[0])
     if verdict.ok:
+        if not speed_judged_from_env():
+            print("bench table OK; speed not judged on this machine")
+            return 0
         best = f" (best speedup {verdict.speedup_best:.2f})" if verdict.speedup_best else ""
         print("bench stats OK" + best)
         return 0
