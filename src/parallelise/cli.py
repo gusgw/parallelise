@@ -79,14 +79,26 @@ def build_task(name: str, backend: str) -> str:
 
 
 def _agent_version(agent: object) -> str:
-    """Return a short hash of the agent's source file, identifying the exact design tested."""
+    """Return a short hash identifying exactly what the model was given and how it was driven.
+
+    The hash covers the agent design's own source file, the shared prompts and finishing
+    rule in ``agents/base.py``, the tools in ``agents/tools.py``, and the function that words
+    the task (``build_task``). A change to any of them, including a change of wording in a
+    prompt, gives a new version, so that runs made with different prompts are never recorded
+    under the same version.
+    """
     try:
+        digest = hashlib.sha256()
         source = inspect.getsourcefile(type(agent))
-        if source:
-            return hashlib.sha256(Path(source).read_bytes()).hexdigest()[:10]
+        if not source:
+            return "unknown"
+        agents_dir = Path(__file__).resolve().parent / "agents"
+        for path in (Path(source), agents_dir / "base.py", agents_dir / "tools.py"):
+            digest.update(path.read_bytes())
+        digest.update(inspect.getsource(build_task).encode("utf-8"))
+        return digest.hexdigest()[:10]
     except (OSError, TypeError):
-        pass
-    return "unknown"
+        return "unknown"
 
 
 def _safe(text: str) -> str:

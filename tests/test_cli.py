@@ -230,3 +230,25 @@ def test_mask_and_report_old_names_print_a_notice(tmp_path, capsys):
     assert cli.main(["mask", str(tmp_path / "x"), "problem_a", str(tmp_path / "y")]) == 1
     assert "parallelise study mask" in capsys.readouterr().err
 
+
+def test_agent_version_changes_when_a_prompt_changes(monkeypatch, tmp_path):
+    """A change of wording in the shared prompts must give a new agent version."""
+    import shutil as _shutil
+    from pathlib import Path as _Path
+
+    from parallelise import cli as cli_module
+    from parallelise.agents import get_agent
+
+    agent = get_agent("basic")
+    before = cli_module._agent_version(agent)
+    assert before != "unknown" and len(before) == 10
+
+    package = _Path(cli_module.__file__).resolve().parent
+    copy = tmp_path / "parallelise"
+    _shutil.copytree(package, copy)
+    (copy / "agents" / "base.py").write_text(
+        (package / "agents" / "base.py").read_text() + "\n# a changed prompt\n"
+    )
+    monkeypatch.setattr(cli_module, "__file__", str(copy / "cli.py"))
+    after = cli_module._agent_version(agent)
+    assert after != before
