@@ -1,0 +1,22 @@
+{
+  "backend": "openmp",
+  "parts": [],
+  "dependency_structure": "embarrassingly parallel outer loops with inner reduction",
+  "bound_by": "mixed",
+  "communication": "none required for shared memory",
+  "also_suitable": [
+    "cuda",
+    "serial"
+  ],
+  "poor_fit": [
+    "mpi"
+  ],
+  "expected_speedup": "4-8x on 8-core CPU",
+  "justification": "The i,j loops are fully independent enabling trivial OpenMP parallelization. At N=256 the problem fits in cache and benefits from threading without communication overhead. MPI would add network latency exceeding the 34M FLOP computation time.",
+  "analysis": "# Analysis of Dense Matrix Multiply\n\n## 1. Dependency Structure\n**Embarrassingly parallel at the outer two loops.** Each element `C[i][j]` is computed independently via a dot product of row `i` of `A` and column `j` of `B`. The innermost `k` loop is a reduction (sum). No iteration of the `i` or `j` loops depends on any other.\n\n## 2. Arithmetic Intensity\n\nFor `n×n` matrices:\n- **Operations**: `2n³` FLOPs (n² dot products, each requiring n multiplies + n adds)\n- **Data movement**: `O(n²)` bytes to read A, B once and write C\n- **Arithmetic intensity**: `O(n)` FLOPs/byte — grows linearly with matrix size\n\nAt `N=256`:\n- ~34M FLOPs\n- ~0.5 MB data (assuming double precision)\n- **Intensity ≈ 67 FLOPs/byte**\n\nThis is **compute-bound** for well-optimized code with cache blocking. However, the naive triple-loop implementation shown has poor cache locality (striding through B column-wise), making it effectively **memory-bandwidth-bound** without optimization.\n\n**Implications:**\n- **Shared-memory CPU (OpenMP)**: Excellent fit. Near-linear speedup expected with proper thread count. Cache-aware blocking would help further.\n- **GPU (CUDA)**: Excellent fit for larger matrices. At N=256, launch overhead may dominate, but still beneficial. Needs tiling/shared memory for peak performance.\n- **Distributed (MPI)**: Overkill for N=256. Communication overhead would dominate. Viable only for N >> 1000.\n\n## 3. Communication\n\nIf distributed across processes using domain decomposition:\n- **Block distribution**: Partition C into blocks; each process needs corresponding row-blocks of A and column-blocks of B\n- **Cannon's or SUMMA algorithm**: Requires `O(√P)` communication rounds for P processes, each exchanging `O(n²/P)` data\n- **Frequency**: One-time setup broadcast/scatter, then algorithmic exchanges\n- **For N=256**: Communication cost >> computation cost on any realistic network\n\n## 4. Algorithm Parts\n\nThis is a **single homogeneous kernel** — no separable phases with different characteristics.\n\n---\n\n## Recommendation\n\n**Primary: OpenMP** — The algorithm is embarrassingly parallel in the outer loops and compute-intensive enough to benefit from threading. Simple `#pragma omp parallel for collapse(2)` on the `i,j` loops yields near-linear speedup on multi-core CPUs with minimal code complexity.\n\n**Also suitable:**\n- **CUDA**: For production code or larger matrices (N ≥ 512), GPU implementations (especially with cuBLAS) deliver massive speedup. At N=256, still worthwhile if GPU is available.\n- **Serial with optimization**: A well-optimized serial version (loop reordering, blocking, vectorization, or calling BLAS) may outperform naive OpenMP.\n\n**Poor fit:**\n- **MPI**: Communication overhead dominates at this problem size. Network latency and bandwidth costs dwarf the ~34M FLOPs. Only justified for N > 2000 or when distributed memory is required.\n\n**Expected speedup:**\n- OpenMP: 4-8× on typical 8-core CPU\n- CUDA: 10-50× with proper tiling\n- MPI: <1× (slowdown) due to overhead\n\n```json\n{\"backend\": \"openmp\", \"parts\": [], \"dependency_structure\": \"embarrassingly parallel outer loops with inner reduction\", \"bound_by\": \"mixed\", \"communication\": \"none required for shared memory\", \"also_suitable\": [\"cuda\", \"serial\"], \"poor_fit\": [\"mpi\"], \"expected_speedup\": \"4-8x on 8-core CPU\", \"justification\": \"The i,j loops are fully independent enabling trivial OpenMP parallelization. At N=256 the problem fits in cache and benefits from threading without communication overhead. MPI would add network latency exceeding the 34M FLOP computation time.\"}\n```",
+  "model": "claude-sonnet-4.5",
+  "notebook": "matmul.ipynb",
+  "prompt_tokens": 1013,
+  "completion_tokens": 975,
+  "latency_s": 22.448
+}

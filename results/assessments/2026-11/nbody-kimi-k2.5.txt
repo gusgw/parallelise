@@ -1,0 +1,51 @@
+I'll analyze this direct 2D N-body acceleration algorithm for parallelization.
+
+## 1. Dependency Structure
+
+The outer loop over `i` (target bodies) is **embarrassingly parallel**: each body's acceleration `ax[i], ay[i]` depends only on the read-only position arrays `px, py`, not on other accelerations. The inner loop over `j` (source bodies) is a reduction (summation) for each `i`, but different `i` values are completely independent.
+
+There is **no neighbor dependency** (unlike stencils) and **no sequential dependency** between outer loop iterations.
+
+## 2. Arithmetic Intensity
+
+Per body pair `(i,j)` where `i≠j`:
+- **Memory traffic**: Read `px[i], py[i], px[j], py[j]` → 4 doubles = 32 bytes (but `px[i], py[i]` are reused across all `j` for fixed `i`)
+- **Computation**: ~20 FLOPs (subtractions, multiplications, addition, sqrt, division, accumulation)
+
+More precisely per outer loop iteration `i`:
+- Read `px[i], py[i]` once (16 bytes), then `px[j], py[j]` for all `j≠i` (16(n-1) bytes)
+- Total memory: ~16n bytes read per output body
+- Computation: ~20n FLOPs per output body
+
+**Arithmetic intensity**: ~20n FLOPs / 16n bytes ≈ **1.25 FLOPs/byte** (cache-resident for `px[i],py[i]`), or considering full memory traffic, ~1.25 FLOPs/byte.
+
+This is **memory-bandwidth-bound** for large n on most architectures. However, the O(n²) computation means for n=1024, we have ~1M interactions; for n=10⁵, we have 10¹⁰ interactions. At realistic research sizes (n ~ 10⁴–10⁶), the quadratic scaling makes this **compute-bound** for the full problem, though individual outer-loop iterations are memory-light.
+
+## 3. Communication
+
+For distributed execution: each process needs **all** position data (`px, py` arrays) to compute its subset of accelerations. This is a **replicated data** pattern: O(n) data must be broadcast to all processes once, then zero communication during computation. The output accelerations are partitioned by `i`.
+
+## 4. Algorithm Parts
+
+Single homogeneous part: direct all-pairs force evaluation.
+
+---
+
+## Recommendations
+
+| Backend | Assessment |
+|--------|-----------|
+| **OpenMP** | **Excellent fit**: Embarrassingly parallel outer loop, minimal synchronization (only final checksum reduction). Dynamic or static scheduling works. Memory is shared, so no data movement. |
+| **CUDA** | **Excellent fit**: Massive parallelism (n threads, each doing n reductions). High FLOP potential. Memory bandwidth is the limit, but GPUs have excellent bandwidth. Inner loop reduction per thread is serial but short; could use shared memory tiling for better reuse. |
+| **MPI** | **Good fit but overkill**: Works fine with replicated data (broadcast positions, scatter-gather results), but adds unnecessary overhead for single-node execution. Only justified for multi-node where n is so large that memory doesn't fit on one node. |
+| **Serial** | Poor choice: Clear parallel speedup available. |
+
+**Poor fits**: Pure MPI on single node (unnecessary process overhead), or any approach with fine-grained synchronization (none needed here).
+
+**Best choice**: **CUDA** for maximum throughput on large problems, or **OpenMP** for portability and ease. Given this is a research prototype likely to run on various hardware, OpenMP is the pragmatic default, but CUDA offers highest performance ceiling.
+
+```json
+{"backend": "combination", "parts": [{"part": "direct_all_pairs_force", "backend": "openmp"}, {"part": "direct_all_pairs_force_gpu_variant", "backend": "cuda"}], "dependency_structure": "embarrassingly parallel outer loop with per-thread reduction", "bound_by": "compute", "communication": "none for shared memory; O(n) broadcast once for distributed", "also_suitable": ["cuda"], "poor_fit": ["mpi"], "expected_speedup": "near-linear on CPU cores (8-64x), 100-1000x on GPU for large n", "justification": "The O(n²) all-pairs computation is embarrassingly parallel with no dependencies between target bodies. OpenMP provides portable near-linear speedup on multicore CPUs. CUDA achieves highest throughput by exploiting massive thread parallelism and high memory bandwidth, though the inner-loop serial reduction per thread requires careful tuning."}
+```
+
+A combination is recommended (direct_all_pairs_force: openmp; direct_all_pairs_force_gpu_variant: cuda). (model kimi-k2.5).

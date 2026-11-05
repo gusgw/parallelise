@@ -1,0 +1,42 @@
+I'll analyze this 2D Jacobi heat stencil algorithm step by step.
+
+## 1. Dependency Structure
+
+The algorithm is a **stencil with neighbor dependencies**. Each interior cell `un[i][j]` depends on four neighbors from the previous iteration (`u[i-1][j]`, `u[i+1][j]`, `u[i][j-1]`, `u[i][j+1]`). However, **within a single sweep**, all updates are independent—each `un[i][j]` only reads from `u` (the previous iteration's buffer). This is a classic **Jacobi iteration pattern**: read-only access to source, write-only to destination. No data races possible within a sweep.
+
+The sweeps themselves are **sequential**: iteration `t+1` must complete before `t+2` begins.
+
+## 2. Arithmetic Intensity
+
+Per interior cell per sweep: 4 loads, 1 store, 4 additions, 1 multiplication = ~5 FLOPs per 5 memory accesses (40 bytes in double precision, 20 in float). Arithmetic intensity ≈ 0.125–0.25 FLOPs/byte.
+
+This is **memory-bandwidth-bound**, especially at N=128 where the working set (~128² × 8 × 2 ≈ 256 KB) fits in L2/L3 cache. At realistic larger sizes (N=4096+), it becomes bandwidth-bound on all architectures. The stencil has poor temporal locality—each value is used 4 times then discarded.
+
+## 3. Communication
+
+For distributed execution: processes would need **halo exchange** of boundary rows/columns with neighbors after every sweep. With 2D domain decomposition, each process exchanges 4 edge strips (2 rows + 2 columns, minus corners) per iteration. Communication volume: O(N) per process per sweep, frequency: every sweep (200 times). This is **frequent fine-grained synchronization**.
+
+## 4. Algorithm Parts
+
+Single homogeneous part: the stencil sweep. The final checksum is a trivial reduction (negligible cost).
+
+---
+
+## Recommendations
+
+| Backend | Assessment |
+|--------|-----------|
+| **OpenMP** | **Best fit**. The within-sweep parallelism is trivial (`#pragma omp parallel for collapse(2)`). No communication needed—shared memory handles halo implicitly. Memory bandwidth is the limit, and OpenMP saturates it well on multicore CPUs. |
+| CUDA | Moderate fit. GPUs have high bandwidth, but the stencil is small (N=128) and has strided memory access in one dimension. Would need careful shared-memory tiling. Overkill for this problem size; better at N=2048+. |
+| MPI | Poor fit for single node; necessary for multi-node. Adds overhead of explicit halo exchange for a problem that fits in one node's memory. |
+| Serial | Viable for N=128, but wastes multicore CPUs. |
+
+**Critical point**: At N=128, the problem is tiny. Parallel overhead (thread spawning, kernel launch) may dominate. For production use with N≥1024, OpenMP is clearly optimal.
+
+---
+
+```json
+{"backend": "openmp", "parts": [], "dependency_structure": "stencil with neighbor dependencies, Jacobi pattern (read-only source, write-only destination)", "bound_by": "memory", "communication": "none for shared memory; halo exchange O(N) per sweep for distributed", "also_suitable": ["cuda"], "poor_fit": ["mpi"], "expected_speedup": "near-linear up to memory bandwidth limit (typically 4-8x on multicore CPU)", "justification": "The Jacobi stencil has independent updates within each sweep, making OpenMP trivial to apply with collapse(2). The algorithm is memory-bandwidth-bound, so shared-memory parallelism avoids MPI's communication overhead while saturating available bandwidth. CUDA is viable but unnecessary overhead at this scale."}
+```
+
+The recommended backend is openmp. (model kimi-k2.5).

@@ -1,0 +1,35 @@
+{
+  "backend": "combination",
+  "parts": [
+    {
+      "part": "small_to_medium_N",
+      "backend": "openmp"
+    },
+    {
+      "part": "large_N_GPU_available",
+      "backend": "cuda"
+    },
+    {
+      "part": "large_N_cluster",
+      "backend": "mpi"
+    }
+  ],
+  "dependency_structure": "embarrassingly parallel outer loops with reduction inner loop",
+  "bound_by": "compute",
+  "communication": "none during computation, O(n²) initial broadcast only",
+  "also_suitable": [
+    "cuda",
+    "mpi"
+  ],
+  "poor_fit": [
+    "serial"
+  ],
+  "expected_speedup": "8-32x on multicore CPU, 50-200x on GPU vs naive serial",
+  "justification": "Dense matrix multiply is compute-bound with independent output elements, making it ideal for OpenMP on CPUs and CUDA on GPUs; MPI suits distributed memory only when problem size exceeds single-node capacity.",
+  "analysis": "I'll analyze this dense matrix multiplication algorithm for parallelization.\n\n## 1. Dependency Structure\n\nThe naive triple-loop matrix multiply has **embarrassingly parallel outer loops** with a reduction inner loop:\n\n- The `i` and `j` loops are **fully independent**: each `C[i][j]` can be computed without any data dependencies on other `C[i'][j']` entries\n- The `k` loop is a **reduction** (summation) that must be sequential or use parallel reduction primitives\n- No stencil dependencies, no neighbour communication needed\n\nThis is **embarrassingly parallel at the outer level** — we can distribute `(i,j)` pairs across workers with zero communication during computation.\n\n## 2. Arithmetic Intensity\n\nFor `n×n` matrices:\n- Memory traffic: read `A[i,:]` (n elements) and `B[:,j]` (n elements) per output, but with caching/reuse this becomes ~2n² reads for A, ~2n² reads for B (with good blocking), and n² writes for C\n- Total flops: 2n³ (n³ multiplications + n³ additions)\n- Arithmetic intensity: ~2n³ / (12n² bytes in double precision) = **n/6 FLOPs/byte**\n\nFor N=256: ~43 FLOPs/byte — **compute-bound**\nFor N=4096: ~683 FLOPs/byte — **strongly compute-bound**\n\nAt realistic sizes, this is **compute-bound**. The working set for N=256 is ~1.5MB (fits in L2/L3), for N=4096 is ~384MB (fits in RAM, benefits from cache blocking).\n\nImplications:\n- **Shared-memory CPU**: Excellent speedup expected with proper blocking\n- **Distributed CPU**: Good if problem is large enough to amortize initial broadcast of A and B\n- **GPU**: Excellent fit — GPUs excel at regular compute-bound dense linear algebra\n\n## 3. Communication\n\nIf distributed across processes:\n- **Initial**: Broadcast or scatter A and B matrices (O(n²) data)\n- **During computation**: **None** — zero communication needed (embarrassingly parallel)\n- **Final**: Gather C matrix (O(n²) data)\n\nCommunication is **minimal and one-time only** — ideal for distributed memory.\n\n## 4. Separable Parts\n\nThe algorithm is homogeneous, but implementation strategy differs:\n- **Small N (≤512)**: Single-node, cache-blocked\n- **Large N (>2048)**: Distributed with 2D decomposition or GPU with tiling\n\n---\n\n## Recommendations\n\n| Backend | Assessment |\n|--------|-----------|\n| **OpenMP** | ✅ **Best first choice** — trivial parallelization of `i` or `j` loop, excellent for N≤2048, automatic reduction handling |\n| **CUDA** | ✅ **Excellent for large N** — cuBLAS or custom kernel with shared memory tiling; 10-100x speedup possible |\n| **MPI** | ✅ **Good for very large N** on clusters, or when memory exceeds single node |\n| **Serial** | ❌ Poor — misses 10-100x speedup opportunity |\n\n**Poor fits**: Pure MPI for small N (overhead dominates), serial for any production use.\n\n**Optimal strategy**: Start with OpenMP (portable, easy), move to CUDA for maximum performance on large problems, or MPI+OpenMP hybrid for cluster-scale problems.\n\n```json\n{\"backend\": \"combination\", \"parts\": [{\"part\": \"small_to_medium_N\", \"backend\": \"openmp\"}, {\"part\": \"large_N_GPU_available\", \"backend\": \"cuda\"}, {\"part\": \"large_N_cluster\", \"backend\": \"mpi\"}], \"dependency_structure\": \"embarrassingly parallel outer loops with reduction inner loop\", \"bound_by\": \"compute\", \"communication\": \"none during computation, O(n²) initial broadcast only\", \"also_suitable\": [\"cuda\", \"mpi\"], \"poor_fit\": [\"serial\"], \"expected_speedup\": \"8-32x on multicore CPU, 50-200x on GPU vs naive serial\", \"justification\": \"Dense matrix multiply is compute-bound with independent output elements, making it ideal for OpenMP on CPUs and CUDA on GPUs; MPI suits distributed memory only when problem size exceeds single-node capacity.\"}\n```",
+  "model": "kimi-k2.5",
+  "notebook": "matmul.ipynb",
+  "prompt_tokens": 912,
+  "completion_tokens": 909,
+  "latency_s": 14.593
+}

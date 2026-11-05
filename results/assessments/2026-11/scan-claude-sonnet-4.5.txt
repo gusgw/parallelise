@@ -1,0 +1,76 @@
+Looking at this notebook, I need to analyze a **prefix sum (scan)** algorithm.
+
+## Analysis
+
+### 1. Dependency Structure
+**Hierarchical dependencies with block-level parallelism.**
+
+The naive implementation shows a sequential scan with each output depending on all previous inputs. However, prefix sum is a classic parallel algorithm with well-known decompositions:
+- **Block decomposition**: Split input into chunks, compute local scans in parallel, then propagate block sums
+- **Tree-based algorithms**: Reduce-then-downsweep (Blelloch scan) or work-efficient parallel scans
+
+The algorithm has O(log n) span with O(n) work, making it amenable to parallelization despite the apparent sequential dependency.
+
+### 2. Arithmetic Intensity
+**Memory-bandwidth-bound.**
+
+- **Operations per element**: 1 addition + 1 store = ~2 FLOPs
+- **Data movement**: Read 8 bytes (input) + write 8 bytes (output) = 16 bytes per element
+- **Arithmetic intensity**: ~0.125 FLOPs/byte
+
+This is extremely low. At N=1M:
+- Data: ~16 MB
+- Computation: ~2M FLOPs (microseconds on modern hardware)
+- Memory bandwidth will dominate on all platforms
+
+**Implications:**
+- **CPU**: Limited by DRAM bandwidth (~50-100 GB/s), parallel scan overhead may not pay off at 1M elements
+- **GPU**: High bandwidth (~500-900 GB/s) helps, but kernel launch overhead significant for 1M elements
+- Speedup ceiling determined by bandwidth ratio, not core count
+
+### 3. Communication
+**Moderate inter-block communication.**
+
+For distributed parallelism:
+- **Initial**: Partition input across processes (one-time broadcast or pre-distributed)
+- **Per-iteration**: Each process needs the sum of all preceding blocks (prefix of block sums)
+- **Pattern**: After local scans, perform a scan on P block sums (P = process count), then each process adds its offset
+- **Volume**: O(P) values exchanged, not O(N) — favorable scaling
+- **Frequency**: One synchronization point after local scans
+
+### 4. Algorithm Structure
+Single-phase algorithm, but implementation would have:
+- **Phase 1**: Local block scans (embarrassingly parallel)
+- **Phase 2**: Scan of block sums (sequential or recursive parallel)
+- **Phase 3**: Add offsets to local results (embarrassingly parallel)
+
+## Recommendation
+
+**For N=1M: SERIAL or OpenMP**
+
+**Reasoning:**
+- At 1M elements (~8MB input), this fits comfortably in CPU cache hierarchy
+- Memory bandwidth bound means limited speedup potential
+- Parallel scan has non-trivial overhead (block coordination, offset propagation)
+- Modern compilers with `-O3` and auto-vectorization can achieve near-optimal sequential performance
+
+**OpenMP** is suitable if:
+- N scales to 10M+ elements
+- Implementation uses efficient block scan (e.g., chunk size tuned to L2 cache)
+- Overhead of parallel region creation is amortized
+
+**Poor fits:**
+- **MPI**: Communication overhead and process startup cost dwarf computation time; only justified for N > 100M with data already distributed
+- **CUDA**: Kernel launch latency (~5-10μs) is significant fraction of total time at 1M elements; GPU shines at 10M+ elements where bandwidth advantage dominates
+- **Combination**: Unnecessary complexity for single-node problem at this scale
+
+**At larger scales (N > 10M):**
+- **CUDA** becomes attractive (memory bandwidth advantage)
+- **OpenMP** remains good for CPU-only environments
+- **MPI+OpenMP** for distributed supercomputers with N > 1B
+
+```json
+{"backend": "openmp", "parts": [], "dependency_structure": "hierarchical block-parallel scan", "bound_by": "memory", "communication": "block-sum prefix exchange", "also_suitable": ["serial"], "poor_fit": ["mpi", "cuda"], "expected_speedup": "2-4x on multicore CPU", "justification": "Prefix sum is memory-bandwidth-bound at 1M elements with low arithmetic intensity. OpenMP provides modest speedup through parallel block scans without distributed overhead, but serial with vectorization is competitive. MPI and CUDA overheads exceed benefit at this scale."}
+```
+
+The recommended backend is openmp. (model claude-sonnet-4.5).
