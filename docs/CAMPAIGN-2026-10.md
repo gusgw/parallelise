@@ -227,6 +227,54 @@ paired comparison no longer separates it from chance. The October check ran the 
 test program, so a later re-check of these routines with the harness's own known-good test may
 change these counts again.
 
+## Re-checked with the present check
+
+All 192 work folders of the campaign were judged again on 6 November 2026, on the same
+12-core host, with the check as it then stood: in a freshly assembled folder, with the
+problem's own known-good test program in place of the agent's, with correctness and speed
+judged separately, and, for OpenMP, with every answer at the benchmark's size compared with
+the known-good routine's. Each folder was judged as it was assembled (`parallelise check
+--as-assembled`): its trusted files, including its October benchmark, which has no untimed
+warm-up call, were checked against its own fingerprint file and used as they were. The
+folders were copied first, and the copies were judged, one at a time, in a single container
+under an 8 GB memory limit; the benchmarks of the prefix sum under MPI ran at a length of 20
+million with at most 4 processes to fit that limit. The records are in
+`results/campaign-2026-10/recheck-2026-11.jsonl`.
+
+Correct runs out of runs, by model: as recorded in October, as re-read from the October logs
+under the rule that judges correctness alone (the section above), and as re-checked:
+
+| Model | October, unmasked | October, masked | Re-read, unmasked | Re-read, masked | Re-checked, unmasked | Re-checked, masked |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| claude-sonnet-4.5 | 24/24 (100%) | 21/24 (88%) | 24/24 (100%) | 24/24 (100%) | 24/24 (100%) | 23/24 (96%) |
+| kimi-k2.5 | 24/24 (100%) | 20/24 (83%) | 24/24 (100%) | 21/24 (88%) | 24/24 (100%) | 21/24 (88%) |
+| gpt-oss-120b | 21/24 (88%) | 20/24 (83%) | 22/24 (92%) | 22/24 (92%) | 22/24 (92%) | 22/24 (92%) |
+| llama-3.3-70b | 7/24 (29%) | 9/24 (38%) | 7/24 (29%) | 9/24 (38%) | 10/24 (42%) | 6/24 (25%) |
+| Three capable models | 69/72 (96%) | 61/72 (85%) | 70/72 (97%) | 67/72 (93%) | 70/72 (97%) | 66/72 (92%) |
+| All models | 76/96 (79%) | 70/96 (73%) | 77/96 (80%) | 76/96 (79%) | 80/96 (83%) | 72/96 (75%) |
+
+For the three capable models, 5 cells lost a correct run when masked and 1 gained one; a
+two-sided sign test on those 6 gives p = 0.22.
+
+The re-check changed the October verdict of 14 of the 192 runs:
+
+| Model | Problem and backend | Variant | Agent design | October | Re-checked |
+| --- | --- | --- | --- | --- | --- |
+| claude-sonnet-4.5 | scan on openmp | masked | basic | failed (benchmark) | correct, faster |
+| claude-sonnet-4.5 | scan on openmp | masked | langgraph | failed (benchmark) | correct, faster |
+| gpt-oss-120b | cg on openmp | masked | langgraph | failed (benchmark) | correct, faster |
+| gpt-oss-120b | jacobi on mpi | masked | langgraph | failed (benchmark) | correct, faster |
+| gpt-oss-120b | jacobi on mpi | unmasked | pydantic | failed (benchmark) | correct, faster |
+| kimi-k2.5 | scan on mpi | masked | langgraph | failed (benchmark) | correct, no useful speed-up |
+| llama-3.3-70b | cg on openmp | masked | basic | passed | not correct (benchmark) |
+| llama-3.3-70b | cg on openmp | masked | pydantic | passed | not correct (benchmark) |
+| llama-3.3-70b | jacobi on openmp | masked | basic | passed | not correct (test-one-worker) |
+| llama-3.3-70b | jacobi on openmp | unmasked | basic | failed (test-one-worker) | correct, faster |
+| llama-3.3-70b | jacobi on openmp | unmasked | langgraph | failed (test-one-worker) | correct, faster |
+| llama-3.3-70b | jacobi on openmp | unmasked | pydantic | passed | not correct (test-one-worker) |
+| llama-3.3-70b | scan on mpi | unmasked | basic | failed (test-one-worker) | correct, faster |
+| llama-3.3-70b | scan on mpi | unmasked | langgraph | failed (test-one-worker) | correct, faster |
+
 ## What the tamper check found
 
 The check in this campaign first compares each trusted file (the benchmark, the headers, the
@@ -412,6 +460,8 @@ an estimate with wide margins, not a lower bound and not a measurement of the re
 component.
 
 Under the later rule, which judges correctness alone and reports speed apart, the fall for the
-three capable models is smaller still: from 70 of 72 correct runs (97%) to 67 of 72 (93%), as
-the section on that rule above shows. Most of what masking cost the capable models in October
-was speed, not correctness.
+three capable models is smaller still: from 70 of 72 correct runs (97%) to 67 of 72 (93%) when
+the October logs are re-read, and from 70 of 72 to 66 of 72 (92%) when every folder is
+re-checked with the present check, which also tests each routine with the problem's own test
+program. Neither fall can be told apart from chance in single runs (p = 0.38 and p = 0.22).
+Most of what masking cost the capable models in October was speed, not correctness.

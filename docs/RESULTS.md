@@ -160,6 +160,35 @@ Correct runs out of 12 per problem, backend and variant, under the present rule:
 | conjugate gradient, OpenMP | 9/12 | 11/12 |
 | conjugate gradient, MPI | 8/12 | 8/12 |
 
+The same runs re-checked on 6 November 2026 with the present check: each work folder judged as
+it was assembled, with the problem's own known-good test program in place of the agent's and,
+for OpenMP, every answer at the benchmark's size compared with the known-good routine's.
+Source: `results/campaign-2026-10/recheck-2026-11.jsonl`; the method and the 14 runs whose
+verdict changed are in [CAMPAIGN-2026-10.md](CAMPAIGN-2026-10.md). Correct runs out of 24 per
+model and variant:
+
+| model | unmasked | masked |
+|---|---|---|
+| claude-sonnet-4.5 | 24/24 | 23/24 |
+| kimi-k2.5 | 24/24 | 21/24 |
+| gpt-oss-120b | 22/24 | 22/24 |
+| llama-3.3-70b | 10/24 | 6/24 |
+| three capable models (of 72) | 70/72 | 66/72 |
+| all models (of 96) | 80/96 | 72/96 |
+
+Correct runs out of 12 per problem, backend and variant, re-checked:
+
+| problem and backend | unmasked | masked |
+|---|---|---|
+| integration, OpenMP | 12/12 | 12/12 |
+| integration, MPI | 12/12 | 12/12 |
+| heat stencil, OpenMP | 11/12 | 9/12 |
+| heat stencil, MPI | 8/12 | 6/12 |
+| prefix sum, OpenMP | 9/12 | 9/12 |
+| prefix sum, MPI | 11/12 | 7/12 |
+| conjugate gradient, OpenMP | 9/12 | 9/12 |
+| conjugate gradient, MPI | 8/12 | 8/12 |
+
 ## 7. Token use and cost
 
 Four harder problems, ten combinations of problem and backend, three agent designs each.
