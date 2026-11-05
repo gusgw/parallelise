@@ -25,7 +25,7 @@ RUN pip install --no-cache-dir ".[dev,report,agents]" \
 
 USER parallelise
 ENV PARALLELISE_WORK_ROOT=/work \
-    PARALLELISE_RESULTS=/app/results/runs.jsonl
+    PARALLELISE_RESULTS=/work/local-runs.jsonl
 # Open MPI refuses to start more processes than it sees cores unless told otherwise;
 # oversubscription lets the many-worker tests run on a small container.
 ENV OMPI_MCA_rmaps_base_oversubscribe=1
@@ -58,7 +58,7 @@ RUN pip install --no-cache-dir ".[dev,report,agents]" \
 
 USER parallelise
 ENV PARALLELISE_WORK_ROOT=/work \
-    PARALLELISE_RESULTS=/app/results/runs.jsonl \
+    PARALLELISE_RESULTS=/work/local-runs.jsonl \
     OMPI_MCA_rmaps_base_oversubscribe=1 \
     NVCC=/usr/local/cuda/bin/nvcc
 # The CUDA Makefiles default to the compiler path used on the author's workstation; the

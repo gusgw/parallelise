@@ -51,7 +51,7 @@ class Settings:
     #: HTTP 429 (too many requests). Zero means do not wait.
     throttle_wait_s: float = 120.0
     work_root: str = "work"
-    results_path: str = "results/runs.jsonl"
+    results_path: str = "results/local-runs.jsonl"
 
     def validate(self) -> Settings:
         """Raise ConfigError with a plain message if any value is unusable; return self."""

@@ -11,3 +11,6 @@ build
 work
 problems/**/bench
 problems/**/bench.csv
+# The stored run records and evidence are large and are not read when the program runs.
+# The three tests that read them skip themselves when the folder is absent.
+results

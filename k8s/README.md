@@ -14,9 +14,12 @@ a registry the cluster can reach and change `image:` in the file). Then run
 
 - **ConfigMap `parallelise-config`** holds the address of the language-model gateway
   (`gateway-url`) and the model name (`model`). They reach the program as the environment
-  variables `PARALLELISE_GATEWAY_URL` and `PARALLELISE_MODEL`. The default address,
-  `http://localhost:4000/v1`, only works if a gateway runs in the same pod, so change it
-  to the address of your own gateway.
+  variables `PARALLELISE_GATEWAY_URL` and `PARALLELISE_MODEL`. The file sets the address to
+  `http://model-gateway.llm.svc.cluster.local:4000/v1`, which names a Service called
+  `model-gateway` in the namespace `llm` and is an example to replace with the address of
+  your own gateway. The program's own default address, `http://localhost:4000/v1`, applies
+  only when the variable is not set, and it would reach a gateway only if one ran in the same
+  pod. The model name in the file is the placeholder `replace-with-model-name`.
 - **Secret `parallelise-secret`** holds the optional key for the gateway. It is passed as
   `PARALLELISE_API_KEY`. The reference is marked `optional`, so the Job still starts if
   you delete the Secret.

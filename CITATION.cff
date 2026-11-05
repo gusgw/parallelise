@@ -1,0 +1,9 @@
+cff-version: 1.2.0
+message: "If you use this software, please cite it as below."
+title: parallelise
+version: 0.1.0
+authors:
+  - family-names: Gray-Weale
+    given-names: Angus
+repository-code: "https://github.com/gusgw/parallelise"
+license: MIT

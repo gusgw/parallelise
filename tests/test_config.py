@@ -17,7 +17,7 @@ def test_defaults_when_environment_is_empty():
     assert s.temperature == 0.2
     assert s.request_timeout_s == 600
     assert s.work_root == "work"
-    assert s.results_path == "results/runs.jsonl"
+    assert s.results_path == "results/local-runs.jsonl"
     assert s.time_limit_s == 1800
     assert s.throttle_wait_s == 120
 

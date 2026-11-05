@@ -13,3 +13,5 @@ work/
 # build products inside problem folders
 problems/**/bench
 problems/**/bench.csv
+# the default store for runs made on this machine
+results/local-runs.jsonl

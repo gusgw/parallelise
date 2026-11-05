@@ -102,7 +102,7 @@ spec:
             - name: PARALLELISE_WORK_ROOT
               value: /work
             - name: PARALLELISE_RESULTS
-              value: /work/results/runs.jsonl
+              value: /work/results/local-runs.jsonl
             - name: TMPDIR
               value: /work/tmp
             - name: HOME
