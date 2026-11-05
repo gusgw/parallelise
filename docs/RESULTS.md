@@ -5,7 +5,11 @@ from. The experimental design is in [DESIGN.md](DESIGN.md); the October 2026 cam
 its own document, [CAMPAIGN-2026-10.md](CAMPAIGN-2026-10.md).
 
 How to read the tables. A run is one attempt by one agent design, with one model, on one
-problem and backend; it passes or fails the check. A cell is one problem and backend for
+problem and backend; it passes or fails the check. The July study and the October campaign
+were judged by an earlier rule under which a correct routine whose best speed-up was below
+the problem's floor failed at the benchmark stage; under the present rule a pass means a
+correct routine, whatever its speed, and speed is reported apart. Section 6 gives the October
+counts under both rules. A cell is one problem and backend for
 one model, scored out of the three agent designs, so "2/3" means two designs passed. Every
 run is a single attempt; where a cell was run more than once, the latest record counts.
 The backends are OpenMP (threads in one computer), MPI (cooperating processes) and CUDA
@@ -128,6 +132,34 @@ the full tables, with latency, throughput and cost, are in
 | llama-3.3-70b | 7/24 | 9/24 |
 | all models | 76/96 | 70/96 |
 
+The same runs counted under the present rule, in which a correct routine passes whatever its
+speed. Source: `results/campaign-2026-10/runs.jsonl` and the check log `gate.log` of each run
+that failed at the benchmark stage, under `results/campaign-2026-10/runs/`. Seven runs change
+from a failure to a correct routine with no useful speed-up; the list is in
+[CAMPAIGN-2026-10.md](CAMPAIGN-2026-10.md). Correct runs out of 24 per model and variant.
+
+| model | earlier rule, unmasked | earlier rule, masked | present rule, unmasked | present rule, masked |
+|---|---|---|---|---|
+| claude-sonnet-4.5 | 24/24 | 21/24 | 24/24 | 24/24 |
+| kimi-k2.5 | 24/24 | 20/24 | 24/24 | 21/24 |
+| gpt-oss-120b | 21/24 | 20/24 | 22/24 | 22/24 |
+| llama-3.3-70b | 7/24 | 9/24 | 7/24 | 9/24 |
+| three capable models (of 72) | 69/72 | 61/72 | 70/72 | 67/72 |
+| all models (of 96) | 76/96 | 70/96 | 77/96 | 76/96 |
+
+Correct runs out of 12 per problem, backend and variant, under the present rule:
+
+| problem and backend | unmasked | masked |
+|---|---|---|
+| integration, OpenMP | 12/12 | 12/12 |
+| integration, MPI | 12/12 | 12/12 |
+| heat stencil, OpenMP | 10/12 | 10/12 |
+| heat stencil, MPI | 8/12 | 6/12 |
+| prefix sum, OpenMP | 9/12 | 9/12 |
+| prefix sum, MPI | 9/12 | 8/12 |
+| conjugate gradient, OpenMP | 9/12 | 11/12 |
+| conjugate gradient, MPI | 8/12 | 8/12 |
+
 ## 7. Token use and cost
 
 Four harder problems, ten combinations of problem and backend, three agent designs each.
@@ -162,19 +194,23 @@ Best speed-up of each reference solution over its one-worker run, one measuremen
 The first table is from the working notes of July 2026 on a machine with 22 processor
 cores; the second is from 11 October 2026 on a 12-core host with a 16 GB NVIDIA graphics
 card, recorded in [../results/reference-checks-gpu-host.md](../results/reference-checks-gpu-host.md)
-with each problem's floor.
+with each problem's floor; the third is from 6 November 2026 on the same host, recorded in
+`results/reference-speedups-2026-11.json`. Only the November figures were measured with the
+untimed warm-up call in every OpenMP and MPI benchmark. In November the MPI benchmarks of the
+prefix sum, histogram, decay and reservoir ran at a length of 20 million with at most 4
+processes, to fit an 8 GB memory limit.
 
-| problem | OpenMP (July) | MPI (July) | CUDA (July) | OpenMP (October) | MPI (October) | CUDA (October) |
-|---|---|---|---|---|---|---|
-| integration | 6.8 | 4.3 | 4.5 | 5.30 | 3.92 | 8.95 |
-| matrix multiply | not recorded | 2.0 to 3.6 | 12.7 | 5.05 | 8.95 | 27.53 |
-| heat stencil | not recorded | 3.5 | 7.6 | 6.18 | 5.42 | 11.51 |
-| N-body | 7.2 | 4.1 | 7.0 | 6.03 | 5.72 | 15.23 |
-| conjugate gradient | 4.8 | 3.9 | 15.4 | 4.59 | 3.51 | 17.60 |
-| prefix sum | 5.9 | 4.0 | none | 1.93 | 1.32 | none |
-| histogram | 4.5 | 3.4 | none | 3.09 | 3.01 | none |
-| decay | 8.8 | 5.3 | none | 6.58 | 7.05 | none |
-| reservoir | 7.8 | 4.2 | none | 7.02 | 5.80 | none |
+| problem | OpenMP (July) | MPI (July) | CUDA (July) | OpenMP (October) | MPI (October) | CUDA (October) | OpenMP (November) | MPI (November) | CUDA (November) |
+|---|---|---|---|---|---|---|---|---|---|
+| integration | 6.8 | 4.3 | 4.5 | 5.30 | 3.92 | 8.95 | 5.45 | 5.86 | 8.95 |
+| matrix multiply | not recorded | 2.0 to 3.6 | 12.7 | 5.05 | 8.95 | 27.53 | 5.14 | 6.42 | 25.62 |
+| heat stencil | not recorded | 3.5 | 7.6 | 6.18 | 5.42 | 11.51 | 6.01 | 6.16 | 11.76 |
+| N-body | 7.2 | 4.1 | 7.0 | 6.03 | 5.72 | 15.23 | 6.05 | 5.78 | 15.21 |
+| conjugate gradient | 4.8 | 3.9 | 15.4 | 4.59 | 3.51 | 17.60 | 5.76 | 3.44 | 17.61 |
+| prefix sum | 5.9 | 4.0 | none | 1.93 | 1.32 | none | 1.49 | 1.16 | none |
+| histogram | 4.5 | 3.4 | none | 3.09 | 3.01 | none | 3.17 | 3.13 | none |
+| decay | 8.8 | 5.3 | none | 6.58 | 7.05 | none | 6.51 | 3.84 | none |
+| reservoir | 7.8 | 4.2 | none | 7.02 | 5.80 | none | 7.00 | 3.96 | none |
 
 ## 9. Calling a finished routine from Python
 
@@ -189,3 +225,31 @@ original serial Python.
 | heat stencil, OpenMP | not recorded | not recorded | 31 times faster |
 | integration, MPI | 0.0152 s on one process | 0.0044 s on four | 3.4 times faster; the answers differ by 6e-14 |
 | integration, CUDA | not recorded | 2.3 ms | the answer matches the oracle |
+
+## 10. Recommended backends against measured speed-ups
+
+The backend that each model recommended for each notebook, from `parallelise assess`, set
+against the best speed-up of the known-good solution on each backend. In this section sonnet
+is `claude-sonnet-4.5` and kimi is `kimi-k2.5`. For a combination, the backend shown in
+brackets is the one the harness would run, the first part that is not serial. "No version"
+means that the problem has no CUDA version. Recommendations: `results/assessments/2026-11/`,
+one call per notebook and model, 6 November 2026. Speed-ups:
+`results/reference-speedups-2026-11.json`, one measurement each, 6 November 2026, on a 12-core
+host with a 16 GB NVIDIA graphics card, with the untimed warm-up call in every benchmark.
+OpenMP used 1 to 12 threads at each benchmark's default length. MPI used 1 to 12 processes at
+the default length, except for decay, histogram, reservoir and the prefix sum, whose MPI
+benchmarks were run at a length of 20 million with at most 4 processes to fit an 8 GB memory
+limit; for those four problems the MPI and OpenMP figures are not measured alike. The CUDA
+speed-up is over one processor core.
+
+| problem | OpenMP | MPI | CUDA | fastest | fastest of OpenMP and MPI | sonnet recommends | sonnet fastest | sonnet fastest of OpenMP and MPI | kimi recommends | kimi fastest | kimi fastest of OpenMP and MPI |
+|---|---|---|---|---|---|---|---|---|---|---|---|
+| integration | 5.45 | 5.86 | 8.95 | CUDA | MPI | OpenMP | no | no | OpenMP | no | no |
+| matrix multiply | 5.14 | 6.42 | 25.62 | CUDA | MPI | OpenMP | no | no | combination (runs OpenMP) | no | no |
+| heat stencil (Jacobi) | 6.01 | 6.16 | 11.76 | CUDA | MPI | OpenMP | no | no | OpenMP | no | no |
+| N-body | 6.05 | 5.78 | 15.21 | CUDA | OpenMP | OpenMP | no | yes | combination (runs OpenMP) | no | yes |
+| conjugate gradient | 5.76 | 3.44 | 17.61 | CUDA | OpenMP | OpenMP | no | yes | OpenMP | no | yes |
+| prefix sum (scan) | 1.49 | 1.16 | no version | OpenMP | OpenMP | OpenMP | yes | yes | CUDA | no (no version) | not a processor backend |
+| histogram | 3.17 | 3.13 | no version | OpenMP | OpenMP | OpenMP | yes | yes | OpenMP | yes | yes |
+| decay | 6.51 | 3.84 | no version | OpenMP | OpenMP | serial | no | no | serial | no | no |
+| reservoir | 7.00 | 3.96 | no version | OpenMP | OpenMP | serial | no | no | serial | no | no |

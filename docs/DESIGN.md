@@ -35,9 +35,10 @@ is not done until the checks pass. They differ only in how that rule is enforced
 - `pydantic` uses the output validator of the Pydantic AI framework. A validator ordinarily
   checks that a model's answer has the right type and, if not, raises a retry so that the
   model tries again. Here the validator checks that the build and tests pass, and raises the
-  same retry until they do or until the request limit is reached. The shipped default for this limit
-  is the step budget of 80 (`--step-budget`); the July runs used a limit of 200, as the log
-  line quoted below shows.
+  same retry until they do, until the framework has refused four final answers in all, or
+  until the request limit is reached. The shipped default for the request limit is the step
+  budget of 80 (`--step-budget`); the July runs used a limit of 200, as the log line quoted
+  below shows.
 
 **Backend.** The same algorithm is converted for OpenMP (threads in one computer), MPI
 (cooperating processes) and CUDA (a graphics processor). The prompts give the model a menu
@@ -101,6 +102,16 @@ hashes because they come from before the fix.
 
 ## The check
 
+The check makes two judgements, and keeps them apart. The first is correctness, which decides
+whether the run passes: the routine must build, give the notebook's answer with one worker and
+with several, keep the rules, and produce a sound benchmark table. The second is speed, which
+is reported as a speed verdict and never fails a run: "faster" when the best speed-up reached
+the problem's floor, "no useful speed-up" when it did not, "speed not judged on this machine"
+when speed judging is switched off, and "not measured" when the run failed. A parallel method
+that gives no useful speed-up for some algorithm on some machine is a finding about that
+algorithm and that machine, not a failed conversion, so a correct routine that is not faster
+passes with the verdict "no useful speed-up".
+
 The check has three parts. Each exists because a model has been seen to fail, or to cheat, in
 the way it guards against.
 
@@ -117,7 +128,9 @@ the way it guards against.
    and an error at the boundary between the blocks given to neighbouring workers, none of which
    shows with one worker. A timeout catches a deadlock.
 3. **Benchmark and validation of the speed-up.** A benchmark that the agent cannot edit
-   times the routine at several widths and the checker validates the figures. The floor is 1.5
+   times the routine at several widths and the checker validates the figures. A table that is
+   missing, malformed or invented fails this part. The best speed-up is then compared with the
+   floor to give the speed verdict. The floor is 1.5
    times for the other problems, 1.25 for the problems limited by memory
    bandwidth (jacobi, cg, scan, decay and reservoir), and 3 times for CUDA (set in each
    problem's Makefile). The floor for CUDA is lower than it looks because double-precision arithmetic on
@@ -125,8 +138,14 @@ the way it guards against.
    rate; the reference solution reached 4.5 times, and a program that secretly ran on the
    processor measured about 1 time.
 
-Parts 2 and 3 are independent of each other on purpose. A serial program passes the first
-two parts and fails the third. A fast but wrong program fails the second.
+Parts 2 and 3 are independent of each other on purpose. A serial program passes all three
+parts with the speed verdict "no useful speed-up". A fast but wrong program fails the second.
+
+The floor still guides the agent. The agent's own `make check` in its work folder fails when
+the floor is missed, because that is how the agent learns that its routine is not yet
+parallel. Only in the check's judging folder, where the benchmark script runs with
+`BENCH_FLOOR_ROLE=report`, is a missed floor reported instead of failed. A stricter floor
+given to the check with `--floor` changes the speed verdict and never the pass.
 
 ### The routine is judged in a fresh folder
 
@@ -175,10 +194,13 @@ when any of these holds:
 - every parallel time is exactly the serial time divided by the width, which real
   measurements never are;
 - throughput is constant across widths;
-- the best speed-up is under the floor.
+- the best speed-up is more than 1.5 times the widest worker count.
 
-Self-tests confirm that a correct solution passes and a serial routine fails with "no real
-parallel speed-up". For CUDA, a review recorded in my project log found a second weakness: the benchmark
+A best speed-up under the floor is not among these rules: it gives the speed verdict "no
+useful speed-up" and leaves the table sound. Self-tests confirm that a correct solution passes
+as faster, that a serial routine passes in the judging folder with "no useful speed-up" and
+fails the agent's own `make check`, and that a routine which prints an invented or malformed
+table fails. For CUDA, a review recorded in my project log found a second weakness: the benchmark
 computed the trusted serial answer at benchmark size and then discarded it, so a routine with
 a hard-coded launch size could be correct at the small test size and wrong at the benchmark
 size. The benchmark now compares the graphics-card output with its own serial result,
@@ -250,7 +272,43 @@ records in `results/campaign-2026-10/runs.jsonl`, reported in
 [CAMPAIGN-2026-10.md](CAMPAIGN-2026-10.md)). Across the three capable models the pass rate fell
 from 69 of 72 runs to 61 of 72 when the names were hidden, and the weakest model did not fall;
 the single runs and the library call names that the masking leaves visible mean this is a
-rough estimate and not a firm measurement.
+rough estimate and not a firm measurement. Counted under the present rule, in which a correct
+routine passes whatever its speed, the capable models' correct runs fell only from 70 of 72 to
+67 of 72, because six of the masked failures were correct routines that missed the floor (see
+[CAMPAIGN-2026-10.md](CAMPAIGN-2026-10.md)). Much of what masking cost in October was speed,
+not correctness.
+
+## Watching the benchmark's calls
+
+An adversarial test of the check found three ways for a routine to deceive the benchmark
+on OpenMP. One was right at the sizes the test uses and did a tenth of the work at the
+benchmark's larger size. One was serial and made its own one-thread run slow on purpose, so
+that its later runs looked faster. One kept its answer from one call to the next and simply
+waited for a believable time. The benchmark could not see any of them, because it never
+looked at the routine's answers and took its baseline from the routine itself. The check now
+links a small recorder into the benchmark, which every call to the routine passes through.
+In a second run of the benchmark the recorder calls the known-good routine beside the
+agent's, on an identical copy of the arguments, and the routine fails if the answers differ
+by more than one part in a million. In the timed run it records the processor time of each
+call beside its wall time; a call cannot be credited with a larger speed-up than the
+processors it kept busy allow. All three routines are caught: the first fails, and the two
+serial ones pass as correct with no useful speed-up. The recorder covers OpenMP only; the
+MPI and CUDA benchmarks are not yet watched, and a routine that is genuinely parallel but
+slows its own one-thread run on purpose can still show an inflated speed-up.
+
+## The assessment stage against measurement
+
+`parallelise assess` was run once on each of the nine notebooks with `claude-sonnet-4.5` and
+`kimi-k2.5`, and section 10 of [RESULTS.md](RESULTS.md) sets the recommended backends against
+the measured speed-ups of the known-good solutions on one host. Both models recommended OpenMP
+for nearly every problem that has a parallel solution, yet the graphics card was fastest on
+all five problems with a CUDA version, and among the processor backends MPI was a little
+faster than OpenMP for integration, matrix multiply and the heat stencil. The recommended
+backend was the fastest overall only for histogram and, for Sonnet, the prefix sum. Both
+models also called decay and reservoir inherently serial, although their known-good solutions
+reached about 6.5 and 7.0 times with OpenMP, so the assessment shares the blind spot that the
+recall-resistant problems were built to expose. The comparison shows which backend was fastest
+on this host, at these sizes, not which to choose on another machine.
 
 ## The strictness finding
 
@@ -275,13 +333,22 @@ claim success. Two consequences follow.
   same for Llama on integrate under MPI, but I have no stored record of that pilot, and in
   the final comparison the Pydantic run of that cell failed (see the next point), so I do not
   rely on it.
-- On a model that cannot solve the problem, "cannot solve it" turns into "retry until the
-  budget is gone". Every refusal forces another request, and each request sends the whole
-  growing conversation again, until the run ends with the log line `The next request would
-  exceed the request_limit of 200`. This happened to Llama on integrate under MPI and to
-  Gemma on jacobi under MPI. Three of the four budget-exhaustion failures in the whole
-  study were Pydantic runs, and this retrying was probably a large part of Llama's token
-  bill, although costs per design were not recorded.
+- On a model that cannot solve the problem, "cannot solve it" can turn into "retry until the
+  agent is stopped". Each refusal of a final answer forces another request, and each request
+  sends the whole growing conversation again. The July account, from my project log, is that
+  such runs ended with the log line `The next request would exceed the request_limit of
+  200`, which happened to Llama on integrate under MPI and to Gemma on jacobi under MPI. The
+  October records show a different ending for most failures. Of the 12 failing Pydantic AI
+  runs in `results/campaign-2026-10/runs.jsonl`, 7 ended on the framework's cap of four
+  refused final answers (the error "Exceeded maximum output retries (4)"), 4 ended on the
+  request limit of 80, and 1 had finished with passing tests but was rejected by the check
+  as having changed a trusted file. The 7 and the 4 agree with the per-run logs under
+  `results/campaign-2026-10/logs/`. All 7 runs that ended on the cap were Llama runs. So the
+  July account of running out of requests may hold only for the older framework version
+  used then; with the version used in October, the cap of refused answers usually stopped a
+  failing run first. Three of the four budget-exhaustion failures in the July study were
+  Pydantic runs, and this retrying was probably a large part of Llama's token bill, although
+  costs per design were not recorded.
 
 The plain and LangGraph agents are less strict, not cleverer. They feed a failure back as
 information and let the run end when the attempts are used, leaving the best work on disk,
@@ -325,6 +392,22 @@ for the first comparison were not recorded.
   [CAMPAIGN-2026-10.md](CAMPAIGN-2026-10.md).
 - **Missing records.** The run files for `decay` and `reservoir`, and the per-run token
   snapshots, were not kept. Their numbers are from my log and cannot be checked.
+- **Two rules for a pass.** The July and October records were judged under an earlier rule in
+  which a correct routine that missed the speed-up floor failed at the benchmark stage. Under
+  the present rule it passes with the speed verdict "no useful speed-up". Their records hold
+  no speed verdict, so reports that mix them with newer records do not count passes in the
+  same way. The October counts under both rules are in
+  [CAMPAIGN-2026-10.md](CAMPAIGN-2026-10.md).
+- **The earlier check.** The July and October results were judged by the earlier check, which
+  ran the agent's own test program. In July it also had no tamper check. The results
+  therefore include passes that the present check, which uses only the trusted test, would
+  reject. Three such cases were found among Llama's runs. Two test programs report success
+  whatever happens: `results/runs/histogram/mpi/llama-3.3-70b/basic/test_histogram.c` and
+  `results/runs/nbody/mpi/llama-3.3-70b/langgraph/test_nbody.c` both end with status zero
+  even on the path where they print a failure. The third,
+  `results/runs/cg/mpi/llama-3.3-70b/basic/test_cg.c`, accepts a checksum within a tolerance
+  of ten million of the expected value, so almost any answer passes it. The other runs have
+  not been searched for such cases.
 - **A re-graded cell.** The raw manifest records a pass for Llama's plain agent on prefix sum
   under MPI. A uniform re-grade at capped memory settings of that problem and of histogram
   under MPI, for every model, did not confirm it. The tables use the recorded result, and

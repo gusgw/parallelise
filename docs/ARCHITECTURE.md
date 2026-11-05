@@ -87,8 +87,49 @@ order, and the check stops at the first failure:
    parallelism is in the routine under test, not in the test: there is one test program,
    run twice, and the routine inside it splits its work across the workers it is given.
 4. Run the benchmark program, which times the routine at several worker counts and writes a
-   table, and judge the table by the rules against invented or merely serial speed-ups,
-   including a floor on the best speed-up.
+   table, and judge the table by the rules of form (the table is complete and its figures
+   agree with one another) and the signs of invention (the figures look made up rather than
+   measured). A table that is missing, malformed or invented fails this stage.
+
+   For OpenMP, this stage also watches the benchmark's calls to the routine, because the
+   benchmark alone never looks at an answer and takes its one-worker time from the
+   routine itself. The check links a small C file of its own, the **call recorder**
+   (`recorder.py` writes it), into the benchmark with the linker's `--wrap` option, so that
+   every call the benchmark makes to the routine passes through the recorder. Two rules
+   follow. First, the benchmark is run a second time with the problem's known-good routine
+   called beside the agent's on each call, on an identical copy of the arguments, and the
+   stage fails if any answer differs by more than one part in a million of the answer's
+   size. A routine that is right only at the test's small sizes therefore fails, although
+   its tests pass. Second, in the timed run the recorder notes each call's processor time,
+   summed over all its threads, and its wall time; one divided by the other is the number
+   of processors the call kept busy. A row whose speed-up is more than 1.2 times its busy
+   processors is credited with only the busy processors, so a serial routine cannot be
+   reported as faster, whether it makes its own one-worker run slow on purpose or keeps its
+   answer from one call to the next and waits instead of working. A row that matches none
+   of the timed calls, in its width or its time, fails the stage. MPI and CUDA benchmarks
+   are not watched.
+
+The check makes two separate judgements. The first is correctness: the routine passes when it
+gets through all four stages, which means that it builds, gives the right answer with one
+worker and with several, kept the rules, and has a sound benchmark table. The second is
+speed, which never fails a run. It is given as one of four **speed verdicts**: "faster" when
+the best speed-up in the table reached the problem's floor, "no useful speed-up" when it did
+not, "speed not judged on this machine" when speed judging is switched off
+(`PARALLELISE_JUDGE_SPEED=0`, which the check passes on to the benchmark as
+`BENCH_JUDGE_SPEED=0`), and "not measured" for a run that failed, whose table says nothing
+about speed. The **floor** is the least best speed-up that counts as useful; it comes from
+`SPEEDUP_FLOOR` in the problem's Makefile, and is 1.5 for OpenMP and MPI and 3 for CUDA when
+the Makefile sets none. A correct routine that is not faster therefore passes with the verdict
+"no useful speed-up", because a parallel method that does not pay for some algorithm on some
+machine is a finding, not a failed conversion. The log ends with one line that gives the speed
+verdict and its reason.
+
+The same benchmark script, `check_bench.py`, is used in two places with two roles, chosen by
+the variable `BENCH_FLOOR_ROLE`. In the agent's work folder the variable is unset, and a
+missed floor makes `make check` fail, because that is how the agent learns that its routine
+is not yet parallel. In the judging folder the check sets `BENCH_FLOOR_ROLE=report`, and a
+missed floor is reported as "no useful speed-up" and the script succeeds. A malformed or
+invented table fails in both places.
 
 A run that fails is recorded with the stage at which it failed. The check always runs, and
 always judges the routine that is on disk when the agent stops, however the agent stopped: when
@@ -111,6 +152,16 @@ fresh folder, with the problem's Makefile, runs it with one worker, and adds one
 log saying whether it built and passed, built and failed, did not build, did not finish
 within a minute, was not run for want of time, or did not exist. That line never changes the verdict. A run that stops at `tampered`
 or `no-files` has no such line.
+
+A work folder can also be **judged as assembled** (`parallelise check --as-assembled`), for
+re-judging an old work folder once the problem's trusted files have changed and the ordinary
+check reports `tampered`. The judging folder is then built from the work folder's own trusted
+files, each checked against the folder's own fingerprint file, rather than from the problem.
+The two checker scripts are written afresh, and the routine, the problem's current
+known-good test program and known-good routine, and the present rules are used as usual. A
+folder without a fingerprint file, or one that holds `GNUmakefile` or `makefile`, is refused.
+The mode is weaker than the ordinary check, because the fingerprints are kept in the work
+folder, where an agent could have rewritten them.
 
 ## Layout
 
@@ -157,7 +208,7 @@ a timeout. No module reads the network except `model.py`.
   (default 600), `time_limit_s` (default 1800: the wall-clock limit on one agent run),
   `throttle_wait_s` (default 120: the most seconds to wait, in total, for one request that is
   refused with HTTP 429), `work_root` (default `work`), `results_path` (default
-  `results/runs.jsonl`). Environment variables: `PARALLELISE_GATEWAY_URL`,
+  `results/local-runs.jsonl`). Environment variables: `PARALLELISE_GATEWAY_URL`,
   `PARALLELISE_MODEL`, `PARALLELISE_TEMPERATURE`, `PARALLELISE_API_KEY`,
   `PARALLELISE_TIMEOUT`, `PARALLELISE_TIME_LIMIT`, `PARALLELISE_THROTTLE_WAIT`,
   `PARALLELISE_WORK_ROOT`, `PARALLELISE_RESULTS`. The older
@@ -208,11 +259,16 @@ a timeout. No module reads the network except `model.py`.
   to the agent), `agent_time_s` and `check_time_s` (seconds, kept apart), `framework_versions`
   (a mapping from package name to installed version, for httpx, httpx2, pydantic-ai,
   langgraph, langchain, langchain-openai and openai, whichever are installed), `cpu_count`
-  (processor cores the process could use), `package_version` (the version of parallelise) and
+  (processor cores the process could use), `package_version` (the version of parallelise),
   `source_hash` (twelve hexadecimal digits of a hash of every `.py` file of the installed
-  package and of the C and shell helpers in `data/`, so that any code change shows). Defaults:
+  package and of the C and shell helpers in `data/`, so that any code change shows) and
+  `speed_verdict` (one of the four speed verdicts, or `None` in a record made before the
+  verdict was kept). `result` is "PASS" when the routine is correct, whatever its speed. In a
+  record made before the speed verdict was kept, a correct routine that missed the floor was
+  recorded as "FAIL" at the stage `benchmark`, so old and new records do not count passes in
+  the same way. Defaults:
   `None` for the numbers, an empty text for the two strings, an empty mapping for the
-  versions. `from_dict` ignores keys it does not know and reads a null `framework_versions`
+  versions, and `None` for the speed verdict. `from_dict` ignores keys it does not know and reads a null `framework_versions`
   as empty, so records written by other versions load. `ResultsStore.ensure_writable()`
   raises `ResultsError` if a record could not be added, without creating anything; `run`
   calls it before the agent starts. `append` and `load` turn an unwritable or unreadable
@@ -240,34 +296,81 @@ a timeout. No module reads the network except `model.py`.
   `problem.h` if present, the backend's header, `bench.c` and `Makefile`, and the record of
   fingerprints `.trusted.json`; with `include_reference=True` it also copies the known-good
   solution and test, which is how the machinery is tested without a model. The check calls
-  it to make the judging folder. `AssembleError`, raised for an unusable problem folder, is a
+  it to make the judging folder. `write_checker_scripts(dest)` writes the two small scripts
+  that call the installed package's table rules. `AssembleError`, raised for an unusable problem folder, is a
   `ParalleliseError`, so the command line shows its message plainly.
-- `check.py` — `run_check(work_dir, problem_dir, backend, timeout_s=300, speedup_floor=None)
-  -> CheckResult(passed, failure_stage, speedup_best, log)`. The `problem_dir` is the problem
+- `check.py` — `run_check(work_dir, problem_dir, backend, timeout_s=300, speedup_floor=None,
+  as_assembled=False) -> CheckResult(passed, failure_stage, speedup_best, log, speed_verdict,
+  speedup_floor)`.
+  `passed` is true when the routine is correct, whatever its speed; `speed_verdict` is one of
+  the four speed verdicts, and is "not measured" for a run that failed; `speedup_floor` is the
+  floor the speed verdict was judged against. The `problem_dir` is the problem
   folder that the work folder was assembled from (the masked copy for a masked run). The
   function first looks for broken rules in the work folder (fingerprints, the fresh copy,
   `GNUmakefile` and `makefile`) and fails at the stage `tampered` if it finds any. It then
   assembles the judging folder with `assemble_judging_folder` (the problem's files plus the
   agent's routine plus the problem's known-good test), builds with the backend's compiler,
-  runs the problem's test at one worker and at several, runs the benchmark and calls
-  `bench_check`, all inside the judging folder. The folder is deleted on success and kept as
+  runs the problem's test at one worker and at several, runs the benchmark with
+  `BENCH_FLOOR_ROLE=report` and calls `bench_check`, all inside the judging folder. For
+  OpenMP it first compiles the call recorder and the problem's known-good routine
+  (`reference/<name>.c`, compiled under the name `parallelise_known_good_<function>`, with
+  every other name it defines hidden by `objcopy` so that it cannot clash with the agent's)
+  and links them into the benchmark by passing `LDLIBS` to `make bench`; the timed run of
+  `make check` then has `PARALLELISE_CALL_TIMES` set, and a second run of the benchmark
+  command, which `make -n check` prints with every Makefile variable filled in, has
+  `PARALLELISE_CALL_VERIFY` set. If the recorder cannot be built, the log says so and the
+  check goes on without it. The environment of the code under judgement has
+  `OMP_WAIT_POLICY` and `GOMP_SPINCOUNT` removed, so that idle OpenMP threads wait in the
+  usual way and do not make a serial routine look busy. With `as_assembled`, the tampered
+  stage compares the trusted files only with the folder's own fingerprint file, and the
+  judging folder comes from `assemble_as_assembled_folder(work_dir, problem_dir, backend,
+  dest, digests, routine)`, which copies the fingerprinted files from the work folder,
+  writes fresh checker scripts and adds the routine and the problem's current known-good
+  test; the log also lists each trusted file that the problem has since changed. A folder
+  that cannot be judged that way raises `CheckError` before anything is changed. The folder is deleted on success and kept as
   `check-fail` in the work folder on failure. Last, for the log only, it builds and runs the
   agent's own test program at one worker. `require_reference_test(problem_dir, backend)`
   raises `AssembleError` if the problem has no known-good test, and `run` calls it before the
   agent starts. If the check cannot run at all (the computer will not give it a temporary
   folder, for instance), `run_check` raises `CheckError`, which is the only use of that class;
   a routine that fails is a result and not an error. The code under judgement runs with an environment from which every variable
-  that may hold a secret has been removed. The floor is the least best speed-up that the
-  table must reach. It comes from the problem's Makefile (`SPEEDUP_FLOOR`) and falls back to
-  1.5 for OpenMP and MPI or 3 for CUDA; the module docstring explains it in full.
-- `bench_check.py` — `check_cpu_table(path, floor) -> BenchVerdict(ok, reasons,
-  speedup_best)` judges a table of times at several thread or process counts. It rejects a
-  reported speed-up that disagrees with the measured times, duplicated widths, every
-  parallel time exactly the serial time divided by the width, constant throughput,
-  efficiency not equal to one at one worker, and a best speed-up under the floor.
-  `check_gpu_table` judges the CUDA table, which has one row for the serial run and one for
-  the graphics card. The older names `check_bench_csv` and `check_bench_cuda` remain as
-  deprecated aliases.
+  that may hold a secret has been removed. The floor is the least best speed-up that
+  counts as faster. It comes from the problem's Makefile (`SPEEDUP_FLOOR`) and falls back to
+  1.5 for OpenMP and MPI or 3 for CUDA. A caller may ask for a stricter floor
+  (`speedup_floor`, or `--floor` on the command line) but not a looser one, and the floor
+  changes only the speed verdict, never the pass; the module docstring explains it in full.
+- `recorder.py` — the call recorder. `parse_prototype(header_text) -> Prototype` reads the
+  one function that a problem's header declares (its name need not be the file's: `cg.h`
+  declares `cgsolve`), and raises `PrototypeError` for a form it cannot handle, such as an
+  array parameter. `recorder_source(prototype, header)` returns the C source, which defines
+  `__wrap_<function>` and so stands between the benchmark and the routine. With
+  `PARALLELISE_CALL_TIMES` naming a file, it writes one line per call with the thread count,
+  the wall time and the processor time. With `PARALLELISE_CALL_VERIFY` naming a file, it
+  copies every array the routine may write to (a pointer parameter without `const`, sized by
+  `malloc_usable_size`, so the benchmark must pass arrays it obtained from `malloc`), runs
+  the agent's routine, restores the arrays, runs the known-good routine, and records the
+  largest difference between the two answers and the largest value in the known-good one.
+  `read_calls(path) -> list[Call]` reads either file; `verification_problems(calls)` and
+  `credit_speedups(rows, calls) -> Credit(best, capped, problems)` apply the two rules
+  described under the check above. The tolerance `RELATIVE_TOLERANCE` is 1e-6 and the
+  allowance `BUSY_ALLOWANCE` is 1.2, below the lowest floor in use, 1.25.
+- `bench_check.py` — `check_cpu_table(path, floor=None, judge_speed=None) -> BenchVerdict`
+  judges a table of times at several thread or process counts. Its rules are in three groups.
+  The rules of form require a readable table with the right columns and at least two rows,
+  each width once, a first row that is the one-worker baseline with speed-up and efficiency
+  1.0, positive times, and each reported speed-up equal to the one-worker time divided by that
+  row's time. The signs of invention are every parallel time exactly the one-worker time
+  divided by the width, a throughput that does not change with the width, and a best speed-up
+  above 1.5 times the widest worker count. The floor decides only the speed verdict.
+  `BenchVerdict` holds `ok` (sound, and the floor reached or not applied, which is what the
+  agent's own `make check` needs), `reasons`, `speedup_best`, `form_ok`, `invented` (the
+  signs found), `floor`, `floor_reached`, `speed_verdict` and the property `sound` (form kept
+  and no sign of invention). `check_gpu_table` judges the CUDA table, which has one row for
+  the serial run and one for the graphics card; it has rules of form only. `main` is what the
+  work folder's `check_bench.py` runs; it reads `SPEEDUP_FLOOR`, `BENCH_JUDGE_SPEED` and
+  `BENCH_FLOOR_ROLE` from the environment. `sweep_rows(path)` returns the width, time and
+  speed-up of each row of a sweep table, which the check compares with the recorded calls.
+  The older names `check_bench_csv` and `check_bench_cuda` remain as deprecated aliases.
 - `study/mask.py` — `mask_problem(problem_dir, dest, alias) -> MaskReport`. Produces a copy
   of a problem whose routine, files, header guards, Makefile variables and benchmark
   refer to the neutral name `alias`; whose notebook markdown is replaced by one neutral
@@ -305,24 +408,53 @@ a timeout. No module reads the network except `model.py`.
   themselves when the model says it has finished, and feed failures back, but they stop
   differently. That command uses the work folder's own Makefile and the agent's own test
   program and is the agent's guide only; the verdict comes from `check.py`. All three also stop
-  when the time limit has passed. `basic` stops when the
-  checks pass or after `step_budget` model calls (default 80). `langgraph` makes up to
-  `MAX_PASSES` (8) passes, each limited to `step_budget` steps. `pydantic` stops when the
-  checks pass or when the framework's request limit, set to `step_budget`, is reached; it
-  drives the framework's graph one node at a time (`agent.iter`) so that it can check the time
-  before each model call and read the usage after a failure, and it reaches the model through
-  an `httpx2` client, which is what Pydantic AI asks for (the older `httpx` client is
-  deprecated there and warns). The tests treat a notice that something will be removed in
-  version 3 as an error. `langgraph` streams each pass state by state and stops, between
-  states, when the time limit has passed and the next step would call the model.
+  when the time limit has passed. The other limits differ, as follows. The step budget
+  is set by `--step-budget` and is 80 by default.
+  - `basic` makes one model call in each step and stops when the checks pass, or after
+    `step_budget` model calls, or when the time limit has passed. When the model says it has
+    finished and the checks fail, the failure is fed back and that costs further steps from the
+    same budget.
+  - `langgraph` runs the graph in passes, at most `MAX_PASSES` (8) of them. A pass ends when the
+    model answers without asking for a tool. The agent then runs the checks: if they pass the
+    run ends, and if they fail the output is fed back and the next pass starts. Inside one
+    pass the framework's recursion limit is set to `step_budget`, so a pass may take at most 80
+    graph steps. Every model call is one graph step and every round of tool calls is another,
+    so a pass holds at most about 40 model calls. A pass that reaches that limit ends the whole
+    run, with the note "stopped: a pass reached the step limit". After eight passes without a
+    pass of the checks the run ends with the note "stopped: the checks never passed". The
+    `steps` field of its result counts passes, not graph steps. It streams each pass state by
+    state and stops, between states, when the time limit has passed and the next step would
+    call the model.
+  - `pydantic` has two limits besides the time limit. The first is the framework's request
+    limit, set to `step_budget`: the run ends with the framework's `UsageLimitExceeded` error
+    when the next model request would be the 81st. The second is the cap on refused final
+    answers. The agent is built with `retries=4`, and the output validator refuses every final
+    answer until `run_checks` has reported success. Pydantic AI 2.55.0 (the version that
+    `pyproject.toml` pins) counts these refusals over the whole run, not in a row, and ends the
+    run with the error "Exceeded maximum output retries (4)" when a fifth is needed. Either
+    error ends the run with the checks not passed, and the files left in the work folder are
+    still graded. The agent drives the framework's graph one node at a time (`agent.iter`) so
+    that it can check the time before each model call and read the usage after a failure, and
+    it reaches the model through an `httpx2` client, which is what Pydantic AI asks for (the
+    older `httpx` client is deprecated there and warns). The tests treat a notice that
+    something will be removed in version 3 as an error.
   `docs/DESIGN.md` explains the differences.
-- `study/report.py` — `build_tables(records, masked=False, prices=None) -> str` (Markdown: pass
-  counts by model and backend, by agent design, by problem; when the records hold masked and
+- `study/report.py` — `build_tables(records, masked=False, prices=None, reference=None) -> str`
+  (Markdown: pass counts by model and backend, by agent design, by problem, where a pass is a
+  correct routine whatever its speed; a speed table; when the records hold masked and
   unmasked runs, masked-against-unmasked tables; when they hold request counts, a serving
-  table with cost if `prices` is given), `load_prices(path)`, `build_chart(records,
+  table with cost if `prices` is given). `build_speed_table(records, masked=False,
+  reference=None)` makes the speed table from the correct runs only: for each problem, backend
+  and model it gives the number of correct runs, how many reached each speed verdict, how many
+  recorded none ("not recorded", for older records), and their median best speed-up, leaving
+  out runs whose speed was not judged. `load_reference(path)` reads a JSON list of objects
+  with the keys `problem`, `backend` and `best_speedup` (other keys are ignored), the best
+  speed-up of the known-good solution on the machine; when it is given, the speed table has a
+  column for it beside each model's median. `load_prices(path)`, `build_chart(records,
   dest_svg)` (grouped bars of pass rate by model and backend) and
-  `build_comparison_chart(records, dest_svg)` (pass rate by model, unmasked beside masked),
-  both drawn with matplotlib. `parallelise study report` takes `--store`, `--prices`, `--chart` and
+  `build_comparison_chart(records, dest_svg)` (pass rate by model, unmasked beside masked)
+  complete the module; the charts are drawn with matplotlib. `parallelise study report` takes
+  `--results` (or its older name `--store`), `--prices`, `--reference FILE`, `--chart` and
   `--masked-chart`. The report reads only the fields it needs, so the fields added to records
   later change nothing in its tables, and older records, which lack them, are read as before. A
   timestamp that is not a date, a numeric field that holds text, or a price file that is missing,
@@ -348,7 +480,13 @@ a timeout. No module reads the network except `model.py`.
 - `cli.py` — `main(argv=None)` using argparse. The commands listed by `parallelise --help`
   are `health`, `assess <notebook> [--out verdict.json]`, `run <problem> <backend> [--agent]
   [--model] [--step-budget] [--time-limit SECONDS] [--check-timeout] [--force]`, `check
-  <work_folder> --problem <problem> --backend <backend>` and `study`.
+  <work_folder> --problem <problem> --backend <backend> [--floor] [--as-assembled]` and
+  `study`. `run` and
+  `check` end with one line that gives both judgements, for example "PASS: correct; no useful
+  speed-up on this machine (best 1.07, floor 1.25)" or "FAIL: the problem's test failed with
+  one worker (stage test-one-worker); speed not measured". `--floor` on `check` may only make
+  the Makefile's floor stricter, and changes only the speed verdict. `--as-assembled` on `check`
+  judges the work folder as assembled (see the check above).
   The argument named `<problem>` is the path to a problem folder (a notebook with the files
   for each backend) or the name of one of the shipped examples under `problems/`;
   `<work_folder>` is a finished work folder, not a problem. `check` needs the problem as
@@ -368,7 +506,8 @@ a timeout. No module reads the network except `model.py`.
   `oracle <notebook>`, `assemble <problem> <backend> <dest> [--force]` and `bench-check
   <csv>`. `study mask` also takes `--force`. The old name `grade` for `check` is a
   hidden alias that prints a notice. Exit status is 0 on success, 1 on a failed check or a
-  reported error, and 2 on bad arguments.
+  reported error, and 2 on bad arguments. For `run` and `check`, success means that the
+  routine is correct, whatever its speed.
 
 ### Rules for errors and for deleting
 
@@ -421,7 +560,8 @@ the recurrence, the signature, and that the result must not depend on the worker
 ## Results
 
 ```
-results/runs.jsonl                 one RunRecord per line, every graded run
+results/runs.jsonl                 the published July store, one RunRecord per line
+results/local-runs.jsonl           the default store for new runs (not tracked by git)
 results/manifest-july-2026.tsv     the original run manifest, kept verbatim except for paths
 results/manifest-phase2-july-2026.tsv   an identical copy; cite either
 results/tokens-new-problems-july-2026.json   request and token counts per model

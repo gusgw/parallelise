@@ -18,7 +18,6 @@ development image and is for the CUDA backend on a machine with a graphics card.
     docker run --rm --user "$(id -u):$(id -g)" -v "$PWD/out:/work" \
       -e PARALLELISE_GATEWAY_URL=http://host.docker.internal:4000/v1 \
       -e PARALLELISE_MODEL=local \
-      -e PARALLELISE_RESULTS=/work/runs.jsonl \
       parallelise:cpu run integrate openmp --agent basic
 
 The image's entry point is the `parallelise` command, so everything after the image name
@@ -27,9 +26,9 @@ keep them. Without `--user`, the container runs as its own user, which has ident
 10001, so a mounted directory must be writable by that user, and the files written into it
 belong to it. With `--user "$(id -u):$(id -g)"` the container runs as the calling user and
 the files belong to that user; make the mounted folder yourself first, because Docker would
-otherwise make it owned by the root user. The results file is put in the mounted folder as
-well, since its default place is inside the image, where only the image's own user may
-write. `scripts/smoke-test.sh` runs the image this way where Docker is available.
+otherwise make it owned by the root user. The image keeps its results store,
+`local-runs.jsonl`, in the work folder `/work`, so with that folder mounted the records stay
+on the host. `scripts/smoke-test.sh` runs the image this way where Docker is available.
 
 The settings come from environment variables: `PARALLELISE_GATEWAY_URL`,
 `PARALLELISE_MODEL`, `PARALLELISE_TEMPERATURE`, `PARALLELISE_API_KEY`,
@@ -94,21 +93,45 @@ earlier version of the program, or by hand) is refused until you move it or add 
 - Messages from the program go to the standard error stream, which is the container log
   (`docker logs`, or `kubectl logs job/<name>`). Logger names begin `parallelise.`.
 - Every graded run is appended as one JSON line to the file named by `PARALLELISE_RESULTS`
-  (default `results/runs.jsonl`). The field `failure_stage` says how far the run got:
+  (default `results/local-runs.jsonl`). Each record holds two judgements. `result` is
+  `PASS` when the routine is correct, whatever its speed, and `FAIL` when it is not; the
+  field `speed_verdict` says how fast a correct routine was. The field `failure_stage` says
+  how far the run got:
 
   | `failure_stage`     | Meaning |
   |---------------------|---------|
-  | `none`              | The run passed. |
+  | `none`              | The run passed: the routine is correct. Its speed is in `speed_verdict`. |
   | `no-files`          | The agent did not write the routine file. |
   | `tampered`          | The agent changed a trusted file (the benchmark, a header, the Makefile or a helper), or added a file named `GNUmakefile` or `makefile`. The log names the files. |
   | `build`             | The routine did not compile with the problem's own files, or compiled with warnings, which count as errors. |
   | `test-one-worker`   | The problem's own unit test failed with a single worker. |
   | `test-many-workers` | It passed with one worker but failed with several; usually a race or a wrong partition of the work. |
-  | `benchmark`         | The benchmark failed, or the speed-up figures were rejected or below the floor. |
+  | `benchmark`         | The benchmark did not run to the end; or its table was missing, malformed or invented; or, for OpenMP, the routine's answer at the benchmark's own size differed from the known-good routine's, or a row of the table matched none of the benchmark's timed calls to the routine. A best speed-up below the floor is not a failure in a new record; in a record made before the speed verdict was kept, it was. |
   | `timeout`           | A step of the check took longer than its limit. |
   | `agent-error`       | Older records only: the agent or the model client raised an error, and no check was run. A new run never writes this stage; see below. |
 
-  To list failures: `grep '"result": "FAIL"' results/runs.jsonl`.
+  To list failures: `grep '"result": "FAIL"' results/local-runs.jsonl`.
+
+  The field `speed_verdict` takes one of four values:
+
+  | `speed_verdict` | Meaning |
+  |-----------------|---------|
+  | `faster` | The best speed-up reached the problem's floor. |
+  | `no useful speed-up` | The routine is correct, but its best speed-up is below the floor. |
+  | `speed not judged on this machine` | `PARALLELISE_JUDGE_SPEED` was 0, so the benchmark was run only to show that it works. |
+  | `not measured` | The run failed, so its table says nothing about speed. |
+
+  A record made before the speed verdict was kept has `null` there. To list the correct
+  routines that were not faster: `grep '"speed_verdict": "no useful speed-up"'
+  results/local-runs.jsonl`.
+
+  `parallelise run` and `parallelise check` end with one line that gives both judgements,
+  such as "PASS: correct; no useful speed-up on this machine (best 1.07, floor 1.25)" or
+  "FAIL: the problem's test failed with one worker (stage test-one-worker); speed not
+  measured". Their exit status is 0 when the routine is correct, whatever its speed, so a
+  script that runs many cells should read the speed from the record or the last line, not
+  from the exit status. The check's log has a line that begins "[check] Speed verdict:" and
+  gives the reason.
 
   The check runs whatever became of the agent. If the agent raised an error, if the model
   service failed in the middle of the run, or if the time limit stopped the agent, the
@@ -117,7 +140,7 @@ earlier version of the program, or by hand) is refused until you move it or add 
   with" followed by the error, or "The time limit of 1800 seconds stopped the agent." So a
   run can pass although its agent ended in an error, if the routine written before the error
   is good. To find the runs whose agent was interrupted, search the notes:
-  `grep -E 'agent stopped with|time limit of' results/runs.jsonl`.
+  `grep -E 'agent stopped with|time limit of' results/local-runs.jsonl`.
 - Each record also says how the run was made, so that two records can be compared fairly.
   The fields after `notes` were added later; a record written before they existed has `null`,
   an empty text or an empty mapping in their place, and the report tools read both kinds.
@@ -142,18 +165,87 @@ earlier version of the program, or by hand) is refused until you move it or add 
   work folder, and is kept as evidence under
   `results/runs/<problem>/<backend>/<model>/<agent>/` next to `SUMMARY.txt` and
   `bench.csv`. For a failure at `build`, read the compiler messages there. For a rejected
-  benchmark, `parallelise bench-check <csv>` prints the reasons.
+  benchmark, `parallelise bench-check <csv>` prints the reasons. Unlike the check,
+  `bench-check` rejects a table whose best speed-up is below the `--floor` it is given
+  (default 0, no floor).
 - The check judges the routine in a fresh folder that it assembles in a temporary directory
   from the problem's own files, with the problem's own test program. When the check fails,
   that folder is kept as `check-fail` inside the work folder, with the build products and
   the benchmark table, so that you can see exactly what was judged. When the check passes,
   the folder is deleted. The agent's own test program is run only for the log, and its
   result never changes the verdict.
+- For OpenMP, the check also watches the benchmark's calls to the routine. It links a small
+  C file of its own, the call recorder, into the benchmark, so that every call passes through
+  it, and it applies two rules that the benchmark alone cannot.
+
+  The first is about answers. The problem's test uses small sizes, and the benchmark, which
+  uses a much larger one, never looks at the answer. So the check runs the benchmark a second
+  time, calling the problem's known-good routine beside the agent's on each call with the same
+  arguments, and fails the routine at the stage `benchmark` if any answer differs by more than
+  one part in a million of the answer's size. The log then has a line beginning "[check] At
+  the benchmark's own size, the routine's answer is not the known-good routine's", followed
+  by one line for each call that differed. When they all agree, the log says so and gives the
+  largest difference.
+
+  The second is about speed. In the timed run the recorder notes each call's processor time,
+  summed over all its threads, as well as its wall time. One divided by the other is the
+  number of processors the call kept busy on average. A serial routine keeps one busy,
+  however its table looks; a routine that waits instead of working keeps almost none. A row
+  whose speed-up is more than 1.2 times its busy processors is credited with only the busy
+  processors, and the log has a line such as "At 4 threads the table shows a speed-up of
+  4.00, but the call kept only 1.00 processors busy on average, so it is credited with 1.00."
+  The speed verdict and the best speed-up in the record use the credited figure. Such a
+  routine is still correct, so it passes, with the speed verdict "no useful speed-up". A row
+  of the table that matches none of the timed calls fails the stage `benchmark`.
+
+  The recorder costs time and memory. The second run of the benchmark takes about twice as
+  long as the first, because each call is made twice, and it holds two extra copies of each
+  array the routine writes to. MPI and CUDA benchmarks are not watched, and their log says
+  nothing about the recorder.
 - To judge a work folder again without the agent: `parallelise check <work_folder>
   --problem <problem> --backend <backend>`. The first argument is a finished work folder,
   not a problem; `--problem` is the path to the problem folder it was built from, or the
   name of a shipped example, and for a masked run it is the masked copy that `run` keeps
-  under `<work_root>/_masked/`. The older name `grade` still works and prints a notice.
+  under `<work_root>/_masked/`. `--floor` sets a stricter floor than the problem's Makefile;
+  it changes only the speed verdict, never the pass. The older name `grade` still works and
+  prints a notice.
+- To judge an old work folder as it was assembled, add `--as-assembled`. The ordinary check
+  compares the folder's trusted files with the problem's current ones, so once the problem's
+  benchmark or Makefile has changed, every older folder reports `tampered`. With
+  `--as-assembled`, the check instead checks each trusted file against the folder's own
+  fingerprint file, `.trusted.json`, and builds the judging folder from those files. Only the
+  routine, the problem's current known-good test program and known-good routine, and the
+  present rules are new; the two small checker scripts are written afresh, so that the
+  present table rules apply. Older folders whose Makefile calls its variable `KERNEL` rather
+  than `ROUTINE`, and whose benchmark makes no untimed warm-up call, are judged in the same
+  way. The log begins with a line saying that the folder was judged as assembled, lists each
+  trusted file that the problem has since changed, and ends with "This work folder was judged
+  as assembled." before the closing line. A folder with no fingerprint file, or one that holds
+  a `GNUmakefile` or `makefile`, is refused with a message and exit status 1; a trusted file
+  that no longer matches the fingerprint file gives the stage `tampered`. Because the
+  fingerprint file lives in the work folder, an agent could have rewritten it along with a
+  trusted file, which the ordinary check would catch and this mode cannot. Use the mode only
+  for folders whose ordinary check reports `tampered` because the problem has moved on.
+
+### Re-checking an old campaign
+
+The campaign script keeps every work folder under `work/$CAMPAIGN/<variant>/<agent>/`, and
+each one holds its trusted files and its fingerprint file. To judge every OpenMP folder of a
+campaign again by the present rules, run a loop such as this from the repository root:
+
+    for w in work/campaign-2026-10/unmasked/*/*/openmp/*/*/; do
+        problem=$(basename "$(dirname "$(dirname "$(dirname "$w")")")")
+        parallelise check "$w" --problem "$problem" --backend openmp --as-assembled \
+            > "$w/recheck.log" 2>&1
+        echo "$w: $(tail -n 1 "$w/recheck.log")"
+    done
+
+Each line printed gives the folder and the closing line of its check. A masked folder needs
+the masked copy of its problem, made with the alias that the run used, for example
+`parallelise study mask scan kernel_c masked/kernel_c`, and then `--problem
+masked/kernel_c`. The stored records under `results/` hold only the routine, the agent's
+test and the log, not the trusted files, so they cannot be judged as assembled; judge them
+with the ordinary check, which rebuilds the trusted files from the problem.
 
 ## Running a campaign
 
@@ -172,8 +264,22 @@ The campaign's folder is made by the script from the name: the store `results/$C
 the log of every run and the check evidence, and the work folders go to `work/$CAMPAIGN`.
 The script prints the store path when it starts. Running it again with the same name adds
 to the same store, so use a new name for a new campaign. `MODELS`, `PROBLEMS` and `BACKENDS`
-restrict the run to part of the design. Afterwards, `parallelise study report --results
-results/$CAMPAIGN/runs.jsonl` prints the tables.
+restrict the run to part of the design.
+
+The script runs one container at a time. Each container runs one agent and then the check,
+and the script waits for it to finish before it starts the next, so every check runs while
+no other run of the campaign is on the machine. The script does not stop other programs on
+the host, so run one campaign at a time and keep the host otherwise idle; it only waits until
+enough memory is free (see the last section).
+
+Afterwards, `parallelise study report --results
+results/$CAMPAIGN/runs.jsonl` prints the tables: the pass counts, in which a pass is a correct
+routine whatever its speed, and a speed table of the correct runs by speed verdict, with their
+median best speed-up, for each problem, backend and model. To compare each model's speed with
+what the known-good solutions reach on the same machine, add `--reference FILE`, where the
+file is a JSON list of objects with the keys `problem`, `backend` and `best_speedup` (other
+keys, such as the floor or the settings used, are ignored); the speed table then has a column
+for the known-good speed-up.
 
 ## The smoke test
 
@@ -258,6 +364,11 @@ only the gateway.
 - **Job failed with `DeadlineExceeded`.** The Job reached `activeDeadlineSeconds`.
 - **CUDA tests skip.** There is no `nvcc` or graphics card, which is expected on the CPU
   image. Use the `cuda` stage on a machine with a driver and the NVIDIA container toolkit.
+- **An agent stops working on a routine that is correct but slow.** The agent's own `make
+  check` fails a missed floor only while `BENCH_FLOOR_ROLE` is unset or holds anything but
+  `report`. The agents' commands inherit the shell's environment, apart from secrets and
+  `PARALLELISE_` settings, so do not set `BENCH_FLOOR_ROLE` in the shell that starts a run.
+  The check sets it itself in its judging folder.
 - **`make check-references` fails.** A known-good solution no longer passes its check. Run
   the failing test alone with `pytest -q -k <problem>` and read the check log.
 
@@ -270,7 +381,8 @@ shared test servers with a few busy processor cores, whose timings mean nothing,
 workflow sets `PARALLELISE_JUDGE_SPEED=0`. With that setting the check still builds each
 routine with warnings treated as errors, runs the harness's test at one worker and at
 several, and runs the benchmark program, so continuous integration proves that the code
-works; but it does not judge the speed-up, and the tests that are about the speed rules
+works; but it does not judge the speed-up, and every correct routine there has the speed
+verdict "speed not judged on this machine", and the tests that are about the speed rules
 themselves are skipped. Speed is judged on a real multi-core machine with nothing else
 running, where the variable is left unset. CUDA checks skip wherever there is no graphics
 card.
@@ -286,4 +398,7 @@ services. Run every container with an explicit memory limit and no swap, for exa
 `docker run --memory=8g --memory-swap=8g`, run one benchmark container at a time, check
 that at least 12 GB is free before starting, and size the problem to the limit with
 `BENCH_N` and `BENCH_MAX_RANKS` rather than raising the limit. A container killed for
-memory exits with status 137.
+memory exits with status 137. For OpenMP, the check runs the benchmark a second time to
+compare its answers with the known-good routine's, and that run holds two extra copies of
+every array the routine writes to; at the default length of the prefix sum, decay and
+reservoir problems that is 2 GiB more.

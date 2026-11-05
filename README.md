@@ -7,7 +7,8 @@ model writes the program for a chosen backend: OpenMP for threads within one com
 graphics processor. The agent decides how to parallelise the work: how to split it, which
 pattern of reduction or exchange to use, and how to keep the answer the same however many
 workers run. It writes, builds and tests the program until an independent check accepts
-the result as correct and faster than the serial original. A separate command asks a
+the result as correct; the check reports separately whether it is faster than the serial
+original. A separate command asks a
 model which method suits a notebook, or whether the algorithm is better left serial and
 well written. The models are reached through one OpenAI-compatible gateway, so any model
 served that way can be used and several can be compared. The measurements made so far, on
@@ -59,8 +60,26 @@ never sees, and judges that fresh folder in four stages, stopping at the first f
 3. Run the same test program with several workers. The answer must not depend on the
    number of workers.
 4. Run the benchmark program, which times the routine at several worker counts, and judge
-   its table: a genuine speed-up must reach the problem's floor, and the figures must look
-   measured rather than invented.
+   its table: it must be complete, its figures must agree with one another, and they must
+   look measured rather than invented. For OpenMP the check also watches every call the
+   benchmark makes to the routine. In a second run it calls the problem's known-good routine
+   beside the agent's on the same arguments, and the routine fails if any answer differs, so
+   a routine cannot be right at the test's small size and wrong at the benchmark's larger
+   one. In the timed run it records how many processors each call kept busy, so that a
+   serial routine, or one that only waits, cannot be credited with a speed-up it did not
+   earn.
+
+The check makes two judgements. The first is correctness: a routine that gets through the
+four stages passes. The second is speed, which never fails a run and is given as one of four
+speed verdicts. "Faster" means that the best speed-up reached the problem's floor, the least
+speed-up that counts as useful (1.25 to 1.5 times on the processor, 3 times on a graphics
+card). "No useful speed-up" means that it did not. "Speed not judged on this machine" means
+that speed judging was switched off with `PARALLELISE_JUDGE_SPEED=0`, as on shared test
+servers whose timings mean nothing. "Not measured" is the verdict of a run that failed. A
+correct routine that is not faster therefore passes, because a parallel method that does not
+pay for an algorithm on a machine is a finding, not a failed conversion. The agent's own
+`make check` in its work folder is stricter: it fails when the floor is missed, so that the
+agent keeps working until its routine is genuinely parallel.
 
 Because the verdict rests on the problem's own test and not on the agent's, a test program
 that asserts nothing cannot make a wrong routine pass. The check still builds and runs the
@@ -75,8 +94,8 @@ folder that it judged is kept as `check-fail` inside the work folder; if it pass
 folder is deleted. The check judges whatever routine is on disk when the agent stops, however
 it stopped: finished, out of steps, out of time, or after an error. Every judged run is
 written as one record to a results store, one JSON object per line: the problem, backend,
-model and agent design, the outcome and the stage of any failure, the best speed-up, the
-requests, tokens, latency and throughput of the model calls, the time the agent and the check
+model and agent design, the outcome and the stage of any failure, the speed verdict and the
+best speed-up, the requests, tokens, latency and throughput of the model calls, the time the agent and the check
 each took, the settings of the run (temperature, step budget, time limit), and the versions
 of parallelise and of the libraries that carried the requests.
 
@@ -114,13 +133,18 @@ one way to provide one.
 4. Convert one problem on one backend with one agent design. The argument is the path to a
    problem folder, or the name of a shipped example under `problems/`. The run assembles a
    work folder under `work/` (or under `PARALLELISE_WORK_ROOT`), runs the agent, judges the
-   result with the check, and appends a record to `results/runs.jsonl` (or to
+   result with the check, and appends a record to `results/local-runs.jsonl` (or to
    `PARALLELISE_RESULTS`). The agent is stopped after 30 minutes by default; `--time-limit`
    (or `PARALLELISE_TIME_LIMIT`) sets another limit in seconds, and the routine on disk is
    judged all the same. A request that the model service refuses with HTTP 429 (too many
    requests) is waited out, for up to two minutes by default, before the run gives up.
 
         parallelise run integrate openmp --agent basic
+
+   The last line gives both judgements, for example "PASS: correct; faster on this machine
+   (best 5.30, floor 1.5)" or "PASS: correct; no useful speed-up on this machine (best 1.07,
+   floor 1.25)". The exit status is 0 when the routine is correct, whatever its speed, and 1
+   when it is not.
 
    Running the same cell again replaces the work folder that the earlier run made. No
    command deletes a folder that it did not make: `run`, `assemble` and `study mask` refuse
@@ -134,6 +158,9 @@ one way to provide one.
         parallelise check work/integrate/openmp/kimi-k2.5/basic \
           --problem integrate --backend openmp
 
+   It ends with the same line as `run`. `--floor` sets a stricter floor than the problem's,
+   which changes only the speed verdict, never the pass.
+
 6. Ask the model which method suits a notebook. The reply is a reasoned verdict, printed
    and optionally saved as JSON: which loop iterations are independent, whether arithmetic
    or memory limits the work, what a distributed version would have to communicate, and
@@ -144,7 +171,12 @@ one way to provide one.
 7. The study tools live under one command. `study mask` makes a copy of a problem with a
    neutral name and every revealing word removed, for measuring how much a model's success
    is recall of a known algorithm; `study report` prints the result tables from a results
-   store and draws the charts.
+   store and draws the charts. Its tables count a pass as a correct routine, whatever its
+   speed, and a speed table counts the correct runs by speed verdict, with their median best
+   speed-up, for each problem, backend and model. `--reference FILE` adds the best speed-up of
+   the known-good solution beside each model's; the file is a JSON list of objects with the
+   keys `problem`, `backend` and `best_speedup`, such as
+   `[{"problem": "scan", "backend": "mpi", "best_speedup": 1.3}]`.
 
         parallelise study mask scan problem_c masked/problem_c
         parallelise study report --results results/campaign-2026-10/runs.jsonl \
@@ -161,14 +193,13 @@ With Docker, the image holds the compilers and Open MPI and runs as an ordinary 
     docker run --rm --user "$(id -u):$(id -g)" -v "$PWD/out:/work" \
       -e PARALLELISE_GATEWAY_URL=http://host.docker.internal:4000/v1 \
       -e PARALLELISE_MODEL=kimi-k2.5 \
-      -e PARALLELISE_RESULTS=/work/runs.jsonl \
       parallelise:cpu run integrate openmp --agent basic
 
 The option `--user "$(id -u):$(id -g)"` runs the container as the calling user, so that the
 files it writes into the mounted folder belong to that user and not to the image's own user.
 Make the `out` folder yourself first, as above, because Docker would otherwise make it owned by
-the root user. The results file is placed in the mounted folder too, because the image's default
-place for it is inside the image, where only the image's own user may write.
+the root user. The image keeps its results store, `local-runs.jsonl`, in the work folder
+`/work`, so with that folder mounted the records stay on the host.
 
 A Kubernetes job for one conversion is in `k8s/job.yaml`. Deployment, logs,
 troubleshooting and the memory rules for running benchmarks in containers are in
@@ -222,6 +253,8 @@ requirement that the answer not depend on the worker count; the problems built t
 recall and the masking study; and the limitations. [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)
 maps the code: the conversion path in the package's top level and the study tools in the
 `study` subpackage, each with its own tests.
+
+The folder `studies/coding-agents/` is an earlier study of agent designs on a debugging task, kept with its own code and tests; the agent packages in it are not the agents used by this project, which live in `src/parallelise/agents/`.
 
 ## What is open source and what is my own
 

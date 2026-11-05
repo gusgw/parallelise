@@ -115,6 +115,118 @@ Masked runs also cost more effort. All four models together made 2,287 requests 
 23.4 million prompt tokens on masked problems, against 1,818 requests and 15.5 million prompt
 tokens on unmasked ones: 26% more requests and 51% more prompt tokens.
 
+## Results under the rule that judges correctness alone
+
+The check has since been changed so that it makes two separate judgements: whether the
+routine is correct, which decides the pass, and how fast it is, which is reported as a speed
+verdict and never fails the run. Under the rule that applied in October, a correct routine
+whose best speed-up was below the problem's floor failed at the benchmark stage. Under the new
+rule the same routine passes, with the speed verdict "no useful speed-up".
+
+The 11 October runs that failed at the benchmark stage were read again, one by one, from their
+check logs (the `gate.log` file of each run under `results/campaign-2026-10/runs/`). In the
+October check, the benchmark script listed every broken rule of the table in one line. In the
+eight runs whose benchmark ran to the end, the only rule it listed was the floor; in the other
+three the benchmark crashed or was stopped. Seven of the 11 are now correct with no useful
+speed-up: in each, the code built, the test passed at one worker and at several, and the best
+speed-up (between 1.00 and 1.22) was below the floor of 1.25. The other four are still not
+correct, because their tests did not pass, although each test ended with status zero:
+
+- llama-3.3-70b, jacobi on MPI, unmasked, Pydantic AI design: its test printed "FAIL" with one
+  and with four processes, and the benchmark then crashed.
+- llama-3.3-70b, cg on MPI, unmasked, plain design: its test printed different checksums with
+  one and with four processes, and the benchmark was stopped before it finished.
+- llama-3.3-70b, cg on MPI, masked, LangGraph design: its test printed "Test failed!", and the
+  benchmark was stopped before it finished.
+- llama-3.3-70b, cg on MPI, masked, plain design: its test printed "Test failed!". Its
+  benchmark ran and missed the floor, so a mechanical reading of the new rule would count it
+  as correct, but its own test reported a wrong answer, and it is counted here as not correct.
+
+The seven runs that change are these:
+
+| Model | Problem and backend | Variant | Agent design | Best speed-up |
+| --- | --- | --- | --- | ---: |
+| claude-sonnet-4.5 | scan on openmp | masked | langgraph | 1.19 |
+| claude-sonnet-4.5 | scan on openmp | masked | basic | 1.17 |
+| claude-sonnet-4.5 | scan on mpi | masked | langgraph | 1.02 |
+| kimi-k2.5 | scan on mpi | masked | langgraph | 1.00 |
+| gpt-oss-120b | jacobi on mpi | unmasked | pydantic | 1.00 |
+| gpt-oss-120b | jacobi on mpi | masked | langgraph | 1.00 |
+| gpt-oss-120b | cg on openmp | masked | langgraph | 1.22 |
+
+Six of the seven are masked runs. The speed-ups are as printed in the check logs, which round
+to two places.
+
+Correct runs out of runs, by model, under the old rule and the new. Change is the masked
+rate minus the unmasked rate, in percentage points.
+
+| Model | Old rule, unmasked | Old rule, masked | Old change | New rule, unmasked | New rule, masked | New change |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| claude-sonnet-4.5 | 24/24 (100%) | 21/24 (88%) | -12 | 24/24 (100%) | 24/24 (100%) | 0 |
+| kimi-k2.5 | 24/24 (100%) | 20/24 (83%) | -17 | 24/24 (100%) | 21/24 (88%) | -12 |
+| gpt-oss-120b | 21/24 (88%) | 20/24 (83%) | -4 | 22/24 (92%) | 22/24 (92%) | 0 |
+| llama-3.3-70b | 7/24 (29%) | 9/24 (38%) | +8 | 7/24 (29%) | 9/24 (38%) | +8 |
+| Three capable models | 69/72 (96%) | 61/72 (85%) | -11 | 70/72 (97%) | 67/72 (93%) | -4 |
+| All models | 76/96 (79%) | 70/96 (73%) | -6 | 77/96 (80%) | 76/96 (79%) | -1 |
+
+Correct runs out of 12, by problem and backend:
+
+| Problem and backend | Old rule, unmasked | Old rule, masked | Old change | New rule, unmasked | New rule, masked | New change |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| integrate on openmp | 12/12 (100%) | 12/12 (100%) | 0 | 12/12 (100%) | 12/12 (100%) | 0 |
+| integrate on mpi | 12/12 (100%) | 12/12 (100%) | 0 | 12/12 (100%) | 12/12 (100%) | 0 |
+| jacobi on openmp | 10/12 (83%) | 10/12 (83%) | 0 | 10/12 (83%) | 10/12 (83%) | 0 |
+| jacobi on mpi | 7/12 (58%) | 5/12 (42%) | -17 | 8/12 (67%) | 6/12 (50%) | -17 |
+| scan on openmp | 9/12 (75%) | 7/12 (58%) | -17 | 9/12 (75%) | 9/12 (75%) | 0 |
+| scan on mpi | 9/12 (75%) | 6/12 (50%) | -25 | 9/12 (75%) | 8/12 (67%) | -8 |
+| cg on openmp | 9/12 (75%) | 10/12 (83%) | +8 | 9/12 (75%) | 11/12 (92%) | +17 |
+| cg on mpi | 8/12 (67%) | 8/12 (67%) | 0 | 8/12 (67%) | 8/12 (67%) | 0 |
+
+Correct runs out of 32, by agent design:
+
+| Agent design | Old rule, unmasked | Old rule, masked | New rule, unmasked | New rule, masked |
+| --- | ---: | ---: | ---: | ---: |
+| basic | 26/32 | 25/32 | 26/32 | 26/32 |
+| langgraph | 24/32 | 19/32 | 24/32 | 24/32 |
+| pydantic | 26/32 | 26/32 | 27/32 | 26/32 |
+
+Pairs of runs, each masked run with the unmasked run of the same problem, backend, model and
+agent design (96 pairs):
+
+| Unmasked, then masked | Old rule, all models | New rule, all models | Old rule, three capable models | New rule, three capable models |
+| --- | ---: | ---: | ---: | ---: |
+| correct, correct | 66 | 72 | 60 | 66 |
+| not correct, not correct | 16 | 15 | 2 | 1 |
+| correct, then not correct | 10 | 5 | 9 | 4 |
+| not correct, then correct | 4 | 4 | 1 | 1 |
+| two-sided sign test, chance of a split at least this uneven | 0.18 | 1.00 | 0.021 | 0.38 |
+
+The sign test counts only the pairs that changed and asks how often a split at least as
+uneven would arise if each change were equally likely to go either way; the figures were
+computed exactly from the binomial distribution. The three capable models were grouped after
+the data had been seen, so their figure of 0.021 overstates the evidence.
+
+Failures by stage under the new rule:
+
+| Failure stage | Unmasked | Masked |
+| --- | ---: | ---: |
+| test at one worker | 10 | 10 |
+| benchmark (the four runs listed above, whose tests did not pass) | 2 | 2 |
+| test at several workers | 2 | 2 |
+| build | 2 | 2 |
+| agent error | 2 | 1 |
+| trusted files changed | 1 | 3 |
+| all failures | 19 | 20 |
+
+So much of the fall on masking in October was a fall in speed, not in correctness. Of the 26
+masked runs that failed under the old rule, six were correct routines that did not reach the
+floor, four of them on the prefix sum. Among the 20 unmasked failures there was only one
+such run.
+For the three capable models the fall in correct runs shrinks from 11 points to 4, and the
+paired comparison no longer separates it from chance. The October check ran the agent's own
+test program, so a later re-check of these routines with the harness's own known-good test may
+change these counts again.
+
 ## What the tamper check found
 
 The check in this campaign first compares each trusted file (the benchmark, the headers, the
@@ -250,18 +362,32 @@ completed normally. No run of any model met an access or account error.
   correct code. Of the 12 masked MPI runs of scan, 8 routines call `MPI_Scan` or
   `MPI_Exscan` (5 of them `MPI_Exscan`; counted by searching the routine files). A model that
   sees `MPI_Exscan` named in the task or recalls it from a prefix-sum pattern is still
-  helped. The measured drop is therefore a lower bound on the recall component.
+  helped. This pushes the measured drop below the true recall component.
+- **The masking also made the task harder in another way.** The masked variant removed the
+  comments in each problem's header, and those comments state how the routine must behave
+  (for example, the exact signature and the method to use), as `src/parallelise/study/mask.py`
+  shows: it strips comments from every C source and header file. A masked model therefore had
+  less guidance than an unmasked one, for a reason other than hidden names. This pushes the
+  measured drop above the true recall component.
 - **A different Sonnet.** This campaign used Claude Sonnet 4.5 and July used Claude Sonnet
   4.6. It also used gpt-oss-120b where July used Gemma 31B. The two campaigns are not a
   like-for-like comparison.
 - **A different check.** This campaign used the check with the trusted-file check and the
   other review fixes made on 11 October 2026. The July runs were graded without them.
-- **Missing counts.** Fourteen records, mostly Pydantic runs that stopped on an error such as
-  the request limit of 80, have zero requests and zero tokens, because the counts were lost
-  when the run ended. They are left out of the medians and make the token and cost totals
-  lower bounds.
+- **Missing counts.** Fourteen records have zero requests and zero tokens, because the counts
+  were lost when the run ended. Thirteen came from the Pydantic AI design and one from the
+  LangGraph design. Of the 13 Pydantic AI records, 2 were passes and 11 were failures. Seven of
+  the failures ended on the framework's cap of four refused final answers and four on the
+  request limit of 80; of the two passes, one was stopped by the request limit of 80 and one by the model's
+  output-token limit, and the routine each had left on disk passed the check. The LangGraph record was a failure
+  stopped by the provider's "Too many tokens" quota error. None came from the plain design. The 14 are left out of the medians
+  and make the token and cost totals lower bounds.
 - **Shared hardware.** The three agents of a cell ran together on one host, so wall times
   include interference between them.
+- **Checks run at the same time.** The campaign checked the work of the three agents of a cell
+  at the same time, on one host, whereas the July study checked them one after another. The
+  benchmark's timings, and so the speed-ups near the floor, may partly reflect that
+  competition for the processor cores.
 - **Labelling.** All 192 records have the note "masked campaign, October 2026", including the
   unmasked ones. The `masked` field is correct; the note is only a label for the campaign.
 - **One host, one gateway.** Latency depends on the gateway and the provider's load at the
@@ -278,5 +404,14 @@ masked, and most of its passes were on integrate (6 of 7 unmasked, 6 of 9 masked
 cost more requests and tokens. So, on these four problems, most of the measured competence
 survived the masking, and a modest share of it, about an eighth of the passes, looks
 like recall or at least like help from the problem's familiar name. Because the runs are
-single and the masking leaves the library calls visible, this is an estimate with wide
-margins, not a measurement of the recall component.
+single, the masking leaves the library calls visible, and the masking also removed the
+header comments that say how each routine must behave, the recall component lies within a
+range that this campaign cannot narrow: the library calls left visible push the measured
+fall below it, and the removed header comments push it above. The measured fall is therefore
+an estimate with wide margins, not a lower bound and not a measurement of the recall
+component.
+
+Under the later rule, which judges correctness alone and reports speed apart, the fall for the
+three capable models is smaller still: from 70 of 72 correct runs (97%) to 67 of 72 (93%), as
+the section on that rule above shows. Most of what masking cost the capable models in October
+was speed, not correctness.
