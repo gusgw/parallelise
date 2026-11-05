@@ -8,6 +8,15 @@ experiment, so they are left out unless the caller asks for them.
 
 Records may be `RunRecord` objects or plain dictionaries with the same field names.
 
+A pass means that the routine is correct: it built with warnings treated as errors, gave
+the right answers with one worker and with several, and its benchmark table was sound. Speed
+is reported apart from that, in a speed table for the correct runs: how many reached each
+speed verdict, and their median best speed-up, by problem, backend and model. Records made
+before the speed verdict was kept have none, and are counted as "not recorded"; they lack
+the field altogether or hold null in it, and either form is read without error. Under the
+rule that applied when those records were made, a correct routine that missed the speed-up
+floor was recorded as a failure at the benchmark stage.
+
 When a store holds both masked and unmasked runs, `build_tables` also compares the two.
 When the records carry request counts, it adds a serving table (latency, speed, tokens and,
 if the caller supplies a price table, cost).
@@ -24,12 +33,14 @@ from pathlib import Path
 from typing import Any
 
 from ..errors import ResultsError
+from ..results import SPEED_VERDICTS
 
 log = logging.getLogger("parallelise.study.report")
 
 BACKEND_ORDER = ("openmp", "mpi", "cuda")
-CAPTION = ("Counts are passes out of cells. A cell is one problem, backend, model and agent "
-           "design; only the latest run of each cell is counted.")
+CAPTION = ("Counts are passes out of cells. A pass means a correct routine, whatever its "
+           "speed; speed is shown in its own table. A cell is one problem, backend, model and "
+           "agent design; only the latest run of each cell is counted.")
 
 # A palette that stays distinguishable for the common kinds of colour-blindness.
 _BACKEND_COLOURS = {"openmp": "#0072B2", "mpi": "#E69F00", "cuda": "#009E73"}
@@ -99,10 +110,10 @@ def _fmt(passed_total: tuple[int, int]) -> str:
     return f"{passed}/{total} ({100 * passed / total:.0f}%)"
 
 
-def _markdown_table(header: list[str], rows: list[list[str]]) -> str:
-    """Render a Markdown table with a left-aligned first column."""
+def _markdown_table(header: list[str], rows: list[list[str]], left: int = 1) -> str:
+    """Render a Markdown table whose first `left` columns are left-aligned, the rest right."""
     lines = ["| " + " | ".join(header) + " |",
-             "| --- |" + " ---: |" * (len(header) - 1)]
+             "|" + " --- |" * left + " ---: |" * (len(header) - left)]
     lines += ["| " + " | ".join(row) + " |" for row in rows]
     return "\n".join(lines)
 
@@ -194,6 +205,117 @@ def load_prices(path: str | Path) -> dict[str, tuple[float, float]]:
                 "of US dollars per million tokens."
             ) from None
     return prices
+
+
+def load_reference(path: str | Path) -> dict[tuple[str, str], float]:
+    """Read the known-good solutions' best speed-ups on the machine, by problem and backend.
+
+    The file is JSON: a list of objects, each with the keys `problem`, `backend` and
+    `best_speedup`, for example [{"problem": "scan", "backend": "mpi", "best_speedup": 1.1}].
+    Other keys, such as a note on the machine, are ignored. Raises ResultsError, with a
+    message that names the file, if it cannot be read, is not JSON, is not such a list, or
+    holds an entry without those keys or with a speed-up that is not a number.
+    """
+    path = Path(path)
+    try:
+        text = path.read_text(encoding="utf-8")
+    except (OSError, UnicodeDecodeError) as exc:
+        reason = exc.strerror if isinstance(exc, OSError) and exc.strerror else "not UTF-8 text"
+        raise ResultsError(
+            f"The reference file {path} cannot be read ({reason}). Check the path."
+        ) from exc
+    try:
+        data = json.loads(text)
+    except ValueError as exc:
+        raise ResultsError(
+            f"The reference file {path} is not valid JSON ({exc}). Correct the file."
+        ) from exc
+    shape = ('a JSON list of objects, each with "problem", "backend" and "best_speedup", such '
+             'as [{"problem": "scan", "backend": "mpi", "best_speedup": 1.1}]')
+    if not isinstance(data, list):
+        raise ResultsError(f"The reference file {path} must hold {shape}.")
+    reference: dict[tuple[str, str], float] = {}
+    for number, entry in enumerate(data, start=1):
+        if not isinstance(entry, dict) or not all(
+            k in entry for k in ("problem", "backend", "best_speedup")
+        ):
+            raise ResultsError(
+                f"Entry {number} of the reference file {path} is not an object with "
+                f'"problem", "backend" and "best_speedup". The file must hold {shape}.'
+            )
+        value = entry["best_speedup"]
+        if isinstance(value, bool) or not isinstance(value, int | float):
+            raise ResultsError(
+                f"Entry {number} of the reference file {path} has the best speed-up "
+                f"{value!r}, which is not a number. Correct that entry."
+            )
+        reference[(str(entry["problem"]), str(entry["backend"]))] = float(value)
+    return reference
+
+
+def _optional(record: Any, name: str) -> Any:
+    """Read a field that older records may lack, giving None when it is absent."""
+    if isinstance(record, dict):
+        return record.get(name)
+    return getattr(record, name, None)
+
+
+#: The column headings of the speed table, one for each speed verdict.
+_VERDICT_HEADINGS = {
+    "faster": "Faster",
+    "no useful speed-up": "No useful speed-up",
+    "speed not judged on this machine": "Not judged",
+    "not measured": "Not measured",
+}
+
+
+def build_speed_table(records: Iterable[Any], masked: bool = False,
+                      reference: dict[tuple[str, str], float] | None = None) -> str:
+    """Return a Markdown table of the speed of correct routines, by problem, backend and model.
+
+    It uses the latest run of each cell, and only the cells that passed, since only a correct
+    routine's speed means anything. For each problem, backend and model it counts the runs
+    that reached each speed verdict, and those that recorded none ("not recorded"), and gives
+    the median best speed-up. The median leaves out runs whose speed was not judged, because
+    their timings come from a machine where timings mean nothing. When `reference` maps
+    (problem, backend) to the known-good solution's best speed-up on the machine, a column
+    shows it beside each model's result. Returns "" when no run passed.
+    """
+    cells = [c for c in latest_cells(records, masked=masked) if _get(c, "result") == "PASS"]
+    if not cells:
+        return ""
+    groups: dict[tuple[str, str, str], list[Any]] = defaultdict(list)
+    for cell in cells:
+        groups[(_get(cell, "problem"), _get(cell, "backend"), _get(cell, "model"))].append(cell)
+    header = (["Problem", "Backend", "Model", "Correct runs"]
+              + [_VERDICT_HEADINGS[v] for v in SPEED_VERDICTS]
+              + ["Not recorded", "Median best speed-up"])
+    if reference is not None:
+        header.append("Known-good speed-up")
+    rows = []
+    for problem, backend, model in sorted(groups, key=lambda k: (k[0], _backend_rank(k[1]), k[2])):
+        mine = groups[(problem, backend, model)]
+        verdicts = [_optional(c, "speed_verdict") for c in mine]
+        timed = [_number(c, "speedup_best") for c, v in zip(mine, verdicts, strict=True)
+                 if v != "speed not judged on this machine"
+                 and _optional(c, "speedup_best") is not None]
+        row = [problem, backend, model, f"{len(mine)}"]
+        row += [f"{verdicts.count(v)}" for v in SPEED_VERDICTS]
+        row.append(f"{sum(1 for v in verdicts if v not in SPEED_VERDICTS)}")
+        row.append(f"{statistics.median(timed):.2f}" if timed else "-")
+        if reference is not None:
+            known = reference.get((problem, backend))
+            row.append("-" if known is None else f"{known:.2f}")
+        rows.append(row)
+    note = ("Correct runs only, latest run of each cell. Each count is the number of correct "
+            "runs that reached that speed verdict; \"Not recorded\" counts runs made before the "
+            "verdict was kept. The median best speed-up leaves out runs whose speed was not "
+            "judged on their machine.")
+    if reference is not None:
+        note += (" The known-good speed-up is the best speed-up of the problem's known-good "
+                 "solution, from the reference file supplied.")
+    return ("### Speed of correct routines, by problem, backend and model\n\n" + note + "\n\n"
+            + _markdown_table(header, rows, left=3) + "\n")
 
 
 def _change(unmasked: tuple[int, int], masked: tuple[int, int]) -> str:
@@ -308,13 +430,16 @@ def build_serving_table(records: Iterable[Any],
 
 
 def build_tables(records: Iterable[Any], masked: bool = False,
-                 prices: dict[str, tuple[float, float]] | None = None) -> str:
+                 prices: dict[str, tuple[float, float]] | None = None,
+                 reference: dict[tuple[str, str], float] | None = None) -> str:
     """Return Markdown tables of pass counts by model and backend, agent and problem.
 
-    Only the latest run of each cell is counted; each caption says so. When the records
-    hold both masked and unmasked runs, the masked-against-unmasked tables follow. When they
-    hold request counts, a serving table follows, with cost if `prices` maps a model name
-    to (input, output) US dollars per million tokens.
+    A pass means a correct routine, whatever its speed. Only the latest run of each cell is
+    counted; each caption says so. The speed table for the correct runs follows (see
+    `build_speed_table`), with the known-good speed-ups if `reference` is given. When the
+    records hold both masked and unmasked runs, the masked-against-unmasked tables follow.
+    When they hold request counts, a serving table follows, with cost if `prices` maps a
+    model name to (input, output) US dollars per million tokens.
     """
     records = list(records)
     cells = latest_cells(records, masked=masked)
@@ -336,7 +461,8 @@ def build_tables(records: Iterable[Any], masked: bool = False,
                           _grouped(cells, "problem", "model", problems, models)),
     ]
     text = "\n\n".join(parts) + "\n"
-    for extra in (build_comparison_tables(records), build_serving_table(records, prices)):
+    for extra in (build_speed_table(records, masked, reference),
+                  build_comparison_tables(records), build_serving_table(records, prices)):
         if extra:
             text += "\n" + extra
     return text

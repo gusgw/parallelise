@@ -116,7 +116,8 @@ class FakeAgent:
 
 
 def install_fakes(
-    monkeypatch, tmp_path, behaviour="ok", check_pass=True, routine="integrate", check_delay=0.0
+    monkeypatch, tmp_path, behaviour="ok", check_pass=True, routine="integrate", check_delay=0.0,
+    speed="faster", best=3.2,
 ):
     problems = tmp_path / "problems" / "integrate"
     problems.mkdir(parents=True)
@@ -129,14 +130,18 @@ def install_fakes(
     def require_reference_test(problem_dir, backend):
         calls["required"] = (Path(problem_dir), backend)
 
-    def run_check(work_dir, problem_dir, backend, timeout_s=300, speedup_floor=None):
+    def run_check(work_dir, problem_dir, backend, timeout_s=300, speedup_floor=None,
+                  as_assembled=False):
         calls["checked"] = (Path(work_dir), Path(problem_dir), backend)
+        calls["as_assembled"] = as_assembled
         time.sleep(check_delay)
         return SimpleNamespace(
             passed=check_pass,
             failure_stage="none" if check_pass else "benchmark",
-            speedup_best=3.2 if check_pass else None,
+            speedup_best=best if check_pass else None,
             log="check log text",
+            speed_verdict=speed if check_pass else "not measured",
+            speedup_floor=1.25,
         )
 
     fakes = {
@@ -173,19 +178,61 @@ def test_run_pass_writes_record_and_exits_0(monkeypatch, tmp_path, capsys):
     assert len(record.agent_version) == 10 or record.agent_version == "unknown"
     assert "used the notebook tool" in record.notes
     assert (calls["assembled"][2] / "check.log").read_text() == "check log text"
-    assert "PASS" in capsys.readouterr().out
+    assert record.speed_verdict == "faster"
+    out = capsys.readouterr().out.splitlines()
+    assert out[-1] == "PASS: correct; faster on this machine (best 3.20, floor 1.25)"
     # The check is given the problem folder the work folder was built from.
     assert calls["checked"][1] == tmp_path / "problems" / "integrate"
     assert calls["checked"][0] == calls["assembled"][2] and calls["checked"][2] == "openmp"
     assert calls["required"] == (tmp_path / "problems" / "integrate", "openmp")
 
 
-def test_run_check_failure_exits_1_and_records_stage(monkeypatch, tmp_path):
+def test_run_check_failure_exits_1_and_records_stage(monkeypatch, tmp_path, capsys):
     install_fakes(monkeypatch, tmp_path, check_pass=False)
     assert cli.main(run_args(tmp_path)) == 1
     (record,) = ResultsStore(tmp_path / "runs.jsonl").load()
     assert record.result == "FAIL" and record.failure_stage == "benchmark"
     assert record.speedup_best is None
+    assert record.speed_verdict == "not measured"
+    assert capsys.readouterr().out.splitlines()[-1] == (
+        "FAIL: the benchmark did not run, gave a wrong answer at its own size, or its table "
+        "was malformed, invented or not borne out by the timed calls (stage benchmark); "
+        "speed not measured"
+    )
+
+
+def test_run_of_a_correct_routine_that_is_not_faster_exits_0(monkeypatch, tmp_path, capsys):
+    install_fakes(monkeypatch, tmp_path, speed="no useful speed-up", best=1.07)
+    assert cli.main(run_args(tmp_path)) == 0
+    (record,) = ResultsStore(tmp_path / "runs.jsonl").load()
+    assert (record.result, record.failure_stage) == ("PASS", "none")
+    assert (record.speed_verdict, record.speedup_best) == ("no useful speed-up", 1.07)
+    assert capsys.readouterr().out.splitlines()[-1] == (
+        "PASS: correct; no useful speed-up on this machine (best 1.07, floor 1.25)"
+    )
+
+
+@pytest.mark.parametrize(
+    ("args", "line"),
+    [
+        ((True, "none", "faster", 3.456, 1.5), "PASS: correct; faster on this machine "
+                                               "(best 3.46, floor 1.5)"),
+        ((True, "none", "no useful speed-up", 1.07, None),
+         "PASS: correct; no useful speed-up on this machine (best 1.07)"),
+        ((True, "none", "speed not judged on this machine", 1.07, 1.3),
+         "PASS: correct; speed not judged on this machine (best 1.07)"),
+        ((True, "none", None, None, None), "PASS: correct; speed not measured"),
+        ((False, "test-many-workers", "not measured", None, 1.3),
+         "FAIL: the problem's test failed with several workers (stage test-many-workers); "
+         "speed not measured"),
+        ((False, "tampered", "not measured", None, None),
+         "FAIL: a trusted file in the work folder was changed (stage tampered); "
+         "speed not measured"),
+    ],
+    ids=["faster", "no-speed-up", "not-judged", "no-verdict", "wrong-answer", "tampered"],
+)
+def test_verdict_line_gives_correctness_and_speed_together(args, line):
+    assert cli.verdict_line(*args) == line
 
 
 def test_masked_run_is_checked_against_the_masked_problem(monkeypatch, tmp_path):
@@ -371,11 +418,32 @@ def test_check_passes_the_resolved_problem_folder_to_the_check(monkeypatch, tmp_
                "--problems-dir", str(tmp_path / "problems")]  # fmt: skip
     assert cli.main(by_name) == 1  # the stand-in check fails
     assert calls["checked"] == (work, tmp_path / "problems" / "integrate", "openmp")
-    assert "Check FAILED (failure stage: benchmark" in capsys.readouterr().out
+    assert capsys.readouterr().out.splitlines()[-1].startswith("FAIL: the benchmark did not run")
     by_path = ["check", str(work), "--problem", str(tmp_path / "problems" / "integrate"),
                "--backend", "openmp"]  # fmt: skip
     assert cli.main(by_path) == 1
     assert calls["checked"][1] == tmp_path / "problems" / "integrate"
+
+
+@pytest.mark.parametrize(
+    ("speed", "best", "line"),
+    [
+        ("faster", 3.2, "PASS: correct; faster on this machine (best 3.20, floor 1.25)"),
+        ("no useful speed-up", 1.07,
+         "PASS: correct; no useful speed-up on this machine (best 1.07, floor 1.25)"),
+    ],
+)
+def test_check_of_a_correct_routine_exits_0_whatever_its_speed(
+    monkeypatch, tmp_path, capsys, speed, best, line
+):
+    install_fakes(monkeypatch, tmp_path, speed=speed, best=best)
+    work = tmp_path / "finished"
+    work.mkdir()
+    args = ["check", str(work), "--problem", "integrate", "--backend", "openmp",
+            "--problems-dir", str(tmp_path / "problems")]  # fmt: skip
+    assert cli.main(args) == 0
+    out = capsys.readouterr().out.splitlines()
+    assert out[0] == "check log text" and out[-1] == line
 
 
 def test_check_with_an_unknown_problem_says_what_to_do(monkeypatch, tmp_path, capsys):

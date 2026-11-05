@@ -1,8 +1,12 @@
 """The command-line interface: `parallelise <subcommand>`.
 
 Exit status is 0 on success, 1 when a check fails or an error is reported, and 2 for bad
-arguments. Every error a user can cause ends as one line that says what to do next, never as
-a stack trace: the errors the program raises on purpose are all ``ParalleliseError``, and an
+arguments. For ``run`` and ``check``, success means that the routine is correct, whatever its
+speed: both commands end with one line that gives the correctness and the speed together,
+such as "PASS: correct; no useful speed-up on this machine (best 1.07, floor 1.25)".
+
+Every error a user can cause ends as one line that says what to do next, never as a stack
+trace: the errors the program raises on purpose are all ``ParalleliseError``, and an
 unexpected error from the operating system (a path that cannot be read or written) is
 reported in the same way.
 
@@ -32,6 +36,7 @@ import time
 from pathlib import Path
 
 from . import __version__, provenance
+from .bench_check import FASTER, NO_USEFUL_SPEEDUP, SPEED_NOT_JUDGED
 from .cli_support import PROBLEM_HELP, HelpParser
 from .cli_support import lazy_import as _lazy
 from .cli_support import resolve_problem as _resolve_problem
@@ -114,6 +119,50 @@ def _safe(text: str) -> str:
     return "".join(ch if ch.isalnum() or ch in "-_." else "_" for ch in text) or "model"
 
 
+#: What each failure stage means, for the closing line of ``run`` and ``check``.
+_STAGE_WORDS = {
+    "no-files": "the routine file is missing",
+    "tampered": "a trusted file in the work folder was changed",
+    "build": "the code did not build with warnings treated as errors",
+    "test-one-worker": "the problem's test failed with one worker",
+    "test-many-workers": "the problem's test failed with several workers",
+    "benchmark": "the benchmark did not run, gave a wrong answer at its own size, or its "
+                 "table was malformed, invented or not borne out by the timed calls",
+    "timeout": "the check ran out of time",
+}
+
+
+def verdict_line(
+    passed: bool,
+    failure_stage: str,
+    speed_verdict: str | None,
+    speedup_best: float | None,
+    speedup_floor: float | None = None,
+) -> str:
+    """Return one plain line that gives a check's correctness and speed together.
+
+    A run that passed is correct, and the line goes on to its speed verdict, with the best
+    speed-up and the floor when they are known. A run that failed names the stage in plain
+    words, and its speed is not measured.
+    """
+    if not passed:
+        what = _STAGE_WORDS.get(failure_stage, "the check failed")
+        return f"FAIL: {what} (stage {failure_stage}); speed not measured"
+    figures = []
+    if speedup_best is not None:
+        figures.append(f"best {speedup_best:.2f}")
+    if speedup_floor is not None and speed_verdict in (FASTER, NO_USEFUL_SPEEDUP):
+        figures.append(f"floor {speedup_floor:g}")
+    shown = f" ({', '.join(figures)})" if figures else ""
+    if speed_verdict == FASTER:
+        return f"PASS: correct; faster on this machine{shown}"
+    if speed_verdict == NO_USEFUL_SPEEDUP:
+        return f"PASS: correct; no useful speed-up on this machine{shown}"
+    if speed_verdict == SPEED_NOT_JUDGED:
+        return f"PASS: correct; {SPEED_NOT_JUDGED}{shown}"
+    return "PASS: correct; speed not measured"
+
+
 def _check_backend(backend: str) -> None:
     if backend not in BACKENDS:
         raise ParalleliseError(f"The backend {backend!r} is not one of {', '.join(BACKENDS)}.")
@@ -164,7 +213,11 @@ def cmd_assemble(args: argparse.Namespace) -> int:
 
 
 def cmd_check(args: argparse.Namespace) -> int:
-    """Judge a finished work folder again, using the problem it was built from."""
+    """Judge a finished work folder again, using the problem it was built from.
+
+    It prints the check's log and then one line with the correctness and the speed. The exit
+    status is 0 when the routine is correct, whatever its speed, and 1 when it is not.
+    """
     _check_backend(args.backend)
     work_dir = Path(args.work_dir)
     if not work_dir.is_dir():
@@ -173,12 +226,11 @@ def cmd_check(args: argparse.Namespace) -> int:
     check = _lazy("check")
     result = check.run_check(
         work_dir, problem_dir, args.backend, timeout_s=int(args.timeout),
-        speedup_floor=args.floor,
+        speedup_floor=args.floor, as_assembled=args.as_assembled,
     )
     print(result.log)
-    speedup = "none" if result.speedup_best is None else f"{result.speedup_best:.2f}"
-    print(f"Check {'PASSED' if result.passed else 'FAILED'} "
-          f"(failure stage: {result.failure_stage}, best speed-up: {speedup}).")
+    print(verdict_line(result.passed, result.failure_stage, result.speed_verdict,
+                       result.speedup_best, result.speedup_floor))
     return 0 if result.passed else 1
 
 
@@ -247,7 +299,8 @@ def cmd_run(args: argparse.Namespace) -> int:
     The check runs whatever happened to the agent: if it failed, ran out of time or was stopped
     by the time limit, the routine on disk is still judged, and the record holds both the
     check's result and a note about the agent. The agent's time and the check's time are
-    recorded separately.
+    recorded separately. The last line printed gives the correctness and the speed together,
+    and the exit status is 0 when the routine is correct, whatever its speed.
     """
     _check_backend(args.backend)
     settings = _settings(args)
@@ -349,6 +402,7 @@ def cmd_run(args: argparse.Namespace) -> int:
         result="PASS" if passed else "FAIL",
         failure_stage=stage,
         speedup_best=graded.speedup_best,
+        speed_verdict=graded.speed_verdict,
         wall_time_s=round(wall, 2),
         requests=requests,
         prompt_tokens=prompt,
@@ -374,8 +428,10 @@ def cmd_run(args: argparse.Namespace) -> int:
     except ResultsError:
         log.error("the record that could not be saved was: %s", json.dumps(record.to_dict()))
         raise
-    print(f"{record.result}: {problem_name} on {backend} with {args.agent} and "
-          f"{settings.model} (failure stage: {stage}). Record added to {settings.results_path}.")
+    print(f"Checked {problem_name} on {backend} with {args.agent} and {settings.model}; "
+          f"record added to {settings.results_path}.")
+    print(verdict_line(passed, stage, graded.speed_verdict, graded.speedup_best,
+                       graded.speedup_floor))
     return 0 if passed else 1
 
 
@@ -429,7 +485,11 @@ def build_parser() -> argparse.ArgumentParser:
         description="Build a work folder for a problem, let an agent write the parallel "
                     "program in it, check the result and add a record to the results file. "
                     "The check judges whatever is on disk when the agent stops, whether it "
-                    "finished, used its steps, ran out of time or failed. A work folder made "
+                    "finished, used its steps, ran out of time or failed. It makes two "
+                    "judgements: whether the routine is correct, which decides the pass, and "
+                    "how fast it is, which is reported as a speed verdict and never fails the "
+                    "run. The last line gives both, and the exit status is 0 when the routine "
+                    "is correct, whatever its speed. A work folder made "
                     "by an earlier run of the same cell is replaced; any other folder in the "
                     "way is refused unless --force is given.",
         epilog="Example: parallelise run integrate openmp --agent basic --model local",
@@ -471,8 +531,17 @@ def build_parser() -> argparse.ArgumentParser:
         parser_.add_argument("--timeout", type=float, default=300.0,
                              help="seconds allowed for the whole check (default: 300)")
         parser_.add_argument("--floor", type=float, default=None,
-                             help="the least best speed-up to accept; may only tighten the "
-                                  "floor set in the problem's Makefile")
+                             help="the least best speed-up that counts as faster; it may "
+                                  "only tighten the floor set in the problem's Makefile, and "
+                                  "it changes the speed verdict, never the pass")
+        parser_.add_argument(
+            "--as-assembled", action="store_true",
+            help="judge an old work folder as it was assembled: take the trusted files from the "
+                 "work folder, after checking each against its own fingerprint file "
+                 "(.trusted.json), instead of from the problem's current files. The routine is "
+                 "still judged with the problem's current known-good test and by the present "
+                 "rules. A folder without a fingerprint file, or with a GNUmakefile or "
+                 "makefile, is refused")
 
     p = sub.add_parser(
         "check", parents=[common, problems],
@@ -482,10 +551,14 @@ def build_parser() -> argparse.ArgumentParser:
                     "folder from the problem's own files, copies in only the agent's routine "
                     "and the problem's own known-good test, and judges that. It builds the "
                     "routine, runs the problem's test at one worker and at several, and runs "
-                    "the benchmark. It also fails a work folder in which a trusted file has "
-                    "been changed. The agent's own test program is run for the log only. The "
-                    "first argument is a work folder, not a problem; the problem comes from "
-                    "--problem.",
+                    "the benchmark. It fails a routine whose benchmark table is malformed or "
+                    "invented, and a work folder in which a trusted file has been changed. The "
+                    "routine passes when it is correct, whatever its speed; its speed is "
+                    "reported apart, as faster, no useful speed-up, speed not judged on this "
+                    "machine, or not measured. The last line gives both judgements, and the "
+                    "exit status is 0 when the routine is correct. The agent's own test "
+                    "program is run for the log only. The first argument is a work folder, "
+                    "not a problem; the problem comes from --problem.",
         epilog="Example: parallelise check work/integrate/openmp/local/basic "
                "--problem integrate --backend openmp",
     )

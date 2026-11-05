@@ -2,9 +2,14 @@
 # Runs the masked-versus-unmasked campaign: 4 models x 4 problems x 2 backends x 2 variants,
 # 64 cells, each cell being one run for each of the three agents.
 #
-# The three agents of a cell run at the same time; cells run one after another, so that the
-# benchmark timings of one cell are not disturbed by another. The order is model by model,
-# with the unmasked and masked variants of the same cell next to each other.
+# Every run is one container, which runs one agent and then the check. The script starts each
+# container in the foreground and waits for it to finish before it starts the next, so only
+# one container runs at a time, and inside a container the check starts only after the agent
+# has stopped. Each check therefore runs while no other run of the campaign is on the machine,
+# and its benchmark timings are not disturbed by another run. The script does not stop other
+# programs on the host: run one campaign at a time, and keep the host otherwise idle. The order
+# is model by model; the unmasked and masked cells of the same problem and backend come next
+# to each other, and within a cell the three agents run one after another.
 #
 # The masking tool that the masked variant uses, and the report tables built from the records,
 # are in the subpackage src/parallelise/study/ (see its __init__.py); this script holds no

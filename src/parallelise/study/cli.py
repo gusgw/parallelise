@@ -41,7 +41,8 @@ def cmd_report(args: argparse.Namespace) -> int:
         )
     report = lazy_import("study.report", "Install it with: pip install 'parallelise[report]'.")
     prices = report.load_prices(args.prices) if args.prices else None
-    print(report.build_tables(records, prices=prices))
+    reference = report.load_reference(args.reference) if args.reference else None
+    print(report.build_tables(records, prices=prices, reference=reference))
     if args.chart:
         _draw(report.build_chart, records, args.chart)
         print(f"Chart written to {args.chart}.")
@@ -112,15 +113,23 @@ def _add_report(sub: argparse._SubParsersAction[HelpParser],
     p = sub.add_parser(
         name, parents=parents,
         description="Read the results file and print the pass counts, costs and speeds as "
-                    "Markdown tables. It takes no positional argument.",
-        epilog="Example: parallelise study report --results results/runs.jsonl "
-               "--chart pass-rate.svg",
+                    "Markdown tables. A pass is a correct routine, whatever its speed. The "
+                    "speed table counts the correct runs by speed verdict, with their median "
+                    "best speed-up, by problem, backend and model; with --reference it shows "
+                    "the known-good solution's speed-up beside them. It takes no positional "
+                    "argument.",
+        epilog="Example: parallelise study report --results results/local-runs.jsonl "
+               "--reference reference-speedups.json --chart pass-rate.svg",
         **extra,
     )
     p.add_argument("--results", "--store", dest="results",
                    help="the results file, also called the store (PARALLELISE_RESULTS)")
     p.add_argument("--prices",
                    help="JSON price table, US dollars per million tokens, for the cost column")
+    p.add_argument("--reference", metavar="FILE",
+                   help="JSON list of objects with problem, backend and best_speedup: the "
+                        "known-good solution's best speed-up on the machine, shown beside "
+                        "each model's speed")
     p.add_argument("--chart", help="also write the pass-rate chart to this SVG file")
     p.add_argument("--masked-chart",
                    help="also write the masked-against-unmasked chart to this SVG file")

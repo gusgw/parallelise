@@ -14,9 +14,11 @@ from parallelise.study.report import (
     build_comparison_chart,
     build_comparison_tables,
     build_serving_table,
+    build_speed_table,
     build_tables,
     latest_cells,
     load_prices,
+    load_reference,
 )
 
 
@@ -182,3 +184,110 @@ def test_a_malformed_price_file_is_a_results_error(tmp_path: Path, text) -> None
         path.write_text(text)
     with pytest.raises(ResultsError, match="prices.json"):
         load_prices(path)
+
+
+# --- the speed of correct routines ------------------------------------------------------------
+
+
+def timed(speed: str | None, best: float | None, **kwargs) -> dict:
+    """Build a record with a speed verdict and a best speed-up; None leaves the verdict out."""
+    record = make(**kwargs)
+    record["speedup_best"] = best
+    if speed is not None:
+        record["speed_verdict"] = speed
+    return record
+
+
+SPEED_RECORDS = [
+    timed("faster", 3.0, agent="basic"),
+    timed("no useful speed-up", 1.1, agent="pydantic"),
+    timed("faster", 2.0, agent="langgraph"),
+    timed("speed not judged on this machine", 9.0, agent="other"),  # left out of the median
+    timed(None, 1.5, agent="older"),  # a record made before the verdict was kept
+    timed("not measured", None, agent="broken", result="FAIL"),  # not correct: left out
+    timed("no useful speed-up", 1.07, problem="scan", backend="mpi"),
+]
+
+
+def test_speed_table_counts_each_verdict_and_gives_the_median() -> None:
+    text = build_speed_table(SPEED_RECORDS)
+    assert "### Speed of correct routines, by problem, backend and model" in text
+    assert ("| Problem | Backend | Model | Correct runs | Faster | No useful speed-up | "
+            "Not judged | Not measured | Not recorded | Median best speed-up |") in text
+    assert "| integrate | openmp | m1 | 5 | 2 | 1 | 1 | 0 | 1 | 1.75 |" in text
+    assert "| scan | mpi | m1 | 1 | 0 | 1 | 0 | 0 | 0 | 1.07 |" in text
+    assert "| --- | --- | --- | ---: |" in text  # the three names are aligned left
+    assert "Known-good" not in text
+
+
+def test_speed_table_shows_the_known_good_speedup_beside_each_model() -> None:
+    reference = {("scan", "mpi"): 1.1, ("integrate", "openmp"): 7.5}
+    records = [*SPEED_RECORDS, timed("faster", 6.0, model="m2")]
+    text = build_speed_table(records, reference=reference)
+    assert text.splitlines()[4].endswith("| Median best speed-up | Known-good speed-up |")
+    assert "| integrate | openmp | m1 | 5 | 2 | 1 | 1 | 0 | 1 | 1.75 | 7.50 |" in text
+    assert "| integrate | openmp | m2 | 1 | 1 | 0 | 0 | 0 | 0 | 6.00 | 7.50 |" in text
+    assert "| scan | mpi | m1 | 1 | 0 | 1 | 0 | 0 | 0 | 1.07 | 1.10 |" in text
+    unknown = build_speed_table([timed("faster", 2.0, problem="cg")], reference=reference)
+    assert unknown.splitlines()[-1].endswith("| 2.00 | - |")
+
+
+def test_speed_table_is_left_out_when_no_run_is_correct() -> None:
+    assert build_speed_table([make(result="FAIL")]) == ""
+    assert "Speed of correct routines" not in build_tables([make(result="FAIL")])
+
+
+def test_records_without_a_speed_verdict_do_not_break_the_report() -> None:
+    older = make()  # a dictionary with only the original fields: no speedup_best either
+    newer = RunRecord(problem="integrate", backend="openmp", model="m1", agent="pydantic",
+                      result="PASS", speedup_best=1.07)  # speed_verdict is None
+    text = build_tables([older, newer, newer.to_dict() | {"agent": "x"}])
+    assert "| integrate | openmp | m1 | 3 | 0 | 0 | 0 | 0 | 3 | 1.07 |" in text
+
+
+def test_correctness_tables_count_a_correct_routine_that_is_not_faster_as_a_pass() -> None:
+    text = build_tables([timed("no useful speed-up", 1.07)])
+    assert "| m1 | 1/1 (100%) | 1/1 (100%) |" in text
+    assert "A pass means a correct routine, whatever its speed" in text
+
+
+def write_reference(tmp_path: Path, data) -> Path:
+    path = tmp_path / "reference.json"
+    path.write_text(data if isinstance(data, str) else json.dumps(data))
+    return path
+
+
+def test_reference_file_is_read_and_other_keys_ignored(tmp_path: Path) -> None:
+    path = write_reference(tmp_path, [
+        {"problem": "scan", "backend": "mpi", "best_speedup": 1.1, "note": "four processes"},
+        {"problem": "integrate", "backend": "openmp", "best_speedup": 7},
+    ])
+    assert load_reference(path) == {("scan", "mpi"): 1.1, ("integrate", "openmp"): 7.0}
+
+
+@pytest.mark.parametrize("data", [
+    None, "{oops", {"scan": 1.1}, [1, 2], [{"problem": "scan", "backend": "mpi"}],
+    [{"problem": "scan", "backend": "mpi", "best_speedup": "fast"}],
+    [{"problem": "scan", "backend": "mpi", "best_speedup": True}],
+], ids=["missing", "not-json", "object", "numbers", "no-speedup", "text", "true"])
+def test_a_malformed_reference_file_is_a_results_error(tmp_path: Path, data) -> None:
+    path = tmp_path / "reference.json" if data is None else write_reference(tmp_path, data)
+    with pytest.raises(ResultsError, match="reference.json"):
+        load_reference(path)
+
+
+def test_report_command_takes_a_reference_file(tmp_path: Path, capsys) -> None:
+    store = tmp_path / "runs.jsonl"
+    store.write_text(json.dumps(timed("no useful speed-up", 1.07, problem="scan",
+                                      backend="mpi")) + "\n")
+    reference = write_reference(tmp_path, [{"problem": "scan", "backend": "mpi",
+                                            "best_speedup": 1.1}])
+    assert main(["study", "report", "--results", str(store), "--reference",
+                 str(reference)]) == 0
+    out = capsys.readouterr().out
+    assert "| scan | mpi | m1 | 1 | 0 | 1 | 0 | 0 | 0 | 1.07 | 1.10 |" in out
+    assert main(["study", "report", "--results", str(store)]) == 0
+    assert "Known-good" not in capsys.readouterr().out
+    assert main(["study", "report", "--results", str(store), "--reference",
+                 str(tmp_path / "absent.json")]) == 1
+    assert "absent.json" in capsys.readouterr().err

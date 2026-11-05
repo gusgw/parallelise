@@ -95,3 +95,49 @@ def test_trusted_digest_ignores_only_the_package_location_in_the_checker_scripts
     # Every other file is compared byte for byte.
     (second / "bench.c").write_text((first / "bench.c").read_text() + " ")
     assert trusted_digest(second / "bench.c") != trusted_digest(first / "bench.c")
+
+
+SERIAL_TABLE = "threads,time_s,speedup,efficiency\n1,1,1,1\n2,0.98,1.0204,0.5102\n"
+INVENTED_TABLE = "threads,time_s,speedup,efficiency\n1,1,1,1\n2,0.5,2,1\n4,0.25,4,1\n"
+MALFORMED_TABLE = "threads,time_s,speedup,efficiency\n1,1,1,1\n1,0.9,1.11,1.11\n"
+
+
+def run_shim(dest, table: str, role: str | None):
+    """Run the work folder's check_bench.py on a table, as the Makefile does, in one role."""
+    import os
+    import subprocess
+    import sys
+
+    (dest / "bench.csv").write_text(table)
+    env = {k: v for k, v in os.environ.items()
+           if k not in ("BENCH_FLOOR_ROLE", "BENCH_JUDGE_SPEED", "SPEEDUP_FLOOR")}  # fmt: skip
+    env["SPEEDUP_FLOOR"] = "1.3"
+    if role is not None:
+        env["BENCH_FLOOR_ROLE"] = role
+    return subprocess.run(
+        [sys.executable, "check_bench.py", "bench.csv"],
+        cwd=dest, env=env, capture_output=True, text=True, timeout=60, check=False,
+    )  # fmt: skip
+
+
+def test_shim_fails_a_missed_floor_in_the_agents_work_folder(tmp_path):
+    dest = assemble_work_dir(FIXTURE, "openmp", tmp_path / "w")
+    done = run_shim(dest, SERIAL_TABLE, None)
+    assert done.returncode == 1, done.stdout + done.stderr
+    assert "BENCH CHECK FAIL: no real parallel speedup" in done.stdout
+
+
+def test_shim_reports_a_missed_floor_in_the_judging_role(tmp_path):
+    dest = assemble_work_dir(FIXTURE, "openmp", tmp_path / "w")
+    done = run_shim(dest, SERIAL_TABLE, "report")
+    assert done.returncode == 0, done.stdout + done.stderr
+    assert "no useful speed-up" in done.stdout
+
+
+@pytest.mark.parametrize("role", [None, "report"], ids=["work folder", "judging folder"])
+@pytest.mark.parametrize("table", [INVENTED_TABLE, MALFORMED_TABLE], ids=["invented", "malformed"])
+def test_shim_fails_an_unsound_table_in_both_roles(tmp_path, table, role):
+    dest = assemble_work_dir(FIXTURE, "openmp", tmp_path / "w")
+    done = run_shim(dest, table, role)
+    assert done.returncode == 1, done.stdout + done.stderr
+    assert "BENCH CHECK FAIL" in done.stdout

@@ -74,8 +74,12 @@ def unit_test_filename(name: str) -> str:
     return f"test_{name}.c"
 
 
-def _write_shims(dest: Path) -> None:
-    """Write the two small checker scripts that the Makefiles call from the work folder."""
+def write_checker_scripts(dest: Path) -> None:
+    """Write the two small checker scripts that the Makefiles call from the work folder.
+
+    They call the table rules of the installed package, so a folder that holds freshly
+    written scripts is judged by the present rules.
+    """
     package_parent = str(Path(__file__).resolve().parent.parent)
     for filename, cuda in zip(CHECKER_SCRIPTS, (False, True), strict=True):
         (dest / filename).write_text(
@@ -191,7 +195,7 @@ def _write_work_dir(
     for filename in DATA_FILES:
         shutil.copy2(DATA_DIR / filename, dest / filename)
     (dest / "bench_sweep.sh").chmod((dest / "bench_sweep.sh").stat().st_mode | stat.S_IXUSR)
-    _write_shims(dest)
+    write_checker_scripts(dest)
 
     shutil.copy2(problem_dir / f"{name}.ipynb", dest / f"{name}.ipynb")
     for filename in PROBLEM_LEVEL_FILES:

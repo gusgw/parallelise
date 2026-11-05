@@ -73,10 +73,14 @@ def test_reference_solution_passes(tmp_path):
     result = check(work, timeout_s=240)
     assert result.passed, result.log
     assert result.failure_stage == "none"
+    assert result.speedup_floor == 1.3  # from the fixture's Makefile
     if SPEED_JUDGED:
         assert result.speedup_best and result.speedup_best > 1.3
+        assert result.speed_verdict == "faster"
         assert "bench stats OK" in result.log
+        assert "[check] Speed verdict: faster, because the best speed-up" in result.log
     else:
+        assert result.speed_verdict == "speed not judged on this machine"
         assert "speed not judged on this machine" in result.log
     assert not (work / KEPT_FOLDER).exists(), "a passing check must delete the judging folder"
     assert not (work / "bench.csv").exists(), "the benchmark must run in the judging folder"
@@ -87,6 +91,10 @@ def test_missing_routine_is_no_files(tmp_path):
     (work / "midpoint.c").unlink()
     result = check(work)
     assert (result.passed, result.failure_stage) == (False, "no-files")
+    assert result.speed_verdict == "not measured"
+    assert "Speed verdict: not measured, because the check failed at the stage no-files" in (
+        result.log
+    )
 
 
 def test_warning_is_a_build_failure(tmp_path):
@@ -99,6 +107,7 @@ def test_warning_is_a_build_failure(tmp_path):
 def test_wrong_answer_fails_at_one_worker(tmp_path):
     result = check(folder(tmp_path, WRONG_ROUTINE))
     assert result.failure_stage == "test-one-worker", result.log
+    assert (result.passed, result.speed_verdict) == (False, "not measured")
 
 
 def test_answer_wrong_only_with_threads_fails_at_many_workers(tmp_path):
@@ -111,21 +120,113 @@ def test_answer_wrong_only_with_threads_fails_at_many_workers(tmp_path):
     assert result.failure_stage == "test-many-workers", result.log
 
 
-@needs_speed
-def test_serial_routine_fails_the_benchmark(tmp_path):
+def serial_routine() -> str:
+    """Return the known-good routine with its parallel loop made serial: correct but not faster."""
     reference = (FIXTURE / "openmp/reference/midpoint.c").read_text()
     serial = reference.replace("#pragma omp parallel for reduction(+ : integral_sum)\n", "")
     assert serial != reference
-    result = check(folder(tmp_path, serial), timeout_s=240)
-    assert result.failure_stage == "benchmark", result.log
-    assert "BENCH CHECK FAIL" in result.log
+    return serial
 
 
 @needs_speed
-def test_stricter_floor_than_the_makefile_fails(tmp_path):
+def test_serial_routine_passes_with_no_useful_speedup_in_the_judging_folder(tmp_path):
+    work = folder(tmp_path, serial_routine())
+    result = check(work, timeout_s=240)
+    assert (result.passed, result.failure_stage) == (True, "none"), result.log
+    assert result.speed_verdict == "no useful speed-up"
+    assert result.speedup_best is not None and result.speedup_best < 1.3
+    assert "bench table OK; no useful speed-up" in result.log  # the Makefile went on
+    assert "Speed verdict: no useful speed-up, because the best speed-up" in result.log
+    assert "BENCH CHECK FAIL" not in result.log
+    assert not (work / KEPT_FOLDER).exists()
+
+
+@needs_speed
+def test_serial_routine_fails_the_agents_own_make_check(tmp_path, monkeypatch):
+    # The agent's own make check, run by the agents' finishing rule, must still fail when the
+    # routine is not faster: that is how the agent learns that it has not parallelised it.
+    from parallelise.agents.tools import run_check as agent_make_check
+
+    monkeypatch.delenv("BENCH_FLOOR_ROLE", raising=False)
+    monkeypatch.delenv("BENCH_JUDGE_SPEED", raising=False)
+    work = folder(tmp_path, serial_routine())
+    passed, output = agent_make_check(work)
+    assert not passed, output
+    assert "BENCH CHECK FAIL: no real parallel speedup" in output
+
+
+@needs_speed
+def test_stricter_floor_than_the_makefile_changes_only_the_speed_verdict(tmp_path):
     result = check(folder(tmp_path), timeout_s=240, speedup_floor=1000.0)
-    assert result.failure_stage == "benchmark"
-    assert not result.passed
+    assert (result.passed, result.failure_stage) == (True, "none"), result.log
+    assert result.speed_verdict == "no useful speed-up"
+    assert result.speedup_floor == 1000.0
+
+
+@needs_speed
+def test_looser_floor_than_the_makefile_has_no_effect(tmp_path):
+    result = check(folder(tmp_path, serial_routine()), timeout_s=240, speedup_floor=0.5)
+    assert result.passed, result.log
+    assert (result.speed_verdict, result.speedup_floor) == ("no useful speed-up", 1.3)
+
+
+# A routine that writes its own benchmark table. When the program running is the benchmark,
+# a constructor prints rows before the benchmark's own; the routine itself is correct.
+FAKE_TABLE = r"""#define _POSIX_C_SOURCE 200809L
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <unistd.h>
+
+__attribute__((constructor)) static void fake_table(void)
+{
+    char path[4096];
+    ssize_t n = readlink("/proc/self/exe", path, sizeof path - 1);
+    if (n <= 0) {
+        return;
+    }
+    path[n] = '\0';
+    const char *base = strrchr(path, '/');
+    if (base == NULL || strcmp(base + 1, "bench") != 0) {
+        return;
+    }
+    ROWS
+}
+"""
+INVENTED_ROWS = (
+    'puts("threads,time_s,speedup,efficiency,msamples_per_s");'
+    ' puts("1,1.000000,1.000,1.000,20.0"); puts("2,0.500000,2.000,1.000,40.0");'
+    ' puts("4,0.250000,4.000,1.000,80.0"); fflush(stdout); exit(0);'
+)
+MALFORMED_ROWS = 'puts("threads,time_s,speedup,efficiency,x"); puts("1,1.0,1.0,1.0,1.0");'
+
+
+def routine_with_table(rows: str) -> str:
+    return FAKE_TABLE.replace("ROWS", rows) + (FIXTURE / "openmp/reference/midpoint.c").read_text()
+
+
+@needs_speed
+def test_invented_table_fails_at_the_benchmark(tmp_path):
+    work = folder(tmp_path, routine_with_table(INVENTED_ROWS))
+    result = check(work, timeout_s=240)
+    assert (result.passed, result.failure_stage) == (False, "benchmark"), result.log
+    assert "exactly t1 divided by the width" in result.log
+    assert result.speed_verdict == "not measured"
+    assert (work / KEPT_FOLDER).is_dir()
+
+
+def test_malformed_table_fails_at_the_benchmark(tmp_path):
+    # The benchmark's own rows follow the routine's, so the width 1 appears twice.
+    result = check(folder(tmp_path, routine_with_table(MALFORMED_ROWS)), timeout_s=240)
+    assert (result.passed, result.failure_stage) == (False, "benchmark"), result.log
+    assert "duplicate threads values" in result.log
+    assert result.speed_verdict == "not measured"
+    assert "Speed verdict: not measured, because the benchmark did not run" in result.log
+
+
+def test_check_tells_the_benchmark_script_to_report_a_missed_floor(monkeypatch):
+    monkeypatch.setenv("BENCH_FLOOR_ROLE", "enforce")
+    assert check_module._environment("openmp")["BENCH_FLOOR_ROLE"] == "report"
 
 
 def test_hanging_test_is_a_timeout(tmp_path):
@@ -436,7 +537,10 @@ def test_speed_is_not_judged_when_switched_off(tmp_path, monkeypatch):
     serial = reference.replace("#pragma omp parallel for reduction(+ : integral_sum)\n", "")
     result = check(folder(tmp_path, serial), timeout_s=240)
     assert result.passed, result.log
-    assert "speed not judged on this machine" in result.log
+    assert result.speed_verdict == "speed not judged on this machine"
+    assert "Speed verdict: speed not judged on this machine, because PARALLELISE_JUDGE_SPEED" in (
+        result.log
+    )
 
 
 def test_wrong_answers_still_fail_when_speed_is_not_judged(tmp_path, monkeypatch):
@@ -447,3 +551,18 @@ def test_wrong_answers_still_fail_when_speed_is_not_judged(tmp_path, monkeypatch
     assert wrong != reference
     result = check(folder(tmp_path, wrong), timeout_s=240)
     assert result.failure_stage == "test-one-worker", result.log
+
+
+@needs_speed
+def test_check_command_passes_a_correct_serial_routine_and_says_it_is_not_faster(
+    tmp_path, capsys
+):
+    from parallelise import cli
+
+    work = folder(tmp_path, serial_routine())
+    args = ["check", str(work), "--problem", str(FIXTURE), "--backend", "openmp",
+            "--timeout", "240"]  # fmt: skip
+    assert cli.main(args) == 0
+    last = capsys.readouterr().out.splitlines()[-1]
+    assert last.startswith("PASS: correct; no useful speed-up on this machine (best ")
+    assert last.endswith(", floor 1.3)")

@@ -153,3 +153,16 @@ def test_the_checking_command_also_gets_no_secrets(tmp_path, monkeypatch):
     (tmp_path / "Makefile").write_text('check:\n\t@echo "key=[$$PARALLELISE_API_KEY]"\n')
     passed, output = tools.run_check(tmp_path)
     assert passed and "key=[]" in output and "secret" not in output
+
+
+def test_benchmark_settings_do_not_reach_the_agents_commands(tmp_path, monkeypatch):
+    """A caller's shell must not be able to switch off the agent's own speed requirement."""
+    from parallelise.agents import tools
+
+    monkeypatch.setenv("BENCH_FLOOR_ROLE", "report")
+    monkeypatch.setenv("BENCH_JUDGE_SPEED", "0")
+    (tmp_path / "Makefile").write_text(
+        "show:\n\t@echo role=[$$BENCH_FLOOR_ROLE] judge=[$$BENCH_JUDGE_SPEED]\n"
+    )
+    out = tools.run_shell(tmp_path, "make -s show")
+    assert "role=[]" in out and "judge=[]" in out, out

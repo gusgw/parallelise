@@ -35,7 +35,7 @@ def test_all_contract_fields_are_present():
         "notes",
         # added later; every one has a default so that older records still load
         "temperature", "step_budget", "time_limit_s", "agent_time_s", "check_time_s",
-        "framework_versions", "cpu_count", "package_version", "source_hash",
+        "framework_versions", "cpu_count", "package_version", "source_hash", "speed_verdict",
     }
     assert make().speedup_best is None
     assert make().serving == "not recorded"
@@ -48,7 +48,20 @@ def test_invalid_values_are_refused(tmp_path):
         store.append(make(result="MAYBE"))
     with pytest.raises(ResultsError):
         store.append(make(failure_stage="sulking"))
+    with pytest.raises(ResultsError, match="speed verdict"):
+        store.append(make(speed_verdict="quite quick"))
     assert not store.path.exists()
+
+
+@pytest.mark.parametrize(
+    "verdict",
+    [None, "faster", "no useful speed-up", "speed not judged on this machine", "not measured"],
+)
+def test_every_speed_verdict_round_trips(tmp_path, verdict):
+    store = ResultsStore(tmp_path / "r.jsonl")
+    record = make(speed_verdict=verdict, speedup_best=1.07)
+    store.append(record)
+    assert store.load() == [record]
 
 
 def test_damaged_line_names_its_number(tmp_path):
@@ -69,7 +82,7 @@ def test_unknown_keys_are_ignored(tmp_path):
 NEW_FIELDS = {
     "temperature": None, "step_budget": None, "time_limit_s": None, "agent_time_s": None,
     "check_time_s": None, "framework_versions": {}, "cpu_count": None, "package_version": "",
-    "source_hash": "",
+    "source_hash": "", "speed_verdict": None,
 }
 
 
@@ -127,6 +140,7 @@ def test_the_records_already_kept_in_the_repository_still_load(name):
     records = ResultsStore(path).load()
     assert len(records) == len(lines) > 0
     assert all(r.package_version == "" and r.cpu_count is None for r in records)
+    assert all(r.speed_verdict is None for r in records)
 
 
 def test_the_july_import_script_still_writes_records_the_store_reads():

@@ -17,6 +17,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
+from .bench_check import SPEED_VERDICTS
 from .errors import ResultsError
 
 log = logging.getLogger("parallelise.results")
@@ -44,7 +45,13 @@ def now_iso() -> str:
 
 @dataclass
 class RunRecord:
-    """Everything worth knowing about one agent run and how the check judged it."""
+    """Everything worth knowing about one agent run and how the check judged it.
+
+    ``result`` is "PASS" when the check found the routine correct and keeping the rules,
+    whatever its speed, and ``speed_verdict`` says how fast it was. Records made before the
+    speed verdict was kept have None there; under the rule that applied then, a correct
+    routine that missed the speed-up floor was recorded as a failure at the benchmark stage.
+    """
 
     problem: str
     backend: str
@@ -75,11 +82,17 @@ class RunRecord:
     cpu_count: int | None = None  # processor cores the run could use
     package_version: str = ""  # the version of parallelise itself
     source_hash: str = ""  # short hash of the source files, so that any code change shows
+    speed_verdict: str | None = None  # one of bench_check.SPEED_VERDICTS
 
     def validate(self) -> None:
-        """Raise ResultsError if the result or failure stage is not one of the known values."""
+        """Raise ResultsError if the result, failure stage or speed verdict is not a known value."""
         if self.result not in ("PASS", "FAIL"):
             raise ResultsError(f"The result {self.result!r} must be PASS or FAIL.")
+        if self.speed_verdict is not None and self.speed_verdict not in SPEED_VERDICTS:
+            raise ResultsError(
+                f"The speed verdict {self.speed_verdict!r} is not one of "
+                f"{', '.join(SPEED_VERDICTS)}."
+            )
         if self.failure_stage not in FAILURE_STAGES:
             raise ResultsError(
                 f"The failure stage {self.failure_stage!r} is not one of "
