@@ -1,0 +1,1241 @@
+{
+ "what": "Every known-good routine judged against its problem's serial routine on 7 November 2026, with the driver that waits for the harness to note the start of each call and, for OpenMP and MPI, one worker for each processor core. The speed-ups and the verdicts of faster and parallel compare the routine with the serial routine input by input, from the timed calls kept here.",
+ "machine": "a workstation with an AMD Ryzen 5 9600X (six cores, each with two hardware threads) and an NVIDIA GeForce RTX 5060 Ti graphics card with 16 GB of memory, in a container limited to 8 GB; another program used about one processor meanwhile",
+ "results": [
+  {
+   "problem": "cg",
+   "backend": "cuda",
+   "correct": true,
+   "stage": "none",
+   "speedup": 29.96,
+   "faster": true,
+   "parallel": true,
+   "routine_median_s": 0.0104,
+   "workers": null,
+   "serial_median_s": 0.3116,
+   "scaling": null,
+   "timed_routine_s": [
+    0.0105,
+    0.0104,
+    0.0076,
+    0.0104,
+    0.0088
+   ],
+   "timed_serial_s": [
+    0.3301,
+    0.3116,
+    0.2178,
+    0.3164,
+    0.2563
+   ]
+  },
+  {
+   "problem": "compact",
+   "backend": "cuda",
+   "correct": true,
+   "stage": "none",
+   "speedup": 2.41,
+   "faster": false,
+   "parallel": true,
+   "routine_median_s": 0.0525,
+   "workers": null,
+   "serial_median_s": 0.1539,
+   "scaling": null,
+   "timed_routine_s": [
+    0.0672,
+    0.0961,
+    0.0525,
+    0.0455,
+    0.0373
+   ],
+   "timed_serial_s": [
+    0.0548,
+    0.1567,
+    0.1539,
+    0.1784,
+    0.09
+   ]
+  },
+  {
+   "problem": "decay",
+   "backend": "cuda",
+   "correct": true,
+   "stage": "none",
+   "speedup": 1.15,
+   "faster": true,
+   "parallel": true,
+   "routine_median_s": 0.0691,
+   "workers": null,
+   "serial_median_s": 0.0792,
+   "scaling": null,
+   "timed_routine_s": [
+    0.0691,
+    0.0695,
+    0.0702,
+    0.0685,
+    0.0686
+   ],
+   "timed_serial_s": [
+    0.0795,
+    0.0792,
+    0.0793,
+    0.0787,
+    0.0788
+   ]
+  },
+  {
+   "problem": "histogram",
+   "backend": "cuda",
+   "correct": true,
+   "stage": "none",
+   "speedup": 0.98,
+   "faster": false,
+   "parallel": true,
+   "routine_median_s": 0.0429,
+   "workers": null,
+   "serial_median_s": 0.0422,
+   "scaling": null,
+   "timed_routine_s": [
+    0.0436,
+    0.0422,
+    0.0435,
+    0.0421,
+    0.0429
+   ],
+   "timed_serial_s": [
+    0.0426,
+    0.0428,
+    0.0419,
+    0.0419,
+    0.0422
+   ]
+  },
+  {
+   "problem": "integrate",
+   "backend": "cuda",
+   "correct": true,
+   "stage": "none",
+   "speedup": 8.59,
+   "faster": true,
+   "parallel": true,
+   "routine_median_s": 0.0044,
+   "workers": null,
+   "serial_median_s": 0.0378,
+   "scaling": null,
+   "timed_routine_s": [
+    0.0044,
+    0.0044,
+    0.0044,
+    0.0044,
+    0.0044
+   ],
+   "timed_serial_s": [
+    0.0376,
+    0.0377,
+    0.0381,
+    0.0378,
+    0.0381
+   ]
+  },
+  {
+   "problem": "ising",
+   "backend": "cuda",
+   "correct": true,
+   "stage": "none",
+   "speedup": 62.66,
+   "faster": true,
+   "parallel": true,
+   "routine_median_s": 0.0151,
+   "workers": null,
+   "serial_median_s": 0.9461,
+   "scaling": null,
+   "timed_routine_s": [
+    0.0151,
+    0.0151,
+    0.0151,
+    0.0151,
+    0.0151
+   ],
+   "timed_serial_s": [
+    0.9461,
+    2.0902,
+    0.8817,
+    0.93,
+    2.2153
+   ]
+  },
+  {
+   "problem": "jacobi",
+   "backend": "cuda",
+   "correct": true,
+   "stage": "none",
+   "speedup": 20.97,
+   "faster": true,
+   "parallel": true,
+   "routine_median_s": 0.0129,
+   "workers": null,
+   "serial_median_s": 0.2705,
+   "scaling": null,
+   "timed_routine_s": [
+    0.0107,
+    0.0129,
+    0.0165,
+    0.0149,
+    0.0114
+   ],
+   "timed_serial_s": [
+    0.2158,
+    0.2705,
+    0.3526,
+    0.3184,
+    0.236
+   ]
+  },
+  {
+   "problem": "matmul",
+   "backend": "cuda",
+   "correct": true,
+   "stage": "none",
+   "speedup": 569.54,
+   "faster": true,
+   "parallel": true,
+   "routine_median_s": 0.0076,
+   "workers": null,
+   "serial_median_s": 4.3285,
+   "scaling": null,
+   "timed_routine_s": [
+    0.0075,
+    0.0076,
+    0.0076,
+    0.0076,
+    0.0076
+   ],
+   "timed_serial_s": [
+    4.3633,
+    4.3285,
+    4.2759,
+    4.2862,
+    4.3403
+   ]
+  },
+  {
+   "problem": "md",
+   "backend": "cuda",
+   "correct": true,
+   "stage": "none",
+   "speedup": 2.64,
+   "faster": true,
+   "parallel": true,
+   "routine_median_s": 0.4714,
+   "workers": null,
+   "serial_median_s": 1.2526,
+   "scaling": null,
+   "timed_routine_s": [
+    0.4738,
+    0.4714,
+    0.4703,
+    0.4698,
+    0.4739
+   ],
+   "timed_serial_s": [
+    1.2526,
+    1.2638,
+    1.2436,
+    1.2387,
+    1.2661
+   ]
+  },
+  {
+   "problem": "nbody",
+   "backend": "cuda",
+   "correct": true,
+   "stage": "none",
+   "speedup": 14.96,
+   "faster": true,
+   "parallel": true,
+   "routine_median_s": 0.0525,
+   "workers": null,
+   "serial_median_s": 0.7866,
+   "scaling": null,
+   "timed_routine_s": [
+    0.0524,
+    0.0525,
+    0.0526,
+    0.0524,
+    0.0525
+   ],
+   "timed_serial_s": [
+    0.7875,
+    0.7906,
+    0.7866,
+    0.7805,
+    0.7852
+   ]
+  },
+  {
+   "problem": "reservoir",
+   "backend": "cuda",
+   "correct": true,
+   "stage": "none",
+   "speedup": 3.16,
+   "faster": true,
+   "parallel": true,
+   "routine_median_s": 0.0652,
+   "workers": null,
+   "serial_median_s": 0.2057,
+   "scaling": null,
+   "timed_routine_s": [
+    0.0662,
+    0.0651,
+    0.0675,
+    0.0652,
+    0.065
+   ],
+   "timed_serial_s": [
+    0.2055,
+    0.2057,
+    0.0942,
+    0.2205,
+    0.2206
+   ]
+  },
+  {
+   "problem": "scan",
+   "backend": "cuda",
+   "correct": true,
+   "stage": "none",
+   "speedup": 0.39,
+   "faster": false,
+   "parallel": true,
+   "routine_median_s": 0.0536,
+   "workers": null,
+   "serial_median_s": 0.0209,
+   "scaling": null,
+   "timed_routine_s": [
+    0.0535,
+    0.0536,
+    0.0535,
+    0.0539,
+    0.0536
+   ],
+   "timed_serial_s": [
+    0.0209,
+    0.0208,
+    0.0211,
+    0.0209,
+    0.0301
+   ]
+  },
+  {
+   "problem": "sparse_cg",
+   "backend": "cuda",
+   "correct": true,
+   "stage": "none",
+   "speedup": 8.1,
+   "faster": true,
+   "parallel": true,
+   "routine_median_s": 0.0482,
+   "workers": null,
+   "serial_median_s": 0.3943,
+   "scaling": null,
+   "timed_routine_s": [
+    0.0491,
+    0.0449,
+    0.0482,
+    0.0487,
+    0.0478
+   ],
+   "timed_serial_s": [
+    0.3965,
+    0.3605,
+    0.3964,
+    0.3943,
+    0.3901
+   ]
+  },
+  {
+   "problem": "cg",
+   "backend": "mpi",
+   "correct": true,
+   "stage": "none",
+   "speedup": 6.44,
+   "faster": true,
+   "parallel": true,
+   "routine_median_s": 0.0513,
+   "workers": 6,
+   "serial_median_s": 0.3018,
+   "scaling": 4.74,
+   "timed_routine_s": [
+    0.0415,
+    0.058,
+    0.0542,
+    0.0386,
+    0.0513
+   ],
+   "timed_serial_s": [
+    0.2791,
+    0.3069,
+    0.3018,
+    0.2487,
+    0.339
+   ],
+   "timed_one_worker_s": [
+    0.1982,
+    0.2211,
+    0.2179,
+    0.1829,
+    0.2477
+   ]
+  },
+  {
+   "problem": "compact",
+   "backend": "mpi",
+   "correct": true,
+   "stage": "none",
+   "speedup": 3.0,
+   "faster": true,
+   "parallel": true,
+   "routine_median_s": 0.0549,
+   "workers": 6,
+   "serial_median_s": 0.0586,
+   "scaling": 3.31,
+   "timed_routine_s": [
+    0.0589,
+    0.0578,
+    0.0176,
+    0.0549,
+    0.0135
+   ],
+   "timed_serial_s": [
+    0.1899,
+    0.0586,
+    0.0499,
+    0.1815,
+    0.0405
+   ],
+   "timed_one_worker_s": [
+    0.2208,
+    0.1434,
+    0.0582,
+    0.2064,
+    0.0422
+   ]
+  },
+  {
+   "problem": "decay",
+   "backend": "mpi",
+   "correct": true,
+   "stage": "none",
+   "speedup": 0.86,
+   "faster": false,
+   "parallel": true,
+   "routine_median_s": 0.0922,
+   "workers": 6,
+   "serial_median_s": 0.0793,
+   "scaling": 3.47,
+   "timed_routine_s": [
+    0.0922,
+    0.094,
+    0.0918,
+    0.0942,
+    0.0894
+   ],
+   "timed_serial_s": [
+    0.0797,
+    0.078,
+    0.08,
+    0.0787,
+    0.0793
+   ],
+   "timed_one_worker_s": [
+    0.3202,
+    0.3192,
+    0.3235,
+    0.3194,
+    0.3241
+   ]
+  },
+  {
+   "problem": "histogram",
+   "backend": "mpi",
+   "correct": true,
+   "stage": "none",
+   "speedup": 2.78,
+   "faster": true,
+   "parallel": true,
+   "routine_median_s": 0.0152,
+   "workers": 6,
+   "serial_median_s": 0.0425,
+   "scaling": 2.79,
+   "timed_routine_s": [
+    0.0157,
+    0.0151,
+    0.0152,
+    0.0155,
+    0.0145
+   ],
+   "timed_serial_s": [
+    0.0425,
+    0.0422,
+    0.0423,
+    0.0425,
+    0.0433
+   ],
+   "timed_one_worker_s": [
+    0.0431,
+    0.0423,
+    0.0424,
+    0.0424,
+    0.0435
+   ]
+  },
+  {
+   "problem": "integrate",
+   "backend": "mpi",
+   "correct": true,
+   "stage": "none",
+   "speedup": 2.97,
+   "faster": true,
+   "parallel": true,
+   "routine_median_s": 0.0126,
+   "workers": 6,
+   "serial_median_s": 0.0376,
+   "scaling": 2.98,
+   "timed_routine_s": [
+    0.0125,
+    0.0126,
+    0.0067,
+    0.0127,
+    0.0132
+   ],
+   "timed_serial_s": [
+    0.0371,
+    0.037,
+    0.0376,
+    0.0379,
+    0.0382
+   ],
+   "timed_one_worker_s": [
+    0.0373,
+    0.0367,
+    0.0378,
+    0.0379,
+    0.0381
+   ]
+  },
+  {
+   "problem": "ising",
+   "backend": "mpi",
+   "correct": true,
+   "stage": "none",
+   "speedup": 3.41,
+   "faster": true,
+   "parallel": true,
+   "routine_median_s": 0.3006,
+   "workers": 6,
+   "serial_median_s": 0.942,
+   "scaling": 1.93,
+   "timed_routine_s": [
+    0.4965,
+    0.5076,
+    0.2932,
+    0.3006,
+    0.2611
+   ],
+   "timed_serial_s": [
+    2.1089,
+    2.0667,
+    0.9185,
+    0.942,
+    0.8891
+   ],
+   "timed_one_worker_s": [
+    1.1734,
+    1.1907,
+    0.5223,
+    0.5381,
+    0.5029
+   ]
+  },
+  {
+   "problem": "jacobi",
+   "backend": "mpi",
+   "correct": true,
+   "stage": "none",
+   "speedup": 2.86,
+   "faster": true,
+   "parallel": true,
+   "routine_median_s": 0.0798,
+   "workers": 6,
+   "serial_median_s": 0.2283,
+   "scaling": 4.14,
+   "timed_routine_s": [
+    0.0608,
+    0.0798,
+    0.0916,
+    0.1313,
+    0.0714
+   ],
+   "timed_serial_s": [
+    0.1896,
+    0.2283,
+    0.2603,
+    0.3088,
+    0.2119
+   ],
+   "timed_one_worker_s": [
+    0.2794,
+    0.3307,
+    0.3791,
+    0.4611,
+    0.3063
+   ]
+  },
+  {
+   "problem": "matmul",
+   "backend": "mpi",
+   "correct": true,
+   "stage": "none",
+   "speedup": 4.35,
+   "faster": true,
+   "parallel": true,
+   "routine_median_s": 0.9909,
+   "workers": 6,
+   "serial_median_s": 4.3074,
+   "scaling": 4.32,
+   "timed_routine_s": [
+    0.8636,
+    1.0011,
+    1.0148,
+    0.8059,
+    0.9909
+   ],
+   "timed_serial_s": [
+    4.3453,
+    4.3037,
+    4.2843,
+    4.347,
+    4.3074
+   ],
+   "timed_one_worker_s": [
+    4.2756,
+    4.3275,
+    4.2625,
+    4.2854,
+    4.2584
+   ]
+  },
+  {
+   "problem": "md",
+   "backend": "mpi",
+   "correct": true,
+   "stage": "none",
+   "speedup": 6.64,
+   "faster": true,
+   "parallel": true,
+   "routine_median_s": 0.1882,
+   "workers": 6,
+   "serial_median_s": 1.2501,
+   "scaling": 3.72,
+   "timed_routine_s": [
+    0.1882,
+    0.1858,
+    0.1893,
+    0.1984,
+    0.1863
+   ],
+   "timed_serial_s": [
+    1.2501,
+    1.2286,
+    1.2588,
+    1.2437,
+    1.2571
+   ],
+   "timed_one_worker_s": [
+    0.7004,
+    0.6967,
+    0.6961,
+    0.6994,
+    0.6985
+   ]
+  },
+  {
+   "problem": "nbody",
+   "backend": "mpi",
+   "correct": true,
+   "stage": "none",
+   "speedup": 3.4,
+   "faster": true,
+   "parallel": true,
+   "routine_median_s": 0.2258,
+   "workers": 6,
+   "serial_median_s": 0.7727,
+   "scaling": 3.42,
+   "timed_routine_s": [
+    0.2578,
+    0.1417,
+    0.2258,
+    0.1663,
+    0.2564
+   ],
+   "timed_serial_s": [
+    0.7746,
+    0.7798,
+    0.7674,
+    0.7721,
+    0.7727
+   ],
+   "timed_one_worker_s": [
+    0.765,
+    0.7754,
+    0.772,
+    0.7761,
+    0.7699
+   ]
+  },
+  {
+   "problem": "reservoir",
+   "backend": "mpi",
+   "correct": true,
+   "stage": "none",
+   "speedup": 2.9,
+   "faster": true,
+   "parallel": true,
+   "routine_median_s": 0.0727,
+   "workers": 6,
+   "serial_median_s": 0.2094,
+   "scaling": 3.62,
+   "timed_routine_s": [
+    0.0746,
+    0.0719,
+    0.0719,
+    0.0728,
+    0.0727
+   ],
+   "timed_serial_s": [
+    0.0985,
+    0.2094,
+    0.0986,
+    0.2112,
+    0.2115
+   ],
+   "timed_one_worker_s": [
+    0.2633,
+    0.263,
+    0.2627,
+    0.2629,
+    0.2631
+   ]
+  },
+  {
+   "problem": "scan",
+   "backend": "mpi",
+   "correct": true,
+   "stage": "none",
+   "speedup": 0.39,
+   "faster": false,
+   "parallel": false,
+   "routine_median_s": 0.0536,
+   "workers": 6,
+   "serial_median_s": 0.0209,
+   "scaling": 0.66,
+   "timed_routine_s": [
+    0.0535,
+    0.0536,
+    0.0537,
+    0.0534,
+    0.054
+   ],
+   "timed_serial_s": [
+    0.0212,
+    0.0209,
+    0.0209,
+    0.0211,
+    0.0209
+   ],
+   "timed_one_worker_s": [
+    0.0353,
+    0.0354,
+    0.0356,
+    0.036,
+    0.0358
+   ]
+  },
+  {
+   "problem": "sparse_cg",
+   "backend": "mpi",
+   "correct": true,
+   "stage": "none",
+   "speedup": 2.24,
+   "faster": true,
+   "parallel": true,
+   "routine_median_s": 0.1739,
+   "workers": 6,
+   "serial_median_s": 0.3878,
+   "scaling": 1.86,
+   "timed_routine_s": [
+    0.1974,
+    0.1746,
+    0.1643,
+    0.1739,
+    0.1633
+   ],
+   "timed_serial_s": [
+    0.3991,
+    0.3908,
+    0.3789,
+    0.3878,
+    0.3869
+   ],
+   "timed_one_worker_s": [
+    0.3184,
+    0.3252,
+    0.3068,
+    0.3179,
+    0.3183
+   ]
+  },
+  {
+   "problem": "cg",
+   "backend": "openmp",
+   "correct": true,
+   "stage": "none",
+   "speedup": 6.32,
+   "faster": true,
+   "parallel": true,
+   "routine_median_s": 0.0445,
+   "workers": 6,
+   "serial_median_s": 0.2645,
+   "scaling": 3.01,
+   "timed_routine_s": [
+    0.0322,
+    0.0445,
+    0.0525,
+    0.0403,
+    0.053
+   ],
+   "timed_serial_s": [
+    0.1893,
+    0.2645,
+    0.3317,
+    0.2569,
+    0.3357
+   ],
+   "timed_one_worker_s": [
+    0.0887,
+    0.1269,
+    0.1582,
+    0.1213,
+    0.1597
+   ]
+  },
+  {
+   "problem": "compact",
+   "backend": "openmp",
+   "correct": true,
+   "stage": "none",
+   "speedup": 3.81,
+   "faster": true,
+   "parallel": true,
+   "routine_median_s": 0.0319,
+   "workers": 6,
+   "serial_median_s": 0.1213,
+   "scaling": 4.28,
+   "timed_routine_s": [
+    0.0318,
+    0.04,
+    0.0283,
+    0.0319,
+    0.0326
+   ],
+   "timed_serial_s": [
+    0.1213,
+    0.1598,
+    0.086,
+    0.1247,
+    0.0362
+   ],
+   "timed_one_worker_s": [
+    0.1362,
+    0.1788,
+    0.1026,
+    0.1379,
+    0.0485
+   ]
+  },
+  {
+   "problem": "decay",
+   "backend": "openmp",
+   "correct": true,
+   "stage": "none",
+   "speedup": 1.21,
+   "faster": false,
+   "parallel": true,
+   "routine_median_s": 0.0653,
+   "workers": 6,
+   "serial_median_s": 0.0793,
+   "scaling": 4.73,
+   "timed_routine_s": [
+    0.0853,
+    0.0653,
+    0.0653,
+    0.0656,
+    0.0649
+   ],
+   "timed_serial_s": [
+    0.0795,
+    0.0789,
+    0.0794,
+    0.0788,
+    0.0793
+   ],
+   "timed_one_worker_s": [
+    0.3103,
+    0.3091,
+    0.3072,
+    0.3155,
+    0.3087
+   ]
+  },
+  {
+   "problem": "histogram",
+   "backend": "openmp",
+   "correct": true,
+   "stage": "none",
+   "speedup": 2.87,
+   "faster": true,
+   "parallel": true,
+   "routine_median_s": 0.0148,
+   "workers": 6,
+   "serial_median_s": 0.0424,
+   "scaling": 2.87,
+   "timed_routine_s": [
+    0.0147,
+    0.0148,
+    0.0151,
+    0.015,
+    0.0147
+   ],
+   "timed_serial_s": [
+    0.0422,
+    0.0422,
+    0.0424,
+    0.0834,
+    0.0778
+   ],
+   "timed_one_worker_s": [
+    0.0424,
+    0.0425,
+    0.0424,
+    0.0427,
+    0.0431
+   ]
+  },
+  {
+   "problem": "integrate",
+   "backend": "openmp",
+   "correct": true,
+   "stage": "none",
+   "speedup": 2.99,
+   "faster": true,
+   "parallel": true,
+   "routine_median_s": 0.0127,
+   "workers": 6,
+   "serial_median_s": 0.038,
+   "scaling": 2.98,
+   "timed_routine_s": [
+    0.0126,
+    0.0126,
+    0.0127,
+    0.0128,
+    0.0127
+   ],
+   "timed_serial_s": [
+    0.0377,
+    0.0377,
+    0.038,
+    0.0381,
+    0.0383
+   ],
+   "timed_one_worker_s": [
+    0.0376,
+    0.0376,
+    0.0379,
+    0.0385,
+    0.0386
+   ]
+  },
+  {
+   "problem": "ising",
+   "backend": "openmp",
+   "correct": true,
+   "stage": "none",
+   "speedup": 5.35,
+   "faster": true,
+   "parallel": true,
+   "routine_median_s": 0.1773,
+   "workers": 6,
+   "serial_median_s": 0.9457,
+   "scaling": 3.27,
+   "timed_routine_s": [
+    0.1773,
+    0.2594,
+    0.1119,
+    0.1776,
+    0.1701
+   ],
+   "timed_serial_s": [
+    0.9457,
+    2.2528,
+    0.9374,
+    0.951,
+    0.9016
+   ],
+   "timed_one_worker_s": [
+    0.5726,
+    1.4227,
+    0.5612,
+    0.5802,
+    0.5161
+   ]
+  },
+  {
+   "problem": "jacobi",
+   "backend": "openmp",
+   "correct": true,
+   "stage": "none",
+   "speedup": 3.46,
+   "faster": true,
+   "parallel": true,
+   "routine_median_s": 0.0731,
+   "workers": 6,
+   "serial_median_s": 0.2443,
+   "scaling": 3.16,
+   "timed_routine_s": [
+    0.1007,
+    0.0545,
+    0.0798,
+    0.0731,
+    0.0616
+   ],
+   "timed_serial_s": [
+    0.3624,
+    0.1976,
+    0.2693,
+    0.2443,
+    0.2133
+   ],
+   "timed_one_worker_s": [
+    0.3527,
+    0.1894,
+    0.2487,
+    0.2309,
+    0.1937
+   ]
+  },
+  {
+   "problem": "matmul",
+   "backend": "openmp",
+   "correct": true,
+   "stage": "none",
+   "speedup": 56.31,
+   "faster": true,
+   "parallel": true,
+   "routine_median_s": 0.0764,
+   "workers": 6,
+   "serial_median_s": 4.3127,
+   "scaling": 2.92,
+   "timed_routine_s": [
+    0.0786,
+    0.0781,
+    0.0763,
+    0.0764,
+    0.0759
+   ],
+   "timed_serial_s": [
+    4.3515,
+    4.302,
+    4.3501,
+    4.3127,
+    4.274
+   ],
+   "timed_one_worker_s": [
+    0.2243,
+    0.2236,
+    0.2231,
+    0.2238,
+    0.2224
+   ]
+  },
+  {
+   "problem": "md",
+   "backend": "openmp",
+   "correct": true,
+   "stage": "none",
+   "speedup": 5.82,
+   "faster": true,
+   "parallel": true,
+   "routine_median_s": 0.3206,
+   "workers": 6,
+   "serial_median_s": 1.8892,
+   "scaling": 4.02,
+   "timed_routine_s": [
+    0.3206,
+    0.3248,
+    0.3268,
+    0.3203,
+    0.3169
+   ],
+   "timed_serial_s": [
+    1.8568,
+    1.8892,
+    1.8996,
+    1.8684,
+    1.9207
+   ],
+   "timed_one_worker_s": [
+    1.2886,
+    1.304,
+    1.2904,
+    1.2945,
+    1.3084
+   ]
+  },
+  {
+   "problem": "nbody",
+   "backend": "openmp",
+   "correct": true,
+   "stage": "none",
+   "speedup": 3.03,
+   "faster": true,
+   "parallel": true,
+   "routine_median_s": 0.2517,
+   "workers": 6,
+   "serial_median_s": 0.7603,
+   "scaling": 3.02,
+   "timed_routine_s": [
+    0.2517,
+    0.2502,
+    0.2513,
+    0.2525,
+    0.256
+   ],
+   "timed_serial_s": [
+    0.758,
+    0.7571,
+    0.7603,
+    0.7672,
+    0.7656
+   ],
+   "timed_one_worker_s": [
+    0.7678,
+    0.7609,
+    0.7561,
+    0.7617,
+    0.7648
+   ]
+  },
+  {
+   "problem": "reservoir",
+   "backend": "openmp",
+   "correct": true,
+   "stage": "none",
+   "speedup": 1.99,
+   "faster": true,
+   "parallel": true,
+   "routine_median_s": 0.0495,
+   "workers": 6,
+   "serial_median_s": 0.0989,
+   "scaling": 5.34,
+   "timed_routine_s": [
+    0.0501,
+    0.0495,
+    0.0494,
+    0.0504,
+    0.0487
+   ],
+   "timed_serial_s": [
+    0.0663,
+    0.2086,
+    0.2085,
+    0.0989,
+    0.0969
+   ],
+   "timed_one_worker_s": [
+    0.2673,
+    0.2712,
+    0.2622,
+    0.2653,
+    0.2704
+   ]
+  },
+  {
+   "problem": "scan",
+   "backend": "openmp",
+   "correct": true,
+   "stage": "none",
+   "speedup": 0.81,
+   "faster": false,
+   "parallel": true,
+   "routine_median_s": 0.0263,
+   "workers": 6,
+   "serial_median_s": 0.0216,
+   "scaling": 1.51,
+   "timed_routine_s": [
+    0.0263,
+    0.0262,
+    0.0269,
+    0.0276,
+    0.0262
+   ],
+   "timed_serial_s": [
+    0.0222,
+    0.0226,
+    0.0214,
+    0.0216,
+    0.0211
+   ],
+   "timed_one_worker_s": [
+    0.0398,
+    0.0409,
+    0.0395,
+    0.0404,
+    0.0402
+   ]
+  },
+  {
+   "problem": "sparse_cg",
+   "backend": "openmp",
+   "correct": true,
+   "stage": "none",
+   "speedup": 3.96,
+   "faster": true,
+   "parallel": true,
+   "routine_median_s": 0.0984,
+   "workers": 6,
+   "serial_median_s": 0.3946,
+   "scaling": 3.29,
+   "timed_routine_s": [
+    0.1003,
+    0.0984,
+    0.0841,
+    0.1017,
+    0.0919
+   ],
+   "timed_serial_s": [
+    0.3946,
+    0.3891,
+    0.398,
+    0.4029,
+    0.3645
+   ],
+   "timed_one_worker_s": [
+    0.3299,
+    0.3228,
+    0.3322,
+    0.332,
+    0.3136
+   ]
+  }
+ ]
+}
