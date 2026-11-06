@@ -256,6 +256,28 @@ def test_a_fingerprint_file_that_does_not_list_the_header_is_refused(tmp_path):
         run_check(work, FIXTURE, "openmp", as_assembled=True)
 
 
+def test_a_fingerprint_file_that_names_an_unexpected_file_is_refused(tmp_path):
+    """An extra header listed in the fingerprint file would be copied in and could switch the
+    recorder off, so judging as assembled refuses it."""
+    work = folder(tmp_path)
+    (work / "extra.h").write_text("/* not a trusted file */\n")
+    manifest = json.loads((work / TRUSTED_MANIFEST).read_text())
+    manifest["sha256"]["extra.h"] = "0" * 64
+    (work / TRUSTED_MANIFEST).write_text(json.dumps(manifest))
+    with pytest.raises(CheckError, match="extra.h, which are not trusted files"):
+        run_check(work, FIXTURE, "openmp", as_assembled=True)
+
+
+def test_the_callers_openmp_and_make_settings_do_not_reach_the_judgement(monkeypatch):
+    """A thread count or a make option in the caller's shell must not change a verdict."""
+    for name, value in (("OMP_NUM_THREADS", "1"), ("OMP_PROC_BIND", "true"),
+                        ("MAKEFLAGS", "-k"), ("MAKEFILES", "evil.mk")):  # fmt: skip
+        monkeypatch.setenv(name, value)
+    env = check_module._environment("openmp")
+    for name in ("OMP_NUM_THREADS", "OMP_PROC_BIND", "MAKEFLAGS", "MAKEFILES"):
+        assert name not in env
+
+
 def test_the_check_command_takes_the_option(tmp_path, capsys):
     problem = problem_copy(tmp_path)
     work = folder(tmp_path, problem=problem)

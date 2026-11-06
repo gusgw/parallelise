@@ -161,8 +161,10 @@ def test_benchmark_settings_do_not_reach_the_agents_commands(tmp_path, monkeypat
 
     monkeypatch.setenv("BENCH_FLOOR_ROLE", "report")
     monkeypatch.setenv("BENCH_JUDGE_SPEED", "0")
+    monkeypatch.setenv("SPEEDUP_FLOOR", "0.5")
     (tmp_path / "Makefile").write_text(
-        "show:\n\t@echo role=[$$BENCH_FLOOR_ROLE] judge=[$$BENCH_JUDGE_SPEED]\n"
+        "show:\n\t@echo role=[$$BENCH_FLOOR_ROLE] judge=[$$BENCH_JUDGE_SPEED]"
+        " floor=[$$SPEEDUP_FLOOR]\n"
     )
     out = tools.run_shell(tmp_path, "make -s show")
-    assert "role=[]" in out and "judge=[]" in out, out
+    assert "role=[]" in out and "judge=[]" in out and "floor=[]" in out, out

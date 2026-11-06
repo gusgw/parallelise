@@ -157,6 +157,10 @@ SHADOWING_MAKEFILES = ("GNUmakefile", "makefile")
 #: idle threads soon stop, so the processor time of a call reflects real work.
 UNSET_VARIABLES = (
     "OMP_WAIT_POLICY", "GOMP_SPINCOUNT", recorder.TIMES_VARIABLE, recorder.VERIFY_VARIABLE,
+    # settings in a caller's shell that would change how many threads run, where they run,
+    # or what make does, and so could change a verdict without leaving a trace
+    "OMP_NUM_THREADS", "OMP_THREAD_LIMIT", "OMP_DYNAMIC", "OMP_PLACES", "OMP_PROC_BIND",
+    "GOMP_CPU_AFFINITY", "MAKEFLAGS", "MAKEFILES", "MFLAGS",
 )  # fmt: skip
 
 # OpenMP code needs -fopenmp; MPI code is built by the MPI compiler wrapper, which adds
@@ -828,6 +832,12 @@ def _refuse_for_as_assembled(work_dir: Path, name: str) -> dict[str, str]:
                 "the Makefile, so it cannot be judged as assembled."
             )
     digests = _read_manifest(work_dir)
+    unexpected = sorted(set(digests) - set(trusted_file_names(name)))
+    if unexpected:
+        raise CheckError(
+            f"The fingerprint file of {work_dir} names {', '.join(unexpected)}, which are not "
+            "trusted files of this routine, so the folder cannot be judged as assembled."
+        )
     needed = [f for f in ("bench.c", "Makefile", f"{name}.h") if f not in digests]
     if needed:
         raise CheckError(
@@ -910,6 +920,12 @@ def _run_check(
     require_reference_test(problem_dir, backend)
     digests = _refuse_for_as_assembled(work_dir, name) if as_assembled else {}
     record: list[str] = []
+    sizes = [f"{v}={os.environ[v]}" for v in ("BENCH_N", "BENCH_MAX_RANKS") if os.environ.get(v)]
+    if sizes:
+        record.append(
+            "[check] The benchmark runs with " + " and ".join(sizes) + ", taken from the "
+            "caller's environment, in place of the Makefile's own size or worker count."
+        )
     deadline = time.monotonic() + timeout_s
     _discard(work_dir / KEPT_FOLDER)
 

@@ -54,6 +54,15 @@ def _get(record: Any, name: str) -> Any:
     return getattr(record, name)
 
 
+def _speed_verdict_of(record: Any) -> str | None:
+    """Return a record's speed verdict, or None when the record was made before it was kept."""
+    if isinstance(record, dict):
+        value = record.get("speed_verdict")
+    else:
+        value = getattr(record, "speed_verdict", None)
+    return value or None
+
+
 def _when(record: Any) -> datetime:
     """Parse a record's timestamp; a missing time zone is taken to be UTC.
 
@@ -449,14 +458,19 @@ def build_tables(records: Iterable[Any], masked: bool = False,
     models = _model_order(cells)
     agents = sorted({_get(c, "agent") for c in cells})
     problems = sorted({_get(c, "problem") for c in cells})
+    caption = CAPTION
+    if any(_speed_verdict_of(c) is None for c in cells):
+        caption += (" Runs recorded before the speed verdict was kept are counted as they were"
+                    " recorded, under the earlier rule, in which a correct routine that missed"
+                    " the speed-up floor failed.")
     parts = [
-        "### Passes by model and backend\n\n" + CAPTION + "\n\n"
+        "### Passes by model and backend\n\n" + caption + "\n\n"
         + _markdown_table(["Model"] + backends + ["All"],
                           _grouped(cells, "model", "backend", models, backends)),
-        "### Passes by agent design and model\n\n" + CAPTION + "\n\n"
+        "### Passes by agent design and model\n\n" + caption + "\n\n"
         + _markdown_table(["Agent design"] + models + ["All"],
                           _grouped(cells, "agent", "model", agents, models)),
-        "### Passes by problem and model\n\n" + CAPTION + "\n\n"
+        "### Passes by problem and model\n\n" + caption + "\n\n"
         + _markdown_table(["Problem"] + models + ["All"],
                           _grouped(cells, "problem", "model", problems, models)),
     ]

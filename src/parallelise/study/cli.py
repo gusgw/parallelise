@@ -119,7 +119,7 @@ def _add_report(sub: argparse._SubParsersAction[HelpParser],
                     "the known-good solution's speed-up beside them. It takes no positional "
                     "argument.",
         epilog="Example: parallelise study report --results results/local-runs.jsonl "
-               "--reference reference-speedups.json --chart pass-rate.svg",
+               "--reference results/reference-speedups-2026-11.json --chart pass-rate.svg",
         **extra,
     )
     p.add_argument("--results", "--store", dest="results",

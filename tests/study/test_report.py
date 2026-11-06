@@ -70,9 +70,9 @@ def test_chart_is_written_as_svg(tmp_path: Path) -> None:
 
 
 def test_july_records_give_228_cells() -> None:
-    path = Path(__file__).resolve().parent.parent / "results" / "runs.jsonl"
+    path = Path(__file__).resolve().parent.parent.parent / "results" / "runs.jsonl"
     if not path.exists():
-        return
+        pytest.skip("the stored records are not present here")
     records = [json.loads(line) for line in path.read_text().splitlines()]
     assert len(latest_cells(records)) == 228
 
@@ -291,3 +291,10 @@ def test_report_command_takes_a_reference_file(tmp_path: Path, capsys) -> None:
     assert main(["study", "report", "--results", str(store), "--reference",
                  str(tmp_path / "absent.json")]) == 1
     assert "absent.json" in capsys.readouterr().err
+
+
+def test_older_records_are_said_to_be_counted_under_the_earlier_rule() -> None:
+    old = [make(), make(backend="mpi", result="FAIL")]
+    for record in old:
+        record.pop("speed_verdict", None)
+    assert "under the earlier rule" in build_tables(old)

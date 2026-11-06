@@ -106,7 +106,7 @@ def _agent_environment() -> dict[str, str]:
     """Return the environment for a command the agent runs: no secrets, and no setting that
     would change how its own ``make check`` judges the benchmark table."""
     env = without_secrets()
-    for name in (FLOOR_ROLE_VARIABLE, JUDGE_SPEED_VARIABLE):
+    for name in (FLOOR_ROLE_VARIABLE, JUDGE_SPEED_VARIABLE, "SPEEDUP_FLOOR"):
         env.pop(name, None)
     return env
 
@@ -120,11 +120,11 @@ def run_process(
     group, and when ``timeout_s`` seconds pass the whole group is killed: no child survives
     the command. The environment passed on has every variable that may hold a secret removed
     (see ``without_secrets``), so that a program the model compiled cannot read the gateway
-    key from it. The two settings that change how the benchmark table is judged are removed
-    too, so that the agent's own ``make check`` always fails a missed speed-up floor and
-    always judges speed, whatever the caller's shell says; only the check sets them, in its
-    own judging folder. An exit code of -1 means the program could not be started or ran out
-    of time.
+    key from it. The settings that change how the benchmark table is judged, including the
+    speed-up floor, are removed too, so that the agent's own ``make check`` always fails a
+    missed floor and always judges speed, whatever the caller's shell says; only the check
+    sets them, in its own judging folder. An exit code of -1 means the program could not be
+    started or ran out of time.
     """
     try:
         proc = subprocess.Popen(
