@@ -1,289 +1,176 @@
 # Results
 
-What the harness has produced so far, as tables. Each table names the file it was computed
-from. The experimental design is in [DESIGN.md](DESIGN.md); the October 2026 campaign has
-its own document, [CAMPAIGN-2026-10.md](CAMPAIGN-2026-10.md).
+This document reports how many of the routines that agents wrote in July and October 2026 are
+correct, by the checks then in use and by the judgement that [DESIGN.md](DESIGN.md) describes,
+applied again on 7 November 2026, and how fast the known-good routines are. Each table names the
+files it comes from, all under `results/`. Each combination was judged from a single run, so a
+difference of a few runs may be chance.
 
-How to read the tables. A run is one attempt by one agent design, with one model, on one
-problem and backend; it passes or fails the check. The July study and the October campaign
-were judged by an earlier rule under which a correct routine whose best speed-up was below
-the problem's floor failed at the benchmark stage; under the present rule a pass means a
-correct routine, whatever its speed, and speed is reported apart. Section 6 gives the October
-counts under both rules. A cell is one problem and backend for
-one model, scored out of the three agent designs, so "2/3" means two designs passed. Every
-run is a single attempt; where a cell was run more than once, the latest record counts.
-The backends are OpenMP (threads in one computer), MPI (cooperating processes) and CUDA
-(a graphics processor). In column headings, sonnet is `claude-sonnet-4.6`, kimi is
-`kimi-k2.5`, gemma is `gemma-31b` and llama is `llama-3.3-70b`, unless a table says
-otherwise.
+## The studies
 
-## 1. The first three problems
+In July, three agent designs (basic, pydantic and langgraph) and four models converted seven of the
+problems that DESIGN.md describes: integrate, matmul, jacobi, nbody and cg (conjugate gradients)
+for OpenMP (threads within one computer), MPI (the Message Passing Interface, processes that
+exchange messages) and CUDA (NVIDIA's platform for computing on graphics cards), and scan and
+histogram for OpenMP and MPI. They made 237 runs of 228 combinations of problem, backend, model and
+design; where a combination was run more than once, its latest run counts, and 225 of the 228 left
+a routine, for three Llama runs of nbody for OpenMP wrote none. In October the same designs and
+four models converted integrate, jacobi, scan and cg for OpenMP and MPI, each problem once as
+published and once masked: 192 runs. The October routines were also re-checked in early November
+with the check of that time.
 
-Integration by the midpoint rule, matrix multiply and a heat stencil (the Jacobi method);
-three backends; four models. Source: `results/manifest-july-2026.tsv`, 4 and 5 July 2026,
-108 runs. Each entry counts passes out of the three agent designs.
+## How the routines were judged again
 
-| problem and backend | sonnet | kimi | gemma | llama |
-|---|---|---|---|---|
-| integration, OpenMP | 3/3 | 3/3 | 3/3 | 3/3 |
-| integration, MPI | 3/3 | 3/3 | 3/3 | 2/3 |
-| integration, CUDA | 3/3 | 3/3 | 3/3 | 0/3 |
-| matrix multiply, OpenMP | 3/3 | 3/3 | 3/3 | 3/3 |
-| matrix multiply, MPI | 3/3 | 3/3 | 3/3 | 0/3 |
-| matrix multiply, CUDA | 3/3 | 3/3 | 3/3 | 2/3 |
-| heat stencil, OpenMP | 3/3 | 3/3 | 3/3 | 2/3 |
-| heat stencil, MPI | 3/3 | 2/3 | 1/3 | 0/3 |
-| heat stencil, CUDA | 3/3 | 3/3 | 3/3 | 2/3 |
-| **total (of 27)** | **27** | **26** | **25** | **14** |
+`scripts/rejudge.py` judged every stored routine on a workstation with six processor cores and an
+NVIDIA graphics card, with six workers for OpenMP and MPI. The routines were written against
+headers that no longer exist, so the script changed a copy of each, and none of its logic, as its
+opening comment sets out. Among other changes, the header of expected values is replaced by the old
+tolerance alone, so that a routine which reads an expected value no longer builds, and the MPI
+routines of scan, which the old contract let leave each block of the result on its own process,
+gain a gather to process 0. The serial routines that referee this judgement were translated by
+`kimi-k2.5`, one of the models judged, but each had first agreed with the Python at every test size
+and at the benchmark size. Another program used several of the host's processors meanwhile (the
+load average reached 18), so only this judgement's verdicts of correctness are reported, not its
+speed-ups. It used integrate's tolerance of that time, 1e-8; on 7 November the tolerance was
+tightened to 1e-11, about twenty times the largest difference that honest orders of addition make
+at the benchmark size.
 
-## 2. The four harder problems
+## October
 
-N-body forces, conjugate gradient, prefix sum and histogram. Prefix sum and histogram have
-no CUDA version. Source: `results/manifest-july-2026.tsv`, 5 July 2026, 120 runs.
+| Problem and backend | Runs | Passed in October | Passed the re-check | Correct now |
+| --- | ---: | ---: | ---: | ---: |
+| cg, MPI | 24 | 16 | 16 | 8 |
+| cg, OpenMP | 24 | 19 | 18 | 18 |
+| integrate, MPI | 24 | 24 | 24 | 24 |
+| integrate, OpenMP | 24 | 24 | 24 | 21 |
+| jacobi, MPI | 24 | 12 | 14 | 7 |
+| jacobi, OpenMP | 24 | 20 | 20 | 14 |
+| scan, MPI | 24 | 15 | 18 | 17 |
+| scan, OpenMP | 24 | 16 | 18 | 18 |
+| All | 192 | 146 | 152 | 127 |
 
-| problem and backend | sonnet | kimi | gemma | llama |
-|---|---|---|---|---|
-| N-body, OpenMP | 3/3 | 3/3 | 3/3 | 0/3 |
-| N-body, MPI | 3/3 | 3/3 | 3/3 | 1/3 |
-| N-body, CUDA | 3/3 | 3/3 | 3/3 | 2/3 |
-| conjugate gradient, OpenMP | 3/3 | 3/3 | 3/3 | 2/3 |
-| conjugate gradient, MPI | 3/3 | 3/3 | 1/3 | 1/3 |
-| conjugate gradient, CUDA | 3/3 | 3/3 | 3/3 | 0/3 |
-| prefix sum, OpenMP | 3/3 | 3/3 | 3/3 | 0/3 |
-| prefix sum, MPI | 3/3 | 3/3 | 3/3 | 1/3 |
-| histogram, OpenMP | 3/3 | 3/3 | 3/3 | 2/3 |
-| histogram, MPI | 3/3 | 3/3 | 3/3 | 3/3 |
-| **total (of 30)** | **30** | **30** | **28** | **12** |
+Sources: `campaign-2026-10/runs.jsonl`, `campaign-2026-10/recheck-2026-11.jsonl`,
+`rejudge-2026-11.jsonl`. The masked runs are correct now in 62 of 96 cases and the unmasked in 65
+of 96; in October 70 and 76 of them passed.
 
-## 3. The two recall-resistant problems
+## July
 
-`decay` (a running value in which each step takes the largest of three quantities) and
-`reservoir` (a level clamped between empty and a capacity); OpenMP and MPI. Source: the
-project's working notes of 6 July 2026; the run files were not kept.
+| Problem and backend | Routines | Passed in July | Correct now |
+| --- | ---: | ---: | ---: |
+| cg, CUDA | 12 | 9 | 9 |
+| cg, MPI | 12 | 8 | 2 |
+| cg, OpenMP | 12 | 11 | 9 |
+| histogram, MPI | 12 | 12 | 12 |
+| histogram, OpenMP | 12 | 11 | 9 |
+| integrate, CUDA | 12 | 9 | 11 |
+| integrate, MPI | 12 | 11 | 11 |
+| integrate, OpenMP | 12 | 12 | 11 |
+| jacobi, CUDA | 12 | 11 | 9 |
+| jacobi, MPI | 12 | 6 | 4 |
+| jacobi, OpenMP | 12 | 11 | 7 |
+| matmul, CUDA | 12 | 11 | 11 |
+| matmul, MPI | 12 | 9 | 9 |
+| matmul, OpenMP | 12 | 12 | 12 |
+| nbody, CUDA | 12 | 11 | 8 |
+| nbody, MPI | 12 | 10 | 9 |
+| nbody, OpenMP | 9 | 9 | 9 |
+| scan, MPI | 12 | 10 | 9 |
+| scan, OpenMP | 12 | 9 | 9 |
+| All | 225 | 192 | 170 |
 
-| problem and backend | sonnet | kimi | gemma | llama |
-|---|---|---|---|---|
-| decay, OpenMP | 3/3 | 2/3 | 3/3 | 0/3 |
-| decay, MPI | 3/3 | 2/3 | 3/3 | 0/3 |
-| reservoir, OpenMP | 3/3 | 2/3 | 3/3 | 0/3 |
-| reservoir, MPI | 3/3 | 2/3 | 2/3 | 0/3 |
-| **total (of 12)** | **12** | **8** | **11** | **0** |
+Sources: `runs.jsonl`, `rejudge-2026-11.jsonl`. Five Llama routines (two of cg for MPI, one of cg
+for OpenMP, one of integrate for OpenMP and one of nbody for CUDA) compiled in July but no longer
+compile, because they define the routine with other argument types, or in another order, than the
+present header. Every July routine of the other three models follows the present prototype, but the
+July headers are not kept, so the three of these five that passed in July have a row of their own
+in the table of causes. Leaving all five out, 170 of 220 routines are correct now.
 
-## 4. Totals by model and backend
+## Each model
 
-Passing runs over the seven problems of sections 1 and 2. The chart of the same data is
-[figures/pass-rates.svg](figures/pass-rates.svg).
+| Study | Model | Routines | Passed then | Correct now |
+| --- | --- | ---: | ---: | ---: |
+| July | claude-sonnet-4.6 | 57 | 57 | 51 |
+| July | gemma-31b | 57 | 53 | 53 |
+| July | kimi-k2.5 | 57 | 56 | 47 |
+| July | llama-3.3-70b | 54 | 26 | 19 |
+| October | claude-sonnet-4.5 | 48 | 45 | 42 |
+| October | gpt-oss-120b | 48 | 41 | 37 |
+| October | kimi-k2.5 | 48 | 44 | 37 |
+| October | llama-3.3-70b | 48 | 16 | 11 |
 
-| model | OpenMP (of 21) | MPI (of 21) | CUDA (of 15) | all seven (of 57) | first three (of 27) | four harder (of 30) |
-|---|---|---|---|---|---|---|
-| sonnet | 21 | 21 | 15 | 57 | 27 | 30 |
-| kimi | 21 | 20 | 15 | 56 | 26 | 30 |
-| gemma | 21 | 17 | 15 | 53 | 25 | 28 |
-| llama | 12 | 8 | 6 | 26 | 14 | 12 |
+Sources: as for the two tables above.
 
-## 5. Results by agent design
+## What changed, and why
 
-Source: `results/manifest-july-2026.tsv`. "Strong models" are sonnet and kimi; "weak
-models" are gemma and llama.
+Of the 146 October passes, 119 are still correct, 22 now fail at a test size, 4 hang (a call took
+more than two minutes) and 1 no longer builds; 8 October failures are now correct. Of the 192 July
+passes, 167 are still correct, 19 fail at a test size, 3 hang and 3 no longer build; 3 July
+failures are now correct. Most of the old passes that now fail meet inputs that the old checks
+never used: their tests ran one size per problem, such as a grid of side 64 for cg and 128 for
+jacobi with 200 sweeps, with one MPI process and with four, as the files of commit 629768d show.
+Their causes are these:
 
-First three problems, all backends, 36 runs per design:
+| Cause | October | July |
+| --- | ---: | ---: |
+| Wrong at size 1 | 8 | 5 |
+| Wrong or hanging with six MPI processes on a small input (size 8 or less) | 8 | 6 |
+| jacobi for OpenMP frees the caller's grid after an odd number of sweeps | 5 | 4 |
+| jacobi for MPI stops with an error | 5 | 2 |
+| nbody for CUDA is wrong at size 300 | 0 | 3 |
+| jacobi for CUDA stops with an error | 0 | 1 |
+| scan for MPI writes its block of the result in the wrong place | 0 | 1 |
+| The routine reads an expected value, which no longer exists | 1 | 0 |
+| The routine's definition differs from the header | 0 | 3 |
+| All | 27 | 25 |
 
-| design | all models | strong models | weak models |
-|---|---|---|---|
-| basic | 31/36 | 17/18 | 14/18 |
-| pydantic | 30/36 | 18/18 | 12/18 |
-| langgraph | 31/36 | 18/18 | 13/18 |
+Sources: `rejudge-2026-11.jsonl` (the field `why`) and the stored routines. The October routine
+that reads an expected value is the prefix sum that wrote zeros and the expected checksum. Of the
+old failures now correct, nine (seven in October, two in July) had failed at the old benchmark
+stage or at the agent's own test; one October routine had failed because its agent changed a
+trusted file, and one July routine had failed its own test with several workers.
 
-Four harder problems, 40 runs per design:
+## Speed of the known-good routines
 
-| design | all models | strong models | weak models |
-|---|---|---|---|
-| basic | 36/40 | 20/20 | 16/20 |
-| pydantic | 32/40 | 20/20 | 12/20 |
-| langgraph | 32/40 | 20/20 | 12/20 |
+No speed-up measured before 7 November is reported, and none should be relied on. The earlier
+checks timed each routine against its own run with one worker, as the `bench.csv` files stored from
+July show, and a routine can slow that run on purpose. Until 7 November, too, the judgement let the
+idle processes of an MPI routine keep processors busy while the serial routine was timed, which
+made MPI speed-ups too large, and it could note the start of a call late, which made any routine
+that filled every processor look too fast; both faults are now mended.
 
-By design and model over the seven problems, 19 runs per entry:
+The known-good routines, which exist to test the harness, were judged on 7 November on the same
+workstation with the present driver; all 39 are correct. Their speed-ups over each problem's serial
+routine are reference figures for the harness, not findings about models. Another program used
+about one processor meanwhile, and md's serial routine took 1.89 s during the OpenMP run against
+about 1.25 s during the other two, so md's OpenMP figure is too large. The serial matrix product
+reads its second matrix by columns, which is largely why matmul shows 56 times on OpenMP and 570
+times on CUDA; DESIGN.md names the other slow serial routines. Each speed-up is the median, over
+the five timed inputs, of the serial routine's time divided by the routine's, and an asterisk marks
+one that the judgement does not count as faster, because the routine lost on at least one input.
 
-| model | basic | langgraph | pydantic |
-|---|---|---|---|
-| sonnet | 19 | 19 | 19 |
-| kimi | 18 | 19 | 19 |
-| gemma | 18 | 18 | 17 |
-| llama | 12 | 7 | 7 |
+| Problem | OpenMP | MPI | CUDA |
+| --- | ---: | ---: | ---: |
+| cg | 6.32 | 6.44 | 29.96 |
+| compact | 3.81 | 3.00 | 2.41* |
+| decay | 1.21* | 0.86* | 1.15 |
+| histogram | 2.87 | 2.78 | 0.98* |
+| integrate | 2.99 | 2.97 | 8.59 |
+| ising | 5.35 | 3.41 | 62.66 |
+| jacobi | 3.46 | 2.86 | 20.97 |
+| matmul | 56.31 | 4.35 | 569.54 |
+| md | 5.82 | 6.64 | 2.64 |
+| nbody | 3.03 | 3.40 | 14.96 |
+| reservoir | 1.99 | 2.90 | 3.16 |
+| scan | 0.81* | 0.39* | 0.39* |
+| sparse_cg | 3.96 | 2.24 | 8.10 |
 
-Recall-resistant problems, 16 runs per design across the four models (source: the working
-notes of 6 July 2026): pydantic 11, basic 10, langgraph 10.
+Source: `known-good-2026-11.json`.
 
-## 6. The October 2026 campaign: masked against unmasked
+## Files
 
-Integration, the heat stencil, the prefix sum and conjugate gradient on OpenMP and MPI, each
-run as shipped and again after the masking tool had replaced every revealing name; four
-models (here sonnet is `claude-sonnet-4.5`); three agent designs; one run per cell; 192
-runs. Source: `results/campaign-2026-10/runs.jsonl`. Passes out of 24 runs per model and
-variant. The chart is [figures/masked-vs-unmasked.svg](figures/masked-vs-unmasked.svg);
-the full tables, with latency, throughput and cost, are in
-[CAMPAIGN-2026-10.md](CAMPAIGN-2026-10.md).
-
-| model | unmasked | masked |
-|---|---|---|
-| claude-sonnet-4.5 | 24/24 | 21/24 |
-| kimi-k2.5 | 24/24 | 20/24 |
-| gpt-oss-120b | 21/24 | 20/24 |
-| llama-3.3-70b | 7/24 | 9/24 |
-| all models | 76/96 | 70/96 |
-
-The same runs counted under the present rule, in which a correct routine passes whatever its
-speed. Source: `results/campaign-2026-10/runs.jsonl` and the check log `gate.log` of each run
-that failed at the benchmark stage, under `results/campaign-2026-10/runs/`. Seven runs change
-from a failure to a correct routine with no useful speed-up; the list is in
-[CAMPAIGN-2026-10.md](CAMPAIGN-2026-10.md). Correct runs out of 24 per model and variant.
-
-| model | earlier rule, unmasked | earlier rule, masked | present rule, unmasked | present rule, masked |
-|---|---|---|---|---|
-| claude-sonnet-4.5 | 24/24 | 21/24 | 24/24 | 24/24 |
-| kimi-k2.5 | 24/24 | 20/24 | 24/24 | 21/24 |
-| gpt-oss-120b | 21/24 | 20/24 | 22/24 | 22/24 |
-| llama-3.3-70b | 7/24 | 9/24 | 7/24 | 9/24 |
-| three capable models (of 72) | 69/72 | 61/72 | 70/72 | 67/72 |
-| all models (of 96) | 76/96 | 70/96 | 77/96 | 76/96 |
-
-Correct runs out of 12 per problem, backend and variant, under the present rule:
-
-| problem and backend | unmasked | masked |
-|---|---|---|
-| integration, OpenMP | 12/12 | 12/12 |
-| integration, MPI | 12/12 | 12/12 |
-| heat stencil, OpenMP | 10/12 | 10/12 |
-| heat stencil, MPI | 8/12 | 6/12 |
-| prefix sum, OpenMP | 9/12 | 9/12 |
-| prefix sum, MPI | 9/12 | 8/12 |
-| conjugate gradient, OpenMP | 9/12 | 11/12 |
-| conjugate gradient, MPI | 8/12 | 8/12 |
-
-The same runs re-checked on 6 November 2026 with the present check: each work folder judged as
-it was assembled, with the problem's own known-good test program in place of the agent's and,
-for OpenMP, every answer at the benchmark's size compared with the known-good routine's.
-Source: `results/campaign-2026-10/recheck-2026-11.jsonl`; the method and the 14 runs whose
-verdict changed are in [CAMPAIGN-2026-10.md](CAMPAIGN-2026-10.md). Correct runs out of 24 per
-model and variant:
-
-| model | unmasked | masked |
-|---|---|---|
-| claude-sonnet-4.5 | 24/24 | 23/24 |
-| kimi-k2.5 | 24/24 | 21/24 |
-| gpt-oss-120b | 22/24 | 22/24 |
-| llama-3.3-70b | 10/24 | 6/24 |
-| three capable models (of 72) | 70/72 | 66/72 |
-| all models (of 96) | 80/96 | 72/96 |
-
-Correct runs out of 12 per problem, backend and variant, re-checked:
-
-| problem and backend | unmasked | masked |
-|---|---|---|
-| integration, OpenMP | 12/12 | 12/12 |
-| integration, MPI | 12/12 | 12/12 |
-| heat stencil, OpenMP | 11/12 | 9/12 |
-| heat stencil, MPI | 8/12 | 6/12 |
-| prefix sum, OpenMP | 9/12 | 9/12 |
-| prefix sum, MPI | 11/12 | 7/12 |
-| conjugate gradient, OpenMP | 9/12 | 9/12 |
-| conjugate gradient, MPI | 8/12 | 8/12 |
-
-## 7. Token use and cost
-
-Four harder problems, ten combinations of problem and backend, three agent designs each.
-Source: `results/tokens-new-problems-july-2026.json`, 5 and 6 July 2026, counted by a
-proxy between the agents and the gateway. Prices are list prices per million tokens:
-sonnet 3 dollars for prompt and 15 for completion tokens, kimi 0.60 and 3.03, llama 0.72
-for both; gemma ran on a rented graphics-card instance at about 2 dollars an hour.
-
-| model | requests | prompt tokens | completion tokens | cost | per combination |
-|---|---|---|---|---|---|
-| kimi | 260 | 1,053,500 | 66,790 | $0.83 | about $0.08 |
-| sonnet | 355 | 2,358,784 | 114,973 | $8.80 | about $0.88 |
-| llama | 1,944 | 39,574,086 | 358,291 | $28.75 | about $2.88 |
-| gemma | 763 | 8,841,376 | 88,029 | about $5 to $6 of instance time | about $0.50 to $0.60 |
-
-Recall-resistant problems, from the working notes of 6 July 2026, at the same prices:
-
-| model | prompt tokens | completion tokens | cost | passes |
-|---|---|---|---|---|
-| kimi | 9.1 million | 0.25 million | about $6.20 | 8 of 12 |
-| sonnet | 5.0 million | 0.19 million | about $17.90 | 12 of 12 |
-| llama | 32.5 million | 0.11 million | about $23.50 | 0 of 12 |
-| gemma | not recorded | not recorded | about $1.20 of instance time | 11 of 12 |
-
-The October 2026 campaign cost about $49 at Bedrock list prices: sonnet $31.17, llama
-$12.04, kimi $4.22, gpt-oss $1.36. Its per-model request, token, latency and throughput
-figures are in [CAMPAIGN-2026-10.md](CAMPAIGN-2026-10.md).
-
-## 8. Speed-ups of the known-good reference solutions
-
-Best speed-up of each reference solution over its one-worker run, one measurement each.
-The first table is from the working notes of July 2026 on a machine with 22 processor
-cores; the second is from 11 October 2026 on a 12-core host with a 16 GB NVIDIA graphics
-card, recorded in [../results/reference-checks-gpu-host.md](../results/reference-checks-gpu-host.md)
-with each problem's floor; the third is from 6 November 2026 on the same host, recorded in
-`results/reference-speedups-2026-11.json`. Only the November figures were measured with the
-untimed warm-up call in every OpenMP and MPI benchmark. In November the MPI benchmarks of the
-prefix sum, histogram, decay and reservoir ran at a length of 20 million with at most 4
-processes, to fit an 8 GB memory limit. In November the known-good prefix sum under MPI
-reached 1.16, below its floor of 1.25; under the present rule it is a correct routine with no
-useful speed-up.
-
-| problem | OpenMP (July) | MPI (July) | CUDA (July) | OpenMP (October) | MPI (October) | CUDA (October) | OpenMP (November) | MPI (November) | CUDA (November) |
-|---|---|---|---|---|---|---|---|---|---|
-| integration | 6.8 | 4.3 | 4.5 | 5.30 | 3.92 | 8.95 | 5.45 | 5.86 | 8.95 |
-| matrix multiply | not recorded | 2.0 to 3.6 | 12.7 | 5.05 | 8.95 | 27.53 | 5.14 | 6.42 | 25.62 |
-| heat stencil | not recorded | 3.5 | 7.6 | 6.18 | 5.42 | 11.51 | 6.01 | 6.16 | 11.76 |
-| N-body | 7.2 | 4.1 | 7.0 | 6.03 | 5.72 | 15.23 | 6.05 | 5.78 | 15.21 |
-| conjugate gradient | 4.8 | 3.9 | 15.4 | 4.59 | 3.51 | 17.60 | 5.76 | 3.44 | 17.61 |
-| prefix sum | 5.9 | 4.0 | none | 1.93 | 1.32 | none | 1.49 | 1.16 | none |
-| histogram | 4.5 | 3.4 | none | 3.09 | 3.01 | none | 3.17 | 3.13 | none |
-| decay | 8.8 | 5.3 | none | 6.58 | 7.05 | none | 6.51 | 3.84 | none |
-| reservoir | 7.8 | 4.2 | none | 7.02 | 5.80 | none | 7.00 | 3.96 | none |
-
-## 9. Calling a finished routine from Python
-
-Demonstrations in `bindings/`, using nanobind wrappers around routines that passed the
-check; one run each, from the working notes of July 2026. The notebook loop is the
-original serial Python.
-
-| routine | notebook loop | wrapped C | note |
-|---|---|---|---|
-| integration, OpenMP | 1.33 s | 0.004 s | 365 times faster; the answer matches the oracle |
-| matrix multiply, OpenMP | 1.49 s | 0.012 s | 123 times faster; the optimised numpy product takes 0.004 s |
-| heat stencil, OpenMP | not recorded | not recorded | 31 times faster |
-| integration, MPI | 0.0152 s on one process | 0.0044 s on four | 3.4 times faster; the answers differ by 6e-14 |
-| integration, CUDA | not recorded | 2.3 ms | the answer matches the oracle |
-
-## 10. Recommended backends against measured speed-ups
-
-The backend that each model recommended for each notebook, from `parallelise assess`, set
-against the best speed-up of the known-good solution on each backend. In this section sonnet
-is `claude-sonnet-4.5` and kimi is `kimi-k2.5`. For a combination, the backend shown in
-brackets is the one the harness would run, the first part that is not serial. "No version"
-means that the problem has no CUDA version. Recommendations: `results/assessments/2026-11/`,
-one call per notebook and model, 6 November 2026. Speed-ups:
-`results/reference-speedups-2026-11.json`, one measurement each, 6 November 2026, on a 12-core
-host with a 16 GB NVIDIA graphics card, with the untimed warm-up call in every benchmark.
-OpenMP used 1 to 12 threads at each benchmark's default length. MPI used 1 to 12 processes at
-the default length, except for decay, histogram, reservoir and the prefix sum, whose MPI
-benchmarks were run at a length of 20 million with at most 4 processes to fit an 8 GB memory
-limit; for those four problems the MPI and OpenMP figures are not measured alike. The CUDA
-speed-up is over one processor core. A backend is called the fastest only where it beats the
-next by at least 5 per cent; closer than that, two single measurements cannot separate them.
-Where the processor backends were not measured alike, a recommendation between them cannot be
-judged.
-
-| problem | OpenMP | MPI | CUDA | fastest | faster of OpenMP and MPI | sonnet recommends | sonnet fastest | kimi recommends | kimi fastest |
-|---|---|---|---|---|---|---|---|---|---|
-| integration | 5.45 | 5.86 | 8.95 | CUDA | MPI | OpenMP | no | OpenMP | no |
-| matrix multiply | 5.14 | 6.42 | 25.62 | CUDA | MPI | OpenMP | no | combination (runs OpenMP) | no |
-| heat stencil (Jacobi) | 6.01 | 6.16 | 11.76 | CUDA | about equal | OpenMP | no | OpenMP | no |
-| N-body | 6.05 | 5.78 | 15.21 | CUDA | about equal | OpenMP | no | combination (runs OpenMP) | no |
-| conjugate gradient | 5.76 | 3.44 | 17.61 | CUDA | OpenMP | OpenMP | no | OpenMP | no |
-| prefix sum (scan) | 1.49 | 1.16 | no version | OpenMP or MPI | not measured alike | OpenMP | cannot be judged | CUDA | no (no version) |
-| histogram | 3.17 | 3.13 | no version | OpenMP or MPI | not measured alike | OpenMP | cannot be judged | OpenMP | cannot be judged |
-| decay | 6.51 | 3.84 | no version | OpenMP or MPI | not measured alike | serial | no | serial | no |
-| reservoir | 7.00 | 3.96 | no version | OpenMP or MPI | not measured alike | serial | no | serial | no |
+The stored routines are under `results/runs/` (July) and `results/campaign-2026-10/runs/`
+(October), beside the agents' own tests. The October records also hold each run's requests and
+tokens, and `prices.json` beside them gives the list prices per million tokens. The older evidence
+that no kept document uses (the July manifest and token counts, the October run logs, the reference
+measurements of October and early November, the old charts and the old design documents) remains in
+commit 629768d.

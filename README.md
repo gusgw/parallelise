@@ -1,334 +1,191 @@
 # parallelise
 
-parallelise turns a numerical algorithm written as serial Python in a Jupyter notebook into
-a parallel C or CUDA program and checks the result. An agent driven by a large language
-model writes the program for a chosen backend: OpenMP for threads within one computer, MPI
-(the Message Passing Interface) for processes that exchange messages, or CUDA for a
-graphics processor. The agent decides how to parallelise the work: how to split it, which
-pattern of reduction or exchange to use, and how to keep the answer the same however many
-workers run. It writes, builds and tests the program until an independent check accepts
-the result as correct; the check reports separately how much faster the program runs with
-several workers than with one. A separate command asks a
-model which method suits a notebook, or whether the algorithm is better left serial and
-well written. The models are reached through one OpenAI-compatible gateway, so any model
-served that way can be used and several can be compared. The measurements made so far, on
-nine algorithms with four models and three ways of building the agent, are in
-[docs/RESULTS.md](docs/RESULTS.md).
+parallelise asks a large language model, the kind of machine-learning model that writes text and
+code, to write a parallel version of a numerical routine, and then judges the result by fixed
+rules. Its input is a Jupyter notebook that holds an ordinary NumPy function and a declaration of
+the function's arguments and results. The model works through an agent, a program that gives it a
+task and some tools, carries out the actions it asks for and decides when the work is done. It
+writes the parallel routine in C for one of three backends, or ways of running in parallel: OpenMP
+(Open Multi-Processing), a standard for sharing work among the threads of one computer; MPI, the
+Message Passing Interface, for processes that exchange messages; or CUDA, NVIDIA's platform for
+computing on its graphics cards.
 
-This repository holds my own work. It is a public version: material that belongs in
-private repositories was removed before publication, and the history begins at
-publication.
+The project measures how well different models and designs of agent do this work, and whether they
+cheat. In October 2026 one model passed the check then in use with a routine that should have
+computed running totals but ignored its input, wrote zeros and put the expected checksum in its
+last element. In the present design the agent can change no file but its own routine and never sees
+an expected answer or the code that judges it, and the verdict comes from fixed rules alone.
+[docs/DESIGN.md](docs/DESIGN.md) sets out the design of the experiment, and
+[docs/RESULTS.md](docs/RESULTS.md) reports the measurements so far.
 
-## How it works
+A further check is planned and not yet built: an independent agent will translate each parallel
+routine back into plain Python, in which a trick hidden in the C would stand out. The larger goal
+is an agent that also chooses the backend, deciding from the notebook alone whether threads,
+processes, a graphics card or plain serial code suit the algorithm.
 
-A **notebook** is a Jupyter notebook whose last cell defines a dictionary named `ORACLE`
-holding the algorithm's parameters, the answer the notebook itself computed, and a
-tolerance. That answer is the **oracle**: the C program must reproduce it within the
-tolerance. The **routine** is the one C or CUDA function that does the computation, with
-exactly the signature the problem's header states. (CUDA uses the word kernel for a
-function that runs on the graphics card; the routine of a CUDA problem is the function that
-starts such kernels, and this document says routine throughout.)
+This repository is a public version of my own work, with proprietary material removed.
 
-A **problem** is a folder holding the notebook and, for each backend it supports, a header
-with the routine's signature, a benchmark program and a Makefile. Nine problems are
-shipped under `problems/`: numerical integration, matrix multiply, a heat stencil (the
-Jacobi method), N-body forces, conjugate gradient, prefix sum, histogram, and two problems
-built to have no textbook parallel recipe, a decaying score that combines terms by maximum
-and addition, and a tank level that can neither overflow nor run dry.
+## Installing
 
-The **agent** drives the model through one conversion. It hands the model tools to read the
-notebook, read and write files, and run build commands; keeps the conversation going until
-the model says it has finished; runs the checks itself at that point; and feeds any failure
-back until a step budget or a time limit runs out. There are three **agent designs**, which give the model
-the same tools and differ in how firmly they refuse to let it finish before the checks
-pass: a plain loop written on `httpx`, one built on Pydantic AI, and one built on
-LangGraph.
+You need Python 3.11 or later, the C compiler gcc with OpenMP, `make`, and the programs `nm` and
+`objdump`, which are installed with gcc on most systems. The MPI backend needs Open MPI (the
+packages `openmpi-bin` and `libopenmpi-dev` on Debian or Ubuntu), and the CUDA backend needs
+NVIDIA's compiler `nvcc` and a graphics card. The model must be reachable through a web service
+that accepts OpenAI's form of chat request; LiteLLM, which passes such requests on to many
+providers, is one.
 
-Each conversion runs in a **work folder** that the harness assembles: the notebook, the
-oracle written as C constants, the header, the benchmark program, the Makefile and a small
-test helper. The agent writes two files into it, the routine and a test program of its
-own, which helps it find its mistakes. The **check** then judges the routine after the
-agent has finished, without the model. It does not use the folder as the agent left it.
-It assembles a fresh folder in a temporary directory from the problem's own files, copies
-in only the agent's routine and the problem's own known-good test program, which the agent
-never sees, and judges that fresh folder in four stages, stopping at the first failure:
+    git clone https://github.com/gusgw/parallelise.git && cd parallelise
+    python3 -m venv .venv && . .venv/bin/activate
+    make install
 
-1. Build the routine, the problem's test program and the benchmark program with every
-   compiler warning treated as an error.
-2. Run the problem's test program with one worker. It must report no failures, which means
-   its assertions found the routine's answer within the oracle's tolerance.
-3. Run the same test program with several workers. The answer must not depend on the
-   number of workers.
-4. Run the benchmark program, which times the routine at several worker counts, and judge
-   its table: it must be complete, its figures must agree with one another, and they must
-   look measured rather than invented. For OpenMP the check also watches every call the
-   benchmark makes to the routine. In a second run it calls the problem's known-good routine
-   beside the agent's on the same arguments, and the routine fails if any answer differs,
-   which catches a routine that is right at the test's small size and wrong at the
-   benchmark's larger one. In the timed run it records how many processors each call kept
-   busy, which catches a serial routine, or one that only waits, that claims a speed-up it
-   did not earn. These checks catch the simple ways of deceiving the benchmark; they are not
-   proof against a routine written to defeat them, and the design note describes four such
-   routines.
+`make install` installs the package for development, together with the charting library, the tools
+that test and check the code, and the frameworks on which two of the agents are built, which are
+pinned to exact versions.
 
-The check makes two judgements. The first is correctness: a routine that gets through the
-four stages passes. The second is speed, which never fails a run and is given as one of four
-speed verdicts. "Faster" means that the best speed-up reached the problem's floor, the least
-speed-up that counts as useful (1.25 to 1.5 times on the processor, 3 times on a graphics
-card). "No useful speed-up" means that it did not. "Speed not judged on this machine" means
-that speed judging was switched off with `PARALLELISE_JUDGE_SPEED=0`, as on shared test
-servers whose timings mean nothing. "Not measured" is the verdict of a run that failed. A
-correct routine that is not faster therefore passes, because a parallel method that does not
-pay for an algorithm on a machine is a finding, not a failed conversion. The agent's own
-`make check` in its work folder is stricter: it fails when the floor is missed, so that the
-agent keeps working until its routine is genuinely parallel.
+## Writing a notebook
 
-Because the verdict rests on the problem's own test and not on the agent's, a test program
-that asserts nothing cannot make a wrong routine pass. The check still builds and runs the
-agent's own test program, at one worker, and adds one line to its log saying whether it
-passed; that line never changes the verdict. The benchmark program, the header, the
-Makefile and the other helper files are trusted files, and the check fails a run in which
-the agent has changed any of them, or has added a file named `GNUmakefile` or `makefile`,
-which `make` would read instead of the Makefile. It compares each trusted file with the
-fingerprint taken when the folder was assembled and with the fresh copy made from the
-problem, so rewriting the fingerprints does not hide an edit. If the check fails, the fresh
-folder that it judged is kept as `check-fail` inside the work folder; if it passes, that
-folder is deleted. The check judges whatever routine is on disk when the agent stops, however
-it stopped: finished, out of steps, out of time, or after an error. Every judged run is
-written as one record to a results store, one JSON object per line: the problem, backend,
-model and agent design, the outcome and the stage of any failure, the speed verdict and the
-best speed-up, the requests, tokens, latency and throughput of the model calls, the time the agent and the check
-each took, the settings of the run (temperature, step budget, time limit), and the versions
-of parallelise and of the libraries that carried the requests.
+A problem is a folder that holds a notebook of the same name and the problem's serial routine,
+`serial.c`; thirteen are shipped under `problems/`. The notebook's code cells define three things:
+the function, written as a person would write it; `make_inputs(size, rng)`, which draws the
+arguments of one call of the given size with a NumPy random generator and returns them in a
+dictionary keyed by their names; and a dictionary named `ROUTINE`, which names both and declares
+the arguments, the results, the sizes and the tolerance. This is the code of `problems/integrate`,
+without its docstring and its demonstration:
 
-## How to use it
+```python
+import numpy as np
 
-You need Python 3.11 or later, a C compiler (`gcc`), `make`, and Open MPI (`mpicc` and
-`mpirun`; on Debian or Ubuntu the packages are `openmpi-bin` and `libopenmpi-dev`). CUDA
-needs `nvcc` and a graphics card, and its tests skip themselves when either is absent. You
-also need an OpenAI-compatible gateway that serves the chosen model; LiteLLM is
-one way to provide one.
+def integrate(a, b, n):
+    h = (b - a) / n
+    x = a + (np.arange(n) + 0.5) * h
+    return np.sum(4.0 / (1.0 + x * x)) * h
 
-1. Install the package. The plain agent needs only `httpx`; the extras add the two
-   framework agents, the charts and the development tools.
+def make_inputs(size, rng):
+    return {"a": rng.uniform(-1.0, 0.0), "b": rng.uniform(1.0, 2.0), "n": size}
 
-        git clone https://github.com/gusgw/parallelise.git parallelise && cd parallelise
-        python3 -m venv .venv && . .venv/bin/activate
-        make install
+ROUTINE = {
+    "function": integrate,
+    "make_inputs": make_inputs,
+    "arguments": {"a": "float64", "b": "float64", "n": "int64"},
+    "results": {"area": "float64"},
+    "test_sizes": [1, 1_000, 100_000],
+    "benchmark_size": 50_000_000,
+    "tolerance": 1e-11,
+}
+```
 
-2. Point it at the gateway and the model, and confirm that both answer.
+A routine's answers are compared with the function's at the test sizes, and with the serial
+routine's at the benchmark size, where the routine is also timed. Each argument and result has a
+type, `float64`, `float32`, `int64` or `int32`, and an array also has a shape made of size names
+and whole numbers, such as `float64[n, 3]` for the positions of `n` particles in `problems/md`. A
+size name is an integer argument or is read from the shape of an array argument. A result written
+`int64[<=n]`, as in `problems/compact`, holds at most `n` elements, and the routine reports how
+many it wrote through an extra parameter. A result with the same name as an argument, as in
+`problems/jacobi`, is that argument, updated in place. A tolerance is a fraction of the largest
+magnitude in the trusted result, from the function or the serial routine, unless it is written as
+`("absolute", 0.1)`, and a dictionary of tolerances gives each result its own. Integer results are
+compared exactly and need no tolerance. The optional key `c_order` sets the order of the C
+routine's parameters. The models see only the function and the code that it uses, not the rest of
+the notebook.
 
-        export PARALLELISE_GATEWAY_URL=http://localhost:4000/v1
-        export PARALLELISE_MODEL=kimi-k2.5
-        export PARALLELISE_API_KEY=...        # only if the gateway needs one
-        parallelise health
+## Running it
 
-   This lists the models the gateway serves, confirms the chosen one is among them, and
-   makes one small request. It exits with status 1 and a plain message if anything is
-   wrong.
+    export PARALLELISE_GATEWAY_URL=http://localhost:4000/v1   # or give --gateway-url
+    export PARALLELISE_MODEL=gpt-oss-120b                     # name the model under study
+    export PARALLELISE_API_KEY=...                            # if the service needs a key
+    parallelise health
+    parallelise serial path/to/new_problem --model kimi-k2.5
+    parallelise run problems/integrate --backend openmp --agent basic
+    parallelise check work/integrate/openmp/gpt-oss-120b/basic/2026-11-07T09-30-00Z \
+        --problem problems/integrate --backend openmp
+    parallelise report --chart correct.svg
 
-3. Check the machinery without any model. This builds the known-good solution of every
-   shipped problem and runs the full check on it.
+`health` checks that the service answers, offers the model and completes one small request.
+`serial` has a model translate the function into plain C once, before any run, and writes
+`serial.c` only if the translation agrees with the Python on fresh inputs at every test size and at
+the benchmark size. Use one model for every problem, and not one of those under study; all thirteen
+shipped routines were translated by `kimi-k2.5`. Read the translation before relying on it, because
+it referees every later run and sets the baseline of every speed-up.
 
-        make check-references
+`run` makes a new work folder under `work/`, has the model under study write the parallel routine
+there, judges the routine, and appends a record to `results/local-runs.jsonl`. Its last line gives
+the verdict, such as `PASS: correct; faster than the serial routine (speed-up 3.21)`. `check`
+judges a finished work folder again, and `report` prints tables of correctness, speed and the use
+of each model. Every command explains itself with `--help` and takes `--log-level` (WARNING by
+default) and `--log-json`, which writes each log line as JSON (JavaScript Object Notation). Every
+new record names the model's provider and the numeric precision of its weights, from `--serving`
+and `--quantisation`, which say "not recorded" and "not disclosed" unless they are given. The
+largest problems need a few gigabytes of temporary space, so where `/tmp` is held in memory, point
+`TMPDIR` at a folder on disk.
 
-4. Convert one problem on one backend with one agent design. The argument is the path to a
-   problem folder, or the name of a shipped example under `problems/`. The run assembles a
-   work folder under `work/` (or under `PARALLELISE_WORK_ROOT`), runs the agent, judges the
-   result with the check, and appends a record to `results/local-runs.jsonl` (or to
-   `PARALLELISE_RESULTS`). The agent is stopped after 30 minutes by default; `--time-limit`
-   (or `PARALLELISE_TIME_LIMIT`) sets another limit in seconds, and the routine on disk is
-   judged all the same. A request that the model service refuses with HTTP 429 (too many
-   requests) is waited out, for up to two minutes by default, before the run gives up.
+## How a routine is judged
 
-        parallelise run integrate openmp --agent basic
+The program judges the routine that the agent leaves, by fixed rules, in a fresh folder that the
+agent never saw. Correctness alone decides a pass, because a correct routine that is no faster is a
+finding about the algorithm, not a failed conversion. The routine must keep a rule on what it may
+contain, and compile with warnings treated as errors. It must then give the right answers on fresh
+inputs at the test sizes and at two sizes that it could not foresee, each in a new process, once
+with one worker (a thread or an MPI process) and once with one for each processor core. At the
+benchmark size it must match the serial routine on six new inputs, taking turns with it, and it
+counts as faster only if it beats the serial routine on every one of the five timed inputs.
+[docs/DESIGN.md](docs/DESIGN.md) gives the details and the reasons for each step.
 
-   The last line gives both judgements, for example "PASS: correct; faster on this machine
-   (best 5.30, floor 1.5)" or "PASS: correct; no useful speed-up on this machine (best 1.07,
-   floor 1.25)". The exit status is 0 when the routine is correct, whatever its speed, and 1
-   when it is not.
+## The agents and masking
 
-   Running the same cell again replaces the work folder that the earlier run made. No
-   command deletes a folder that it did not make: `run`, `assemble` and `study mask` refuse
-   a destination that already holds files, and say so, unless you add `--force`.
+The agent may read the function, the serial routine and a C header generated from the declaration,
+and it may write only its routine. When the model says it has finished, the agent runs its check,
+which compares the routine with the Python at the test sizes and times it against the serial
+routine, and it accepts only a correct routine at least 1.2 times as fast as the serial one;
+otherwise the work goes on until the budget of requests (`--step-budget`) or the time limit
+(`--time-limit`) runs out. `--agent` chooses the design of agent: `basic`, a plain loop, or
+`pydantic` or `langgraph`, built on the frameworks Pydantic AI and LangGraph. Because a model may
+recognise a famous algorithm by its name and recall a solution, `--masked ALIAS` renames the
+routine to the alias and every other name that the agent's files define to a neutral one such as
+`v7`, and removes the comments and docstrings, except the header's statement of the rules; the
+numbers and the logic are unchanged.
 
-5. Judge a finished work folder again, without the agent or the model. The check needs the
-   problem the work folder was built from, as a path or as the name of a shipped example
-   (for a masked run, the masked copy that `run` keeps under `work/_masked/`), because it
-   rebuilds the folder from the problem's own files and judges only the agent's routine.
+## Containers and Kubernetes
 
-        parallelise check work/integrate/openmp/kimi-k2.5/basic \
-          --problem integrate --backend openmp
+Code written by a model is untrusted, and the rule on what a routine may contain is no sandbox, so
+run conversions in a container. `make image` builds the image `parallelise:cpu`, which holds gcc,
+Open MPI and the package, runs as an ordinary user and keeps its work in `/work`; the Dockerfile's
+`cuda` stage is for machines with a graphics card. On Linux, with the model service at
+`http://localhost:4000/v1` on the same machine, run the container with a memory limit and as
+yourself, so that the files it writes are yours:
 
-   It ends with the same line as `run`. `--floor` sets a stricter floor than the problem's,
-   which changes only the speed verdict, never the pass.
-
-6. Ask the model which method suits a notebook. The reply is a reasoned verdict, printed
-   and optionally saved as JSON: which loop iterations are independent, whether arithmetic
-   or memory limits the work, what a distributed version would have to communicate, and
-   which of OpenMP, MPI, CUDA, a combination by part, or serial code it recommends.
-
-        parallelise assess problems/jacobi/jacobi.ipynb --out verdict.json
-
-7. The study tools live under one command. `study mask` makes a copy of a problem with a
-   neutral name and every revealing word removed, for measuring how much a model's success
-   is recall of a known algorithm; `study report` prints the result tables from a results
-   store and draws the charts. Its tables count a pass as a correct routine, whatever its
-   speed, and a speed table counts the correct runs by speed verdict, with their median best
-   speed-up, for each problem, backend and model. `--reference FILE` adds the best speed-up of
-   the known-good solution beside each model's; the file is a JSON list of objects with the
-   keys `problem`, `backend` and `best_speedup`, such as
-   `[{"problem": "scan", "backend": "mpi", "best_speedup": 1.3}]`.
-
-        parallelise study mask scan problem_c masked/problem_c
-        parallelise study report --results results/campaign-2026-10/runs.jsonl \
-          --prices results/campaign-2026-10/prices.json \
-          --masked-chart docs/figures/masked-vs-unmasked.svg
-
-Every command answers `--help` with one sentence per argument and an example.
-
-With Docker, the image holds the compilers and Open MPI and runs as an ordinary user:
-
-    make image
-    docker run --rm parallelise:cpu health
     mkdir -p out
-    docker run --rm --user "$(id -u):$(id -g)" -v "$PWD/out:/work" \
-      -e PARALLELISE_GATEWAY_URL=http://host.docker.internal:4000/v1 \
-      -e PARALLELISE_MODEL=kimi-k2.5 \
-      parallelise:cpu run integrate openmp --agent basic
+    docker run --rm --memory=8g --memory-swap=8g --network host --user "$(id -u):$(id -g)" \
+        -v "$PWD/out:/work" -e PARALLELISE_MODEL=gpt-oss-120b \
+        parallelise:cpu run problems/integrate --backend openmp
 
-The option `--user "$(id -u):$(id -g)"` runs the container as the calling user, so that the
-files it writes into the mounted folder belong to that user and not to the image's own user.
-Make the `out` folder yourself first, as above, because Docker would otherwise make it owned by
-the root user. The image keeps its results store, `local-runs.jsonl`, in the work folder
-`/work`, so with that folder mounted the records stay on the host.
+`k8s/job.yaml` describes one conversion as a Kubernetes Job, a task that runs once to completion,
+and its comments explain each setting. The Job checks the model service first, runs without
+privileges on a read-only file system within limits of processor, memory and time, and asks the
+cluster to let it reach only the model service and the cluster's name service.
 
-A Kubernetes job for one conversion is in `k8s/job.yaml`. Deployment, logs,
-troubleshooting and the memory rules for running benchmarks in containers are in
-[docs/OPERATIONS.md](docs/OPERATIONS.md). The script `scripts/smoke-test.sh` runs the
-steps above from a fresh clone against a scripted stand-in for the model, and continuous
-integration runs it on every push.
+## Tests
 
-## Adding a problem
+    make test-fast          # run the tests that compile no C code
+    make test               # run every test; MPI and CUDA tests skip without mpicc, nvcc or a card
+    make lint               # check the style with ruff and the types with mypy
+    make check-known-good   # judge the known-good routine of every problem and backend
 
-A new problem is a folder with the notebook and, for each backend, the three files the
-shipped problems have: a header giving the routine's exact signature, a benchmark program
-that builds inputs of a chosen size, calls the routine at several worker counts after an
-untimed warm-up call, and writes a timing table, and a Makefile whose `check` target builds
-the routine and the test program, runs the test with one worker and with several, runs the
-benchmark and judges its table against the problem's speed-up floor. Each backend also needs
-a `reference` folder holding a known-good routine and a known-good test program,
-`test_<name>.c`. The check judges every agent's routine with that test program, which is
-never copied into an agent's work folder, so a problem without it cannot be run. For the
-check to watch an OpenMP benchmark's calls, the benchmark must pass the routine arrays that
-it obtained from `malloc`, and the header must declare only the routine, with no array or
-function-pointer parameters; otherwise the log says that the answers at the benchmark's size
-were not compared.
+Both `make test` and `make lint` must pass before a change is offered. On every push and pull
+request, GitHub runs the same checks and then `scripts/smoke-test.sh`, which installs a fresh copy
+of the repository and converts integrate against a scripted stand-in for the model, both directly
+and in Docker. GitHub also validates the Kubernetes file and builds the image.
 
-The routine, its files and the notebook are named after the problem folder. In a folder
-called `integrate`, the notebook is `integrate.ipynb`, the header is `integrate.h`, the
-routine is written in `integrate.c` (`integrate.cu` for CUDA) and its test in
-`test_integrate.c`. The header gives the name and signature of the function itself, which
-may be longer than the folder name, as in `nbody_accel` for the folder `nbody`.
+## Use of AI tools
 
-The notebook's last cell defines `ORACLE`. It holds the parameters, the expected values and
-the tolerance, and optionally the terms of a sum, so that the tolerance can be set from how
-far a correct program may legitimately differ by adding them in another order. It does not
-name the routine. The shipped problems are the models to copy; `problems/integrate` is the
-smallest. Generating the per-backend files from the notebook alone is planned and not yet
-done.
+The design is mine in detail: the pipeline and every stage in it, from
+the notebook and its declaration, through the agents, the check and the masking, to the
+experiments and their analysis. AI coding agents (Claude Code, with Anthropic's Claude
+models) wrote much of the code, the tests and the documents to that design, under my
+direction, and ran measurements on my machines at my instruction.
+The language models that the pipeline drives are a separate matter: they are the subject
+of the experiments, not tools that wrote this repository.
 
-## Results
+## Licence
 
-Nine problems, three backends, four models and three agent designs have been run, in a
-July 2026 study of 228 runs on seven problems (237 records, nine of them replaced by a later
-run of the same cell), runs of the two recall-resistant problems known from working notes, and an October 2026 campaign of 192 that compared each
-problem as shipped with a copy whose revealing names had been removed. The tables, with
-the file each came from, are in [docs/RESULTS.md](docs/RESULTS.md); the October campaign,
-with its method, latency, throughput and cost, is in
-[docs/CAMPAIGN-2026-10.md](docs/CAMPAIGN-2026-10.md); the charts are
-[docs/figures/pass-rates.svg](docs/figures/pass-rates.svg) and
-[docs/figures/masked-vs-unmasked.svg](docs/figures/masked-vs-unmasked.svg). All runs are
-single attempts.
-
-## Design
-
-[docs/DESIGN.md](docs/DESIGN.md) sets out the experiment: the controlled axes of model,
-agent design and backend; the frozen agent versions recorded with every run; the four-stage
-check and why each stage exists; the rules that stop an agent inventing its speed-ups; the
-requirement that the answer not depend on the worker count; the problems built to resist
-recall and the masking study; and the limitations. [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)
-maps the code: the conversion path in the package's top level and the study tools in the
-`study` subpackage, each with its own tests.
-
-The folder `studies/coding-agents/` is an earlier study of agent designs on a debugging task, kept with its own code and tests; the agent packages in it are not the agents used by this project, which live in `src/parallelise/agents/`.
-
-## What is open source and what is my own
-
-Used from others:
-
-- The models. Claude Sonnet is proprietary and was used through a service. Kimi K2.5,
-  Llama 3.3 70B, Gemma 31B and gpt-oss-120b have open weights, each under its own licence.
-- The agent frameworks Pydantic AI and LangGraph, with LangChain beneath LangGraph.
-- LiteLLM, which provides the gateway; vLLM, which serves a model on a graphics card; and
-  Amazon Bedrock, a commercial service that hosts several of the models.
-- The standard tools `gcc`, Open MPI, OpenMP, CUDA, nanobind and httpx.
-
-My own, all in this repository:
-
-- The harness: the oracle extractor, the assembly of work folders, the check, the model
-  client, the assessment stage and the results store.
-- The nine problems: notebooks, oracles, routine headers, trusted benchmarks, Makefiles and
-  known-good reference solutions.
-- The benchmark checker that rejects invented speed-ups, and the masking tool.
-- The three agents, including the plain agent written directly on `httpx`.
-- The nanobind wrappers that call a finished routine from Python, and the design of the
-  experiments and their analysis.
-
-## How the models were served
-
-In the July 2026 study, Amazon Bedrock served `claude-sonnet-4.6`, `kimi-k2.5` and
-`llama-3.3-70b`, and vLLM served `gemma-31b` on one NVIDIA L40S graphics card with 48 GB of
-memory; all four were reached through one LiteLLM gateway. In the October 2026 campaign
-Amazon Bedrock served `claude-sonnet-4.5`, `kimi-k2.5`, `gpt-oss-120b` and
-`llama-3.3-70b`. Bedrock does not disclose the numerical precision of its models, and the
-Gemma checkpoint and quantisation were not recorded; the run records say "not disclosed" or
-"not recorded" in those fields. The July runs did not record latency or wall-clock time;
-every October record carries requests, tokens, mean latency and completion tokens per
-second. Those are latencies through a gateway to a shared cloud service on one day, not
-properties of the models.
-
-## Security
-
-Code written by a model is untrusted. The harness limits what it can do in several ways, none
-of which is a sandbox. The agent can run only commands from a short allow-list (the build
-tools, `mpirun`, `ls`, `cat`, and programs inside the work folder), as argument lists with
-no shell; the list holds no Python interpreter and no shell. Every command runs in a process
-group of its own that is killed as a whole when the time limit passes, so no child process
-survives, and with an environment from which every variable that may hold a secret has been
-removed: any name containing KEY, TOKEN, SECRET or PASSWORD, and every variable beginning
-`PARALLELISE_`, which includes the gateway key. That keeps the key out of a program's own
-environment, but it does not hide it from a program that reads the harness's process
-information, which on Linux another process of the same user can do. Neither the allow-list
-nor the environment confines the agent: `make` and the compilers can start other programs,
-and a program the agent builds runs with the agent's own rights, so a determined agent can
-leave the work folder, and a container, not the allow-list, is the boundary that matters.
-
-The verdict depends on nothing the agent can change except the routine. The check builds and tests the
-agent's routine in a fresh folder assembled from the problem's own files, with the problem's
-own test, so a test program that asserts nothing, an edited Makefile or benchmark, a
-`GNUmakefile` or a rewritten fingerprint record cannot make a wrong routine pass. The check
-still fails a work folder in which a trusted file differs from its fingerprint or from the
-fresh copy, or which holds a `GNUmakefile` or `makefile`, because an agent that breaks the
-rules should fail. The routine is still compiled and run by the check, with the same
-secret-free environment, so the container is also what contains a routine that is itself
-harmful. Every subprocess, whether a build, a test, a benchmark or a notebook run, has a
-timeout, and so does every model request; the agent's whole run has a time limit as well. The container runs as an ordinary user; under
-Kubernetes it drops all capabilities, has a read-only file system, and runs under processor
-and memory limits and a hard deadline. The generated code can reach the network unless the
-deployment forbids it, for example with a network policy;
-[docs/OPERATIONS.md](docs/OPERATIONS.md) describes the settings.
-
-## Licence and author
-
-The MIT licence applies; see [LICENSE](LICENSE). Angus Gray-Weale wrote this.
+The MIT licence applies; see [LICENSE](LICENSE), and [CITATION.cff](CITATION.cff) for how to cite
+the work. The author is Angus Gray-Weale.
