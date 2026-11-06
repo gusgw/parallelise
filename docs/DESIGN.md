@@ -2,8 +2,10 @@
 
 This document explains how the experiment is built and what it found, for a reader who
 wants to judge whether the conclusions can be trusted. The code is mapped in
-`docs/ARCHITECTURE.md`; every table of results is in `docs/RESULTS.md`, and each number
-quoted here comes from the tables there. The runs described were made on 4 to 6 July 2026.
+`docs/ARCHITECTURE.md`; the tables of results are in `docs/RESULTS.md` and
+`docs/CAMPAIGN-2026-10.md`, and each number quoted here comes from them or from the record named
+beside it. The runs were made in July and October 2026; the re-check of the October runs and the
+reference measurements were made in November 2026.
 
 ## The question
 
@@ -270,13 +272,16 @@ the same agent designs, and compares pass rate and token use against the unmaske
 drop, if any, is the models' recall component. The study has now been run (October 2026, 192
 records in `results/campaign-2026-10/runs.jsonl`, reported in
 [CAMPAIGN-2026-10.md](CAMPAIGN-2026-10.md)). Across the three capable models the pass rate fell
-from 69 of 72 runs to 61 of 72 when the names were hidden, and the weakest model did not fall;
+from 69 of 72 runs to 61 of 72 when the names were hidden, and in October the weakest model did
+not fall;
 the single runs and the library call names that the masking leaves visible mean this is a
 rough estimate and not a firm measurement. Counted under the present rule, in which a correct
 routine passes whatever its speed, the capable models' correct runs fell only from 70 of 72 to
-67 of 72, because six of the masked failures were correct routines that missed the floor (see
-[CAMPAIGN-2026-10.md](CAMPAIGN-2026-10.md)). Much of what masking cost in October was speed,
-not correctness.
+67 of 72 when the October logs were re-read, and to 66 of 72 when every folder was re-checked
+with the present check (see [CAMPAIGN-2026-10.md](CAMPAIGN-2026-10.md)); neither fall can be
+told apart from chance. Most of the routines that missed the floor in October cleared it when
+they were re-measured one at a time, so the apparent cost in speed is more likely an effect of
+the crowded host than of the masking.
 
 ## Watching the benchmark's calls
 
@@ -291,24 +296,34 @@ In a second run of the benchmark the recorder calls the known-good routine besid
 agent's, on an identical copy of the arguments, and the routine fails if the answers differ
 by more than one part in a million. In the timed run it records the processor time of each
 call beside its wall time; a call cannot be credited with a larger speed-up than the
-processors it kept busy allow. All three routines are caught: the first fails, and the two
-serial ones pass as correct with no useful speed-up. The recorder covers OpenMP only; the
-MPI and CUDA benchmarks are not yet watched, and a routine that is genuinely parallel but
-slows its own one-thread run on purpose can still show an inflated speed-up.
+processors it kept busy allow. All three of those routines are caught: the first fails, and the
+two serial ones pass as correct with no useful speed-up.
+
+The recorder is not proof against a routine written to defeat it, and a later review found four
+that do. A serial routine can call the known-good routine that the check links into the
+benchmark, and so pass the comparison with its answers. A routine can read the setting that
+announces the comparison run, and behave well only in that run. A routine can overwrite its
+constant inputs, so that the known-good routine, given the same arrays, agrees with a wrong
+answer. And a serial routine can replay a stored answer while every thread spins, which keeps
+the processors busy without doing any work. The recorder also covers OpenMP only: the MPI and
+CUDA benchmarks are not yet watched, and a routine that is genuinely parallel but slows its own
+one-thread run on purpose can still show an inflated speed-up. These are open problems.
 
 ## The assessment stage against measurement
 
 `parallelise assess` was run once on each of the nine notebooks with `claude-sonnet-4.5` and
 `kimi-k2.5`, and section 10 of [RESULTS.md](RESULTS.md) sets the recommended backends against
 the measured speed-ups of the known-good solutions on one host. Both models recommended OpenMP
-for nearly every problem that has a parallel solution, yet the graphics card was fastest on
-all five problems with a CUDA version, and among the processor backends MPI was a little
-faster than OpenMP for integration, matrix multiply and the heat stencil. The recommended
-backend was the fastest overall only for histogram and, for Sonnet, the prefix sum. Both
-models also called decay and reservoir inherently serial, although their known-good solutions
-reached about 6.5 and 7.0 times with OpenMP, so the assessment shares the blind spot that the
-recall-resistant problems were built to expose. The comparison shows which backend was fastest
-on this host, at these sizes, not which to choose on another machine.
+for nearly every problem that has a parallel solution, yet the graphics card was fastest, by a
+wide margin, on all five problems with a CUDA version, and among the processor backends MPI was
+faster than OpenMP for integration and matrix multiply. On every problem where the measurements
+can separate the backends, the recommended backend was not the fastest; for the prefix sum and
+histogram the processor backends were not measured alike, so those recommendations cannot be
+judged. Both models also called decay and reservoir inherently serial, although their known-good
+solutions reached about 6.5 and 7.0 times with OpenMP, so the assessment shares the blind spot
+that the recall-resistant problems were built to expose. The comparison rests on one measurement
+of each known-good solution on one host, at these sizes, and does not say which backend to
+choose on another machine.
 
 ## The strictness finding
 
@@ -346,8 +361,8 @@ claim success. Two consequences follow.
   `results/campaign-2026-10/logs/`. All 7 runs that ended on the cap were Llama runs. So the
   July account of running out of requests may hold only for the older framework version
   used then; with the version used in October, the cap of refused answers usually stopped a
-  failing run first. Three of the four budget-exhaustion failures in the July study were
-  Pydantic runs, and this retrying was probably a large part of Llama's token bill, although
+  failing run first. According to the July working notes, which are not part of this
+  repository, three of the four budget-exhaustion failures in the July study were Pydantic runs, and this retrying was probably a large part of Llama's token bill, although
   costs per design were not recorded.
 
 The plain and LangGraph agents are less strict, not cleverer. They feed a failure back as
@@ -401,13 +416,15 @@ for the first comparison were not recorded.
 - **The earlier check.** The July and October results were judged by the earlier check, which
   ran the agent's own test program. In July it also had no tamper check. The results
   therefore include passes that the present check, which uses only the trusted test, would
-  reject. Three such cases were found among Llama's runs. Two test programs report success
+  reject. Three such cases were found among Llama's July runs. Two test programs report success
   whatever happens: `results/runs/histogram/mpi/llama-3.3-70b/basic/test_histogram.c` and
   `results/runs/nbody/mpi/llama-3.3-70b/langgraph/test_nbody.c` both end with status zero
   even on the path where they print a failure. The third,
   `results/runs/cg/mpi/llama-3.3-70b/basic/test_cg.c`, accepts a checksum within a tolerance
-  of ten million of the expected value, so almost any answer passes it. The other runs have
-  not been searched for such cases.
+  of ten million of the expected value, so almost any answer passes it. The re-check of 6
+  November 2026 judged every October work folder with the problem's own test and rejected four
+  October passes, all by Llama (see [CAMPAIGN-2026-10.md](CAMPAIGN-2026-10.md)); the July runs
+  have not been searched beyond the three cases above.
 - **A re-graded cell.** The raw manifest records a pass for Llama's plain agent on prefix sum
   under MPI. A uniform re-grade at capped memory settings of that problem and of histogram
   under MPI, for every model, did not confirm it. The tables use the recorded result, and
@@ -415,8 +432,10 @@ for the first comparison were not recorded.
 - **Older benchmark form**: the CPU speed figures of the July study and the October
   campaign, except for decay and reservoir, were measured without the warm-up call,
   described above.
-- **One benchmark machine**, with 22 processor cores and a laptop-class graphics card.
-  Absolute speed-ups would differ elsewhere; the pass and fail verdicts should not.
+- **One machine for each campaign.** The July runs used a machine with 22 processor cores and a
+  laptop-class graphics card; the October runs, their re-check and the November measurements
+  used a 12-core host with a 16 GB graphics card. Absolute speed-ups would differ elsewhere; the
+  pass and fail verdicts should not.
 - **One sampling setting.** No temperature sweep has been run.
 - **Comparison as harnesses.** All three designs ran the same retrofitted finishing loop and
   prompts, so the experiment compares the constructions as harnesses, not each framework's

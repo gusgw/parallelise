@@ -201,7 +201,8 @@ earlier version of the program, or by hand) is refused until you move it or add 
   The recorder costs time and memory. The second run of the benchmark takes about twice as
   long as the first, because each call is made twice, and it holds two extra copies of each
   array the routine writes to. MPI and CUDA benchmarks are not watched, and their log says
-  nothing about the recorder.
+  nothing about the recorder. The recorder catches the simple ways of deceiving the
+  benchmark, not a routine written to defeat it; `docs/DESIGN.md` describes four that do.
 - To judge a work folder again without the agent: `parallelise check <work_folder>
   --problem <problem> --backend <backend>`. The first argument is a finished work folder,
   not a problem; `--problem` is the path to the problem folder it was built from, or the
@@ -365,10 +366,10 @@ only the gateway.
 - **CUDA tests skip.** There is no `nvcc` or graphics card, which is expected on the CPU
   image. Use the `cuda` stage on a machine with a driver and the NVIDIA container toolkit.
 - **An agent stops working on a routine that is correct but slow.** The agent's own `make
-  check` fails a missed floor only while `BENCH_FLOOR_ROLE` is unset or holds anything but
-  `report`. The agents' commands inherit the shell's environment, apart from secrets and
-  `PARALLELISE_` settings, so do not set `BENCH_FLOOR_ROLE` in the shell that starts a run.
-  The check sets it itself in its judging folder.
+  check` fails a missed floor, so an agent should keep working until its routine is faster.
+  The harness removes `BENCH_FLOOR_ROLE`, `BENCH_JUDGE_SPEED` and `SPEEDUP_FLOOR` from the
+  environment of every command the agent runs, so a setting in the shell that starts a run
+  cannot change this. Only the check sets them, in its own judging folder.
 - **`make check-references` fails.** A known-good solution no longer passes its check. Run
   the failing test alone with `pytest -q -k <problem>` and read the check log.
 

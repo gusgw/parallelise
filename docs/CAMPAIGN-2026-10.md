@@ -1,9 +1,13 @@
 # The October 2026 campaign: masked against unmasked
 
 This document reports the campaign that asks how much of a model's success on familiar
-algorithms is recall. Every number in it was computed from the 192 run records in
-`results/campaign-2026-10/runs.jsonl`, with one exception that is marked: the prices.
-The tables below are the output of `parallelise study report --results
+algorithms is recall. Its numbers come from the 192 run records in
+`results/campaign-2026-10/runs.jsonl`, from the check log of each run (`gate.log`, under
+`results/campaign-2026-10/runs/`), from the re-check of 6 November 2026
+(`results/campaign-2026-10/recheck-2026-11.jsonl`) and from the routine files the agents wrote.
+Two figures come from elsewhere and are marked where they appear: the prices, and the count of
+the host's memory exhaustions. The tables of the first results section are the output of
+`parallelise study report --results
 results/campaign-2026-10/runs.jsonl --prices results/campaign-2026-10/prices.json
 --masked-chart docs/figures/masked-vs-unmasked.svg`, with the comparisons that the report
 does not print worked out from the same file. Each record is one run, and each run is one
@@ -253,8 +257,9 @@ under the rule that judges correctness alone (the section above), and as re-chec
 | Three capable models | 69/72 (96%) | 61/72 (85%) | 70/72 (97%) | 67/72 (93%) | 70/72 (97%) | 66/72 (92%) |
 | All models | 76/96 (79%) | 70/96 (73%) | 77/96 (80%) | 76/96 (79%) | 80/96 (83%) | 72/96 (75%) |
 
-For the three capable models, 5 cells lost a correct run when masked and 1 gained one; a
-two-sided sign test on those 6 gives p = 0.22.
+For the three capable models, 5 pairs of runs lost a correct run when masked and 1 gained one;
+a two-sided sign test on those 6 gives p = 0.22. For all four models together the split is 9 to
+1 (p = 0.021); Llama alone splits 4 to 0 (p = 0.13).
 
 The re-check changed the October verdict of 14 of the 192 runs:
 
@@ -275,14 +280,26 @@ The re-check changed the October verdict of 14 of the 192 runs:
 | llama-3.3-70b | scan on mpi | unmasked | basic | failed (test-one-worker) | correct, faster |
 | llama-3.3-70b | scan on mpi | unmasked | langgraph | failed (test-one-worker) | correct, faster |
 
+One run that the re-read counted as correct is not correct when re-checked: Sonnet's prefix sum
+under MPI, masked, with the LangGraph design. It failed in October too, so it is not in the
+table above; with several processes it fails the problem's own test.
+
+The re-check also measured the speed of the seven routines that the re-read counted as correct
+with no useful speed-up. Five of them cleared the floor comfortably when checked one at a time,
+at 2.29 to 5.54 times; Kimi's prefix sum under MPI, at the shorter length, reached 1.08; and
+Sonnet's prefix sum under MPI is the run just described. Neither measurement used the untimed
+warm-up call, so the October shortfall in speed is more likely an effect of three checks running
+at once on a host short of memory than a property of the routines, and the speed of these
+routines is not settled.
+
 ## What the tamper check found
 
 The check in this campaign first compares each trusted file (the benchmark, the headers, the
 Makefile and the checking scripts) with digests, which are fingerprints taken when the work
 folder was made. A run in which any of them has changed fails with failure stage `tampered`.
-The check was added to the check on 11 October 2026 (source: the repository's revision history,
-the commit "Verify the trusted files before judging, and other review fixes"). The July check
-did not have it.
+The tamper check was added on 11 October 2026, before the campaign began (source: the
+repository's revision history, the commit "Verify the trusted files before judging, and other
+review fixes"). The July check did not have it.
 
 Four of the 192 runs failed this way. In the three Llama runs the agent's own record says the
 checks passed, which is what one would expect if the agent had changed the files that define
@@ -384,7 +401,8 @@ costs, and its speed-up figures, though not its correctness results, may be infl
 **The host ran short of memory during the campaign.** The driver ran the three agents of a
 cell at once, each in its own container with no memory limit, and the MPI benchmark for the
 prefix sum allocates 2 GiB per rank at the production length. The host's memory was exhausted
-61 times over the two days and the kernel killed unrelated services. No campaign run was
+61 times over the two days, as the host's administrator reported from its system log, which is
+not part of this repository, and the kernel killed unrelated services. No campaign run was
 itself killed, so every record is a complete run, but timings taken while the machine was
 short of memory are suspect, and memory pressure is a further candidate cause of the very long
 gpt-oss-120b runs on jacobi and conjugate gradient under MPI. Future campaigns run one
@@ -398,12 +416,14 @@ unmasked with the basic design, and jacobi on MPI masked with the basic design).
 Bedrock's tokens-per-minute quota, not a spending limit; the gateway in front of it keeps
 no spend records and enforces no budget. The three runs are recorded with the failure
 stage agent-error and the error text in their notes, so at most three of Llama's 32
-failures belong to the quota rather than to the model. Five other runs, across the other
-three models, met a transient gateway error that the client's retries absorbed, and they
-completed normally. No run of any model met an access or account error.
+failures belong to the quota rather than to the model. One other run (Sonnet, conjugate
+gradient on MPI, masked, plain design) met a transient gateway error that the client's retries
+absorbed, and it completed normally. No run of any model met an access or account error.
 
-- **Single runs.** Each cell is one attempt, at temperature 0.2. With the pairs as counted
-  above, the fall in pass rate on masking is not distinguishable from chance. Repeated runs
+- **Single runs.** Each cell is one attempt, at temperature 0.2. For the three capable models,
+  the fall on masking is not distinguishable from chance under any of the counts in this
+  document. For all four models together, the re-check's split of 9 pairs to 1 is (p = 0.021),
+  but it rests largely on Llama. Repeated runs
   are needed to put error bars on it.
 - **The masking is incomplete.** The tool deliberately leaves library call names, such as
   `MPI_Scan`, `MPI_Exscan` and `omp_` functions, because the model needs them to write
@@ -445,12 +465,13 @@ completed normally. No run of any model met an access or account error.
 
 Hiding the name of the algorithm removed only a small part of what the strong models did. For
 the three capable models taken together, the pass rate fell from 69 of 72 runs (96%) to 61 of
-72 (85%), a fall of 11 points, or about one pass in nine. The fall was concentrated in prefix
+72 (85%), a fall of 11 points, or about one pass in nine (8 of 69). The fall was concentrated in prefix
 sum (scan) and in jacobi under MPI, and it was zero on integrate, where all 48 runs passed
-in both variants. The weakest model did not fall at all; it passed 7 runs unmasked and 9
-masked, and most of its passes were on integrate (6 of 7 unmasked, 6 of 9 masked). The masked problems also
+in both variants. In October the weakest model did not fall: it passed 7 runs unmasked and 9
+masked, most of them on integrate (6 of 7 unmasked, 6 of 9 masked). When re-checked it fell
+from 10 of 24 to 6 of 24. The masked problems also
 cost more requests and tokens. So, on these four problems, most of the measured competence
-survived the masking, and a modest share of it, about an eighth of the passes, looks
+survived the masking, and a modest share of it, about one pass in nine, looks
 like recall or at least like help from the problem's familiar name. Because the runs are
 single, the masking leaves the library calls visible, and the masking also removed the
 header comments that say how each routine must behave, the recall component lies within a
@@ -464,4 +485,6 @@ three capable models is smaller still: from 70 of 72 correct runs (97%) to 67 of
 the October logs are re-read, and from 70 of 72 to 66 of 72 (92%) when every folder is
 re-checked with the present check, which also tests each routine with the problem's own test
 program. Neither fall can be told apart from chance in single runs (p = 0.38 and p = 0.22).
-Most of what masking cost the capable models in October was speed, not correctness.
+Part of what masking seemed to cost in October was speed rather than correctness, but most of
+those routines cleared the floor when they were re-measured one at a time, so the October
+shortfall in speed is more likely an effect of the crowded host than of the masking.

@@ -7,8 +7,8 @@ model writes the program for a chosen backend: OpenMP for threads within one com
 graphics processor. The agent decides how to parallelise the work: how to split it, which
 pattern of reduction or exchange to use, and how to keep the answer the same however many
 workers run. It writes, builds and tests the program until an independent check accepts
-the result as correct; the check reports separately whether it is faster than the serial
-original. A separate command asks a
+the result as correct; the check reports separately how much faster the program runs with
+several workers than with one. A separate command asks a
 model which method suits a notebook, or whether the algorithm is better left serial and
 well written. The models are reached through one OpenAI-compatible gateway, so any model
 served that way can be used and several can be compared. The measurements made so far, on
@@ -63,11 +63,13 @@ never sees, and judges that fresh folder in four stages, stopping at the first f
    its table: it must be complete, its figures must agree with one another, and they must
    look measured rather than invented. For OpenMP the check also watches every call the
    benchmark makes to the routine. In a second run it calls the problem's known-good routine
-   beside the agent's on the same arguments, and the routine fails if any answer differs, so
-   a routine cannot be right at the test's small size and wrong at the benchmark's larger
-   one. In the timed run it records how many processors each call kept busy, so that a
-   serial routine, or one that only waits, cannot be credited with a speed-up it did not
-   earn.
+   beside the agent's on the same arguments, and the routine fails if any answer differs,
+   which catches a routine that is right at the test's small size and wrong at the
+   benchmark's larger one. In the timed run it records how many processors each call kept
+   busy, which catches a serial routine, or one that only waits, that claims a speed-up it
+   did not earn. These checks catch the simple ways of deceiving the benchmark; they are not
+   proof against a routine written to defeat them, and the design note describes four such
+   routines.
 
 The check makes two judgements. The first is correctness: a routine that gets through the
 four stages passes. The second is speed, which never fails a run and is given as one of four
@@ -217,7 +219,11 @@ the routine and the test program, runs the test with one worker and with several
 benchmark and judges its table against the problem's speed-up floor. Each backend also needs
 a `reference` folder holding a known-good routine and a known-good test program,
 `test_<name>.c`. The check judges every agent's routine with that test program, which is
-never copied into an agent's work folder, so a problem without it cannot be run.
+never copied into an agent's work folder, so a problem without it cannot be run. For the
+check to watch an OpenMP benchmark's calls, the benchmark must pass the routine arrays that
+it obtained from `malloc`, and the header must declare only the routine, with no array or
+function-pointer parameters; otherwise the log says that the answers at the benchmark's size
+were not compared.
 
 The routine, its files and the notebook are named after the problem folder. In a folder
 called `integrate`, the notebook is `integrate.ipynb`, the header is `integrate.h`, the
@@ -235,7 +241,8 @@ done.
 ## Results
 
 Nine problems, three backends, four models and three agent designs have been run, in a
-July 2026 study of 237 judged runs and an October 2026 campaign of 192 that compared each
+July 2026 study of 228 runs on seven problems (237 records, nine of them replaced by a later
+run of the same cell), runs of the two recall-resistant problems known from working notes, and an October 2026 campaign of 192 that compared each
 problem as shipped with a copy whose revealing names had been removed. The tables, with
 the file each came from, are in [docs/RESULTS.md](docs/RESULTS.md); the October campaign,
 with its method, latency, throughput and cost, is in

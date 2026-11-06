@@ -99,15 +99,17 @@ order, and the check stops at the first failure:
    follow. First, the benchmark is run a second time with the problem's known-good routine
    called beside the agent's on each call, on an identical copy of the arguments, and the
    stage fails if any answer differs by more than one part in a million of the answer's
-   size. A routine that is right only at the test's small sizes therefore fails, although
-   its tests pass. Second, in the timed run the recorder notes each call's processor time,
+   size, which catches a routine that is right only at the test's small sizes. Second, in the timed run the recorder notes each call's processor time,
    summed over all its threads, and its wall time; one divided by the other is the number
    of processors the call kept busy. A row whose speed-up is more than 1.2 times its busy
-   processors is credited with only the busy processors, so a serial routine cannot be
-   reported as faster, whether it makes its own one-worker run slow on purpose or keeps its
-   answer from one call to the next and waits instead of working. A row that matches none
-   of the timed calls, in its width or its time, fails the stage. MPI and CUDA benchmarks
-   are not watched.
+   processors is credited with only the busy processors, which catches a serial routine that
+   makes its own one-worker run slow on purpose, or keeps its answer from one call to the
+   next and waits instead of working. A row that matches none of the timed calls, in its
+   width or its time, fails the stage. MPI and CUDA benchmarks are not watched. The recorder
+   is not proof against a routine written to defeat it: a routine can call the known-good
+   routine linked beside it, read the setting that announces the comparison run, overwrite
+   its constant inputs, or keep every thread spinning while it replays a stored answer
+   (see the design note).
 
 The check makes two separate judgements. The first is correctness: the routine passes when it
 gets through all four stages, which means that it builds, gives the right answer with one

@@ -227,7 +227,9 @@ with each problem's floor; the third is from 6 November 2026 on the same host, r
 `results/reference-speedups-2026-11.json`. Only the November figures were measured with the
 untimed warm-up call in every OpenMP and MPI benchmark. In November the MPI benchmarks of the
 prefix sum, histogram, decay and reservoir ran at a length of 20 million with at most 4
-processes, to fit an 8 GB memory limit.
+processes, to fit an 8 GB memory limit. In November the known-good prefix sum under MPI
+reached 1.16, below its floor of 1.25; under the present rule it is a correct routine with no
+useful speed-up.
 
 | problem | OpenMP (July) | MPI (July) | CUDA (July) | OpenMP (October) | MPI (October) | CUDA (October) | OpenMP (November) | MPI (November) | CUDA (November) |
 |---|---|---|---|---|---|---|---|---|---|
@@ -269,16 +271,19 @@ OpenMP used 1 to 12 threads at each benchmark's default length. MPI used 1 to 12
 the default length, except for decay, histogram, reservoir and the prefix sum, whose MPI
 benchmarks were run at a length of 20 million with at most 4 processes to fit an 8 GB memory
 limit; for those four problems the MPI and OpenMP figures are not measured alike. The CUDA
-speed-up is over one processor core.
+speed-up is over one processor core. A backend is called the fastest only where it beats the
+next by at least 5 per cent; closer than that, two single measurements cannot separate them.
+Where the processor backends were not measured alike, a recommendation between them cannot be
+judged.
 
-| problem | OpenMP | MPI | CUDA | fastest | fastest of OpenMP and MPI | sonnet recommends | sonnet fastest | sonnet fastest of OpenMP and MPI | kimi recommends | kimi fastest | kimi fastest of OpenMP and MPI |
-|---|---|---|---|---|---|---|---|---|---|---|---|
-| integration | 5.45 | 5.86 | 8.95 | CUDA | MPI | OpenMP | no | no | OpenMP | no | no |
-| matrix multiply | 5.14 | 6.42 | 25.62 | CUDA | MPI | OpenMP | no | no | combination (runs OpenMP) | no | no |
-| heat stencil (Jacobi) | 6.01 | 6.16 | 11.76 | CUDA | MPI | OpenMP | no | no | OpenMP | no | no |
-| N-body | 6.05 | 5.78 | 15.21 | CUDA | OpenMP | OpenMP | no | yes | combination (runs OpenMP) | no | yes |
-| conjugate gradient | 5.76 | 3.44 | 17.61 | CUDA | OpenMP | OpenMP | no | yes | OpenMP | no | yes |
-| prefix sum (scan) | 1.49 | 1.16 | no version | OpenMP | OpenMP | OpenMP | yes | yes | CUDA | no (no version) | not a processor backend |
-| histogram | 3.17 | 3.13 | no version | OpenMP | OpenMP | OpenMP | yes | yes | OpenMP | yes | yes |
-| decay | 6.51 | 3.84 | no version | OpenMP | OpenMP | serial | no | no | serial | no | no |
-| reservoir | 7.00 | 3.96 | no version | OpenMP | OpenMP | serial | no | no | serial | no | no |
+| problem | OpenMP | MPI | CUDA | fastest | faster of OpenMP and MPI | sonnet recommends | sonnet fastest | kimi recommends | kimi fastest |
+|---|---|---|---|---|---|---|---|---|---|
+| integration | 5.45 | 5.86 | 8.95 | CUDA | MPI | OpenMP | no | OpenMP | no |
+| matrix multiply | 5.14 | 6.42 | 25.62 | CUDA | MPI | OpenMP | no | combination (runs OpenMP) | no |
+| heat stencil (Jacobi) | 6.01 | 6.16 | 11.76 | CUDA | about equal | OpenMP | no | OpenMP | no |
+| N-body | 6.05 | 5.78 | 15.21 | CUDA | about equal | OpenMP | no | combination (runs OpenMP) | no |
+| conjugate gradient | 5.76 | 3.44 | 17.61 | CUDA | OpenMP | OpenMP | no | OpenMP | no |
+| prefix sum (scan) | 1.49 | 1.16 | no version | OpenMP or MPI | not measured alike | OpenMP | cannot be judged | CUDA | no (no version) |
+| histogram | 3.17 | 3.13 | no version | OpenMP or MPI | not measured alike | OpenMP | cannot be judged | OpenMP | cannot be judged |
+| decay | 6.51 | 3.84 | no version | OpenMP or MPI | not measured alike | serial | no | serial | no |
+| reservoir | 7.00 | 3.96 | no version | OpenMP or MPI | not measured alike | serial | no | serial | no |
