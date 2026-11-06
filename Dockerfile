@@ -20,7 +20,7 @@ WORKDIR /app
 COPY . /app
 # The framework packages are installed at the exact versions that pyproject.toml pins in its
 # "agents" extra: the image installs from the project file itself, so the pins apply here.
-RUN pip install --no-cache-dir ".[dev,report,agents]" \
+RUN pip install --no-cache-dir ".[agents]" \
     && chown -R parallelise:parallelise /app
 
 USER parallelise
@@ -53,15 +53,12 @@ RUN useradd --create-home --uid 10001 --shell /usr/sbin/nologin parallelise
 WORKDIR /app
 COPY . /app
 # As in the cpu stage, the pins in pyproject.toml apply to this install.
-RUN pip install --no-cache-dir ".[dev,report,agents]" \
+RUN pip install --no-cache-dir ".[agents]" \
     && chown -R parallelise:parallelise /app
 
 USER parallelise
 ENV PARALLELISE_WORK_ROOT=/work \
     PARALLELISE_RESULTS=/work/local-runs.jsonl \
-    OMPI_MCA_rmaps_base_oversubscribe=1 \
-    NVCC=/usr/local/cuda/bin/nvcc
-# The CUDA Makefiles default to the compiler path used on the author's workstation; the
-# line above points them at the compiler in this image instead.
+    OMPI_MCA_rmaps_base_oversubscribe=1
 ENTRYPOINT ["parallelise"]
 CMD ["--help"]

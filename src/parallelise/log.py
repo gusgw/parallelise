@@ -1,4 +1,4 @@
-"""Logging set-up. Only the command-line layer calls this; library code just logs."""
+"""Logging set-up. Only the command line calls this; library code just logs."""
 
 from __future__ import annotations
 
@@ -7,9 +7,7 @@ import logging
 import sys
 from datetime import UTC, datetime
 
-from .errors import ConfigError
-
-_HANDLER_MARK = "_parallelise_handler"
+from .errors import ParalleliseError
 
 
 class _JsonFormatter(logging.Formatter):
@@ -28,28 +26,18 @@ class _JsonFormatter(logging.Formatter):
 
 
 def configure_logging(level: str = "INFO", json_lines: bool = False) -> None:
-    """Send the package's log messages to standard error at the given level.
+    """Send the package's log messages to standard error at ``level``, as plain lines or JSON.
 
-    Calling it again replaces the earlier set-up rather than adding a second handler.
-    With json_lines true, each message is one JSON object per line.
+    Calling it again replaces the earlier set-up.
     """
     numeric = logging.getLevelName(str(level).upper())
     if not isinstance(numeric, int):
-        raise ConfigError(
-            f"The log level {level!r} is not known. Use DEBUG, INFO, WARNING or ERROR."
-        )
-    logger = logging.getLogger("parallelise")
-    for handler in list(logger.handlers):
-        if getattr(handler, _HANDLER_MARK, False):
-            logger.removeHandler(handler)
+        raise ParalleliseError(f"The log level {level!r} is not known. Use DEBUG, INFO, "
+                               "WARNING or ERROR.")  # fmt: skip
     handler = logging.StreamHandler(sys.stderr)
-    setattr(handler, _HANDLER_MARK, True)
-    if json_lines:
-        handler.setFormatter(_JsonFormatter())
-    else:
-        handler.setFormatter(
-            logging.Formatter("%(asctime)s %(levelname)s %(name)s: %(message)s")
-        )
-    logger.addHandler(handler)
+    handler.setFormatter(_JsonFormatter() if json_lines else
+                         logging.Formatter("%(asctime)s %(levelname)s %(name)s: %(message)s"))
+    logger = logging.getLogger("parallelise")
+    logger.handlers = [handler]
     logger.setLevel(numeric)
     logger.propagate = False

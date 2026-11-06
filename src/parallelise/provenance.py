@@ -1,100 +1,54 @@
 """Facts about the software and the machine, noted in every run record.
 
-A result is only as useful as the account of what produced it. These small functions say which
-version of parallelise ran (and, by a hash of its source files, whether the code has changed
-since), which versions of the libraries that carry the requests were installed, and how many
-processor cores the run could use, which bears on the speed-ups the benchmark measures.
+A result is only as useful as the account of what produced it: a hash of the package's source
+says exactly which code ran, and the count of processor cores the run could use bears on every
+speed-up it measures.
 """
 
 from __future__ import annotations
 
 import hashlib
 import os
-from functools import lru_cache
-from importlib import metadata
+from functools import cache
 from pathlib import Path
 
-from . import __version__
 
-#: The libraries whose versions are noted when they are installed. The first six are the
-#: ones named in the project's requirements; httpx2 is the HTTP library that Pydantic AI and
-#: the OpenAI library now use underneath.
-FRAMEWORK_PACKAGES = (
-    "httpx",
-    "httpx2",
-    "pydantic-ai",
-    "langgraph",
-    "langchain",
-    "langchain-openai",
-    "openai",
-)
+def cores() -> int:
+    """Return the number of processor cores this process may run on, and at least 1.
 
-#: Length of the source hash, in hexadecimal digits.
-HASH_LENGTH = 12
-
-#: What counts as source: the Python files and the C helper files that every work folder gets.
-_SOURCE_SUFFIXES = (".py", ".h", ".sh")
-
-
-def package_version() -> str:
-    """Return the version of parallelise itself."""
-    return __version__
-
-
-def framework_versions() -> dict[str, str]:
-    """Return the installed version of each package in ``FRAMEWORK_PACKAGES``.
-
-    A package that is not installed is left out.
-    """
-    found: dict[str, str] = {}
-    for name in FRAMEWORK_PACKAGES:
-        try:
-            found[name] = metadata.version(name)
-        except metadata.PackageNotFoundError:
-            continue
-    return found
-
-
-def cpu_count() -> int:
-    """Return the number of processor cores this process may use, and at least 1.
-
-    The count of cores the process is allowed to run on is used where the system gives it,
-    since that is what limits a benchmark in a container or under a core-pinning command.
+    Only the processors the process is allowed to use count, which is what limits a benchmark in
+    a container or under a command that pins processors; and a core counts once however many
+    hardware threads it has, because a routine with a worker on every hardware thread waits at
+    each step whenever any other program runs. Where the system does not say which core a
+    processor belongs to, every processor counts.
     """
     try:
-        return max(1, len(os.sched_getaffinity(0)))
+        allowed = os.sched_getaffinity(0)
     except (AttributeError, OSError):
         return max(1, os.cpu_count() or 1)
+    found = set()
+    for cpu in allowed:
+        topology = Path(f"/sys/devices/system/cpu/cpu{cpu}/topology")
+        try:
+            found.add((topology.joinpath("physical_package_id").read_text(),
+                       topology.joinpath("core_id").read_text()))
+        except OSError:
+            return max(1, len(allowed))
+    return max(1, len(found))
 
 
-def source_hash(package_dir: Path | None = None) -> str:
-    """Return a short hash of the source files of the installed package.
+PACKAGE = Path(__file__).resolve().parent
 
-    Every ``.py`` file in the package is covered, and so are the C and shell helpers in
-    ``data/`` that are copied into every work folder, because they too decide what a run
-    does. Each file's path (relative to the package) goes into the hash with its contents, so
-    that adding, removing or renaming a file changes the hash as well as editing one.
+
+@cache
+def source_hash(root: Path = PACKAGE) -> str:
+    """Return a short hash of the package's Python files, their names and their contents.
+
+    It changes whenever a prompt, a template or the judgement changes, and when a file is
+    added, removed or renamed.
     """
-    if package_dir is None:
-        return _installed_source_hash()
-    return _hash_sources(Path(package_dir))
-
-
-@lru_cache(maxsize=1)
-def _installed_source_hash() -> str:
-    return _hash_sources(Path(__file__).resolve().parent)
-
-
-def _hash_sources(root: Path) -> str:
     digest = hashlib.sha256()
-    for path in sorted(root.rglob("*")):
-        relative = path.relative_to(root)
-        if (
-            not path.is_file()
-            or path.suffix not in _SOURCE_SUFFIXES
-            or "__pycache__" in relative.parts
-        ):
-            continue
-        digest.update(relative.as_posix().encode("utf-8") + b"\0")
-        digest.update(path.read_bytes() + b"\0")
-    return digest.hexdigest()[:HASH_LENGTH]
+    for path in sorted(root.rglob("*.py")):
+        if "__pycache__" not in path.parts:
+            digest.update(path.relative_to(root).as_posix().encode() + b"\0" + path.read_bytes())
+    return digest.hexdigest()[:12]

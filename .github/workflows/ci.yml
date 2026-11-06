@@ -25,9 +25,6 @@ jobs:
       - name: Test (the CUDA tests skip themselves without a graphics card)
         env:
           OMPI_MCA_rmaps_base_oversubscribe: "1"
-          # These shared test servers have a few busy cores, so their timings mean
-          # nothing: the checks here prove that the code works, and speed is not judged.
-          PARALLELISE_JUDGE_SPEED: "0"
         run: pytest -q -rs
 
   smoke:
@@ -36,8 +33,6 @@ jobs:
     steps:
       - uses: actions/checkout@v7
       - name: Clone, install, convert and check in a fresh copy, then repeat inside Docker
-        env:
-          PARALLELISE_JUDGE_SPEED: "0"
         run: scripts/smoke-test.sh
 
   manifest:
@@ -60,4 +55,4 @@ jobs:
         run: docker run --rm parallelise:cpu --help
       # The CUDA stage is not built here: its development base image is several
       # gigabytes and exhausts the hosted runner's disk, and the runner has no graphics
-      # card to run it. It is built and tested on the GPU host (see docs/OPERATIONS.md).
+      # card to run it. It is built and tested on a machine with a graphics card (see README.md).

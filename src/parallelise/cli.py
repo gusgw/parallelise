@@ -1,117 +1,107 @@
-"""The command-line interface: `parallelise <subcommand>`.
+"""The command line: parallelise health, serial, run, check and report.
 
-Exit status is 0 on success, 1 when a check fails or an error is reported, and 2 for bad
-arguments. For ``run`` and ``check``, success means that the routine is correct, whatever its
-speed: both commands end with one line that gives the correctness and the speed together,
-such as "PASS: correct; no useful speed-up on this machine (best 1.07, floor 1.25)".
-
-Every error a user can cause ends as one line that says what to do next, never as a stack
-trace: the errors the program raises on purpose are all ``ParalleliseError``, and an
-unexpected error from the operating system (a path that cannot be read or written) is
-reported in the same way.
-
-No command deletes a folder that it did not make unless ``--force`` is given: ``assemble``,
-``study mask`` and ``run`` refuse a destination that already holds files. A later ``run`` of
-the same cell replaces its own earlier work folder, which it recognises by a marker file.
-
-The commands listed by `parallelise --help` are health, assess, run, check and study. The
-study command holds the tools for studying many runs: `study mask` and `study report`. Three
-maintenance commands (oracle, assemble and bench-check) work but are not listed, and the
-older names grade, mask and report remain as hidden aliases that print a notice. The modules
-that do the heavy work (check, assemble, agents, assess and the study tools) are imported
-only when the subcommand that needs them runs. A missing or incomplete module therefore
-produces a clear message for that subcommand alone, instead of stopping the whole program at
-start-up.
+An error that a person can cause is printed as one line that says what went wrong and what to
+do next, and the exit status is then 1.
 """
 
 from __future__ import annotations
 
 import argparse
 import hashlib
-import inspect
-import json
 import logging
 import sys
+import tempfile
 import time
+from collections.abc import Callable
 from pathlib import Path
 
-from . import __version__, provenance
-from .bench_check import FASTER, NO_USEFUL_SPEEDUP, SPEED_NOT_JUDGED
-from .cli_support import PROBLEM_HELP, HelpParser
-from .cli_support import lazy_import as _lazy
-from .cli_support import resolve_problem as _resolve_problem
-from .cli_support import settings_from_args as _settings
-from .errors import AgentUnavailable, ConfigError, ParalleliseError, ResultsError
-from .folders import ensure_folder, prepare_own_folder, write_marker
+from . import __version__, convert, generate, judge, notebook, provenance, serial
+from .agents import AGENT_NAMES, AgentResult, get_agent
+from .config import Settings
+from .errors import AgentUnavailable, ModelError, ParalleliseError
 from .log import configure_logging
 from .model import ModelClient
-from .oracle import extract_oracle, write_reference
 from .results import ResultsStore, RunRecord
-from .study import cli as study_cli
+from .study import report
 
 log = logging.getLogger("parallelise.cli")
 
-BACKENDS = ("openmp", "mpi", "cuda")
-AGENTS = ("basic", "pydantic", "langgraph")
-
-_BACKEND_ADVICE = {
-    "openmp": (
-        "Use OpenMP (shared-memory threads). The unit test is plain C and the routine is "
-        "built with -fopenmp."
-    ),
-    "mpi": (
-        "Use MPI (message passing between processes). The unit test is run under mpirun at "
-        "one and at several processes; only rank 0 may report results."
-    ),
-    "cuda": (
-        "Use CUDA (a graphics processor). The routine is a .cu file built with nvcc, and the "
-        "check requires a real speed-up over one processor core."
-    ),
+#: What each failure stage means, for the closing line of run and check.
+_STAGE_WORDS = {
+    "no-files": "the routine file is missing",
+    "rule": "the routine breaks the rule on what a routine may contain",
+    "build": "the routine did not compile, with warnings treated as errors",
+    "test": "the routine gave a wrong answer, or stopped, at a test size",
+    "benchmark": "the routine gave a wrong answer, or stopped, at the benchmark size",
+    "timeout": "the judgement ran out of time",
 }
 
 
-def build_task(name: str, backend: str) -> str:
-    """Return the instructions given to the agent for a problem called `name`."""
-    routine_file = name + (".cu" if backend == "cuda" else ".c")
-    return (
-        "You convert a research Jupyter notebook that implements a numerical algorithm in "
-        f"serial Python into a parallel C routine. Read the notebook with the notebook tool to "
-        f"learn the algorithm. Read {name}.h, which gives the exact signature to implement, "
-        "and reference.h, which gives the expected values and the tolerance REF_TOL. If "
-        "problem.h is present, read it and use its shared helpers. Then write two files: "
-        f"{routine_file}, the parallel routine implementing {name}.h, and test_{name}.c, a unit "
-        "test that checks the routine against reference.h within REF_TOL. The benchmark "
-        "bench.c is already provided; do not write or change it. Divide the work among the "
-        "parallel workers so that each does only its share, and combine the partial results "
-        "correctly; never make every worker repeat the whole computation. The build treats "
-        "warnings as errors, so include every header whose functions you call and leave no "
-        "parameter unused. " + _BACKEND_ADVICE[backend] + " Build and test with 'make check' "
-        "and keep fixing until it passes. Copy text exactly from what you read, and make "
-        "small, exact edits. Finish only when the checks pass."
-    )
+def verdict_line(verdict: judge.Verdict) -> str:
+    """Return one plain line that gives a judgement's correctness and speed together."""
+    if verdict.stage == "notebook":
+        return "NOT JUDGED: the notebook's own Python failed during the judgement (stage notebook)"
+    if not verdict.correct:
+        what = _STAGE_WORDS.get(verdict.stage, "the judgement failed")
+        return f"FAIL: {what} (stage {verdict.stage}); speed not measured"
+    shown = "" if verdict.speedup is None else f" (speed-up {verdict.speedup:.2f})"
+    faster = "faster" if verdict.faster else "not faster"
+    return f"PASS: correct; {faster} than the serial routine{shown}"
 
 
-def _agent_version(agent: object) -> str:
-    """Return a short hash identifying exactly what the model was given and how it was driven.
+def _settings(args: argparse.Namespace) -> Settings:
+    """The settings from the environment, overridden by any options that were given."""
+    return Settings.from_env({
+        "gateway_url": getattr(args, "gateway_url", None), "model": getattr(args, "model", None),
+        "work_root": getattr(args, "work_root", None),
+        "results_path": getattr(args, "results", None),
+        "time_limit_s": getattr(args, "time_limit", None),
+    })  # fmt: skip
 
-    The hash covers the agent design's own source file, the shared prompts and finishing
-    rule in ``agents/base.py``, the tools in ``agents/tools.py``, and the function that words
-    the task (``build_task``). A change to any of them, including a change of wording in a
-    prompt, gives a new version, so that runs made with different prompts are never recorded
-    under the same version.
-    """
-    try:
-        digest = hashlib.sha256()
-        source = inspect.getsourcefile(type(agent))
-        if not source:
-            return "unknown"
-        agents_dir = Path(__file__).resolve().parent / "agents"
-        for path in (Path(source), agents_dir / "base.py", agents_dir / "tools.py"):
-            digest.update(path.read_bytes())
-        digest.update(inspect.getsource(build_task).encode("utf-8"))
-        return digest.hexdigest()[:10]
-    except (OSError, TypeError):
-        return "unknown"
+
+def _problem(folder: str) -> tuple[Path, Path]:
+    """Return a problem folder and its notebook, which has the folder's name."""
+    path = Path(folder)
+    nb = path / f"{path.name}.ipynb"
+    if not nb.is_file():
+        raise ParalleliseError(f"{path} is not a problem folder: it holds no {nb.name}. Give the "
+                               "path of a folder that holds a notebook of the same name.")
+    return path, nb
+
+
+def _require_tools(backend: str) -> None:
+    """Raise ParalleliseError, before anything takes long, if the judgement could not run."""
+    missing = judge.missing_tools(backend)
+    if missing:
+        raise ParalleliseError(f"Judging a routine for {backend} needs {', '.join(missing)}, "
+                               "which this machine lacks. Install them, or work on a machine "
+                               "that has them.")  # fmt: skip
+
+
+def _new_work_folder(parent: Path) -> Path:
+    """Make a new folder under ``parent``, named by the time, so that no run meets another's."""
+    parent.mkdir(parents=True, exist_ok=True)
+    stamp = time.strftime("%Y-%m-%dT%H-%M-%SZ", time.gmtime())
+    for n in range(1, 100):
+        folder = parent / (stamp if n == 1 else f"{stamp}-{n}")
+        try:
+            folder.mkdir()
+            return folder
+        except FileExistsError:
+            continue
+    raise ParalleliseError(f"No new work folder could be made under {parent}. Try again.")
+
+
+def _positive(kind: type) -> Callable[[str], float]:
+    """An argparse type for a number that must be above zero."""
+
+    def convert(text: str) -> float:
+        value = kind(text)
+        if value <= 0:
+            raise argparse.ArgumentTypeError(f"{text} is not above zero")
+        return value
+
+    return convert
 
 
 def _safe(text: str) -> str:
@@ -119,511 +109,260 @@ def _safe(text: str) -> str:
     return "".join(ch if ch.isalnum() or ch in "-_." else "_" for ch in text) or "model"
 
 
-#: What each failure stage means, for the closing line of ``run`` and ``check``.
-_STAGE_WORDS = {
-    "no-files": "the routine file is missing",
-    "tampered": "a trusted file in the work folder was changed",
-    "build": "the code did not build with warnings treated as errors",
-    "test-one-worker": "the problem's test failed with one worker",
-    "test-many-workers": "the problem's test failed with several workers",
-    "benchmark": "the benchmark did not run, gave a wrong answer at its own size, or its "
-                 "table was malformed, invented or not borne out by the timed calls",
-    "timeout": "the check ran out of time",
-}
-
-
-def verdict_line(
-    passed: bool,
-    failure_stage: str,
-    speed_verdict: str | None,
-    speedup_best: float | None,
-    speedup_floor: float | None = None,
-) -> str:
-    """Return one plain line that gives a check's correctness and speed together.
-
-    A run that passed is correct, and the line goes on to its speed verdict, with the best
-    speed-up and the floor when they are known. A run that failed names the stage in plain
-    words, and its speed is not measured.
-    """
-    if not passed:
-        what = _STAGE_WORDS.get(failure_stage, "the check failed")
-        return f"FAIL: {what} (stage {failure_stage}); speed not measured"
-    figures = []
-    if speedup_best is not None:
-        figures.append(f"best {speedup_best:.2f}")
-    if speedup_floor is not None and speed_verdict in (FASTER, NO_USEFUL_SPEEDUP):
-        figures.append(f"floor {speedup_floor:g}")
-    shown = f" ({', '.join(figures)})" if figures else ""
-    if speed_verdict == FASTER:
-        return f"PASS: correct; faster on this machine{shown}"
-    if speed_verdict == NO_USEFUL_SPEEDUP:
-        return f"PASS: correct; no useful speed-up on this machine{shown}"
-    if speed_verdict == SPEED_NOT_JUDGED:
-        return f"PASS: correct; {SPEED_NOT_JUDGED}{shown}"
-    return "PASS: correct; speed not measured"
-
-
-def _check_backend(backend: str) -> None:
-    if backend not in BACKENDS:
-        raise ParalleliseError(f"The backend {backend!r} is not one of {', '.join(BACKENDS)}.")
-
-
-# --- subcommands -------------------------------------------------------------------
+# --- the commands ----------------------------------------------------------------------------
 
 
 def cmd_health(args: argparse.Namespace) -> int:
-    """Check that the model endpoint is reachable and serves the chosen model."""
+    """Check that the model endpoint answers, lists the chosen model and completes one request."""
     settings = _settings(args)
-    with ModelClient(settings) as client:
-        report = client.health_check()
     print(f"Endpoint: {settings.gateway_url}")
-    print(f"Model requested: {settings.model}")
-    print(f"Reachable: {'yes' if report.reachable else 'no'}")
-    if report.reachable:
-        print(f"Models offered: {', '.join(report.models) or 'none'}")
-        print(f"Requested model listed: {'yes' if report.model_listed else 'no'}")
-        print(f"Test chat call succeeded: {'yes' if report.chat_ok else 'no'}")
-        print(f"Round trip: {report.round_trip_s:.2f} seconds")
-    if report.detail:
-        print(report.detail, file=sys.stderr)
-    return 0 if report.healthy else 1
-
-
-def cmd_oracle(args: argparse.Namespace) -> int:
-    """Run a notebook and write reference.json and reference.h."""
-    notebook = Path(args.notebook)
-    oracle = extract_oracle(notebook, timeout_s=args.timeout)
-    dest = Path(args.out) if args.out else notebook.resolve().parent
-    json_path, header_path = write_reference(oracle, dest)
-    print(f"Wrote {json_path} and {header_path} from the notebook {notebook.name}.")
-    return 0
-
-
-def cmd_assemble(args: argparse.Namespace) -> int:
-    """Build a work folder for a problem and backend."""
-    _check_backend(args.backend)
-    assemble = _lazy("assemble")
-    problem_dir = _resolve_problem(args.problem, args.problems_dir)
-    assemble.assemble_work_dir(
-        problem_dir, args.backend, Path(args.dest), include_reference=args.with_reference,
-        force=args.force,
-    )
-    print(f"Assembled {problem_dir.name} for {args.backend} in {args.dest}.")
-    return 0
-
-
-def cmd_check(args: argparse.Namespace) -> int:
-    """Judge a finished work folder again, using the problem it was built from.
-
-    It prints the check's log and then one line with the correctness and the speed. The exit
-    status is 0 when the routine is correct, whatever its speed, and 1 when it is not.
-    """
-    _check_backend(args.backend)
-    work_dir = Path(args.work_dir)
-    if not work_dir.is_dir():
-        raise ParalleliseError(f"The work folder {work_dir} does not exist. Check the path.")
-    problem_dir = _resolve_problem(args.problem, args.problems_dir)
-    check = _lazy("check")
-    result = check.run_check(
-        work_dir, problem_dir, args.backend, timeout_s=int(args.timeout),
-        speedup_floor=args.floor, as_assembled=args.as_assembled,
-    )
-    print(result.log)
-    print(verdict_line(result.passed, result.failure_stage, result.speed_verdict,
-                       result.speedup_best, result.speedup_floor))
-    return 0 if result.passed else 1
-
-
-def cmd_grade(args: argparse.Namespace) -> int:
-    """Run the check under its old name, after a one-line notice."""
-    print("parallelise: the command 'grade' is now called 'check'; running 'check'.",
-          file=sys.stderr)
-    return cmd_check(args)
-
-
-def cmd_bench_check(args: argparse.Namespace) -> int:
-    """Validate the speed-up figures in a benchmark CSV file."""
-    csv_path = Path(args.csv)
-    if not csv_path.is_file():
-        raise ParalleliseError(f"The benchmark file {csv_path} does not exist. Check the path.")
-    bench = _lazy("bench_check")
-    verdict = bench.check_cpu_table(csv_path, args.floor)
-    for reason in verdict.reasons:
-        print(f"- {reason}")
-    best = "none" if verdict.speedup_best is None else f"{verdict.speedup_best:.2f}"
-    print(f"Benchmark {'accepted' if verdict.ok else 'rejected'}; best speed-up {best}.")
-    return 0 if verdict.ok else 1
-
-
-def cmd_assess(args: argparse.Namespace) -> int:
-    """Ask the model which backend suits a notebook; print the analysis and the verdict."""
-    assess = _lazy("assess")
-    notebook = Path(args.notebook)
-    settings = _settings(args)
     with ModelClient(settings) as client:
-        verdict = assess.assess_notebook(notebook, client)
-    print(verdict.analysis)
-    print()
-    print(f"{verdict.summary_line()} (model {verdict.model}).")
-    if args.out:
-        assess.write_verdict(verdict, Path(args.out))
-        print(f"Verdict written to {args.out}.")
+        try:
+            models = client.models()
+        except ModelError as exc:
+            print(f"Reachable: no. {exc}")
+            return 1
+        print("Reachable: yes")
+        listed = settings.model in models
+        offered = ", ".join(models) or "none"
+        print(f"Model {settings.model} listed: " + ("yes" if listed else f"no; offered: {offered}"))
+        try:
+            client.chat([{"role": "user", "content": "Reply with the single word: ready."}])
+        except ModelError as exc:
+            print(f"Test chat call succeeded: no. {exc}")
+            return 1
+    print("Test chat call succeeded: yes")
+    return 0 if listed else 1
+
+
+def cmd_serial(args: argparse.Namespace) -> int:
+    """Have a model, at temperature zero, translate a notebook into the problem's serial routine.
+
+    A serial routine that exists already is never replaced without ``--force``, because it is
+    the referee and the baseline of every run.
+    """
+    folder, nb = _problem(args.problem)
+    dest = folder / "serial.c"
+    if dest.exists() and not args.force:
+        raise ParalleliseError(f"{dest} exists already, and every judgement of {folder.name} "
+                               "rests on it. Pass --force to replace it.")  # fmt: skip
+    _require_tools("serial")
+    settings = _settings(args)
+    settings.temperature = 0.0
+    verdict, used = serial.translate(nb, settings, dest, step_budget=args.step_budget)
+    print("\n".join(verdict.log))
+    print(f"The model made {used['requests']} requests, with {used['prompt_tokens']} prompt and "
+          f"{used['completion_tokens']} completion tokens.")  # fmt: skip
+    if not verdict.correct:
+        print(f"The translation was not accepted, so {dest} was not written.")
+        return 1
+    print(f"The translation was accepted and written to {dest}. Read it before relying on it.")
     return 0
-
-
-def _check_run_numbers(args: argparse.Namespace) -> None:
-    """Raise ConfigError if a number given to ``run`` could not work."""
-    if args.step_budget < 1:
-        raise ConfigError(
-            f"The step budget {args.step_budget} must be a whole number of 1 or more. "
-            "Pass --step-budget with such a number."
-        )
-    if not args.check_timeout > 0:
-        raise ConfigError(
-            f"The check timeout {args.check_timeout:g} must be positive. Pass --check-timeout "
-            "with a number of seconds above zero."
-        )
-
-
-def _log_agent_failure(exc: Exception) -> None:
-    """Log that the agent failed; a stack trace only for an error nobody expected."""
-    log.error(
-        "the agent failed: %s: %s", type(exc).__name__, exc,
-        exc_info=not isinstance(exc, ParalleliseError),
-    )
 
 
 def cmd_run(args: argparse.Namespace) -> int:
-    """Assemble a work folder, run an agent in it, check the result and record the run.
+    """Have an agent write a problem's parallel routine, judge it, and record the run.
 
-    The check runs whatever happened to the agent: if it failed, ran out of time or was stopped
-    by the time limit, the routine on disk is still judged, and the record holds both the
-    check's result and a note about the agent. The agent's time and the check's time are
-    recorded separately. The last line printed gives the correctness and the speed together,
-    and the exit status is 0 when the routine is correct, whatever its speed.
+    The judgement takes whatever is on disk when the agent stops, whether it finished, used its
+    steps, ran out of time or failed. The exit status is 0 when the routine is correct.
     """
-    _check_backend(args.backend)
     settings = _settings(args)
-    _check_run_numbers(args)
-    assemble = _lazy("assemble")
-    check = _lazy("check")
-    agents = _lazy("agents")
-    problem_dir = _resolve_problem(args.problem, args.problems_dir)
-    problem_name = problem_dir.name
-    work_root = Path(settings.work_root)
-
-    # Find out now, before anything takes long, that the record can be kept and the folders
-    # can be made: an hour's work must not be lost at the end to a wrong path.
+    folder, nb = _problem(args.problem)
+    serial_c = folder / "serial.c"
+    if not serial_c.is_file():
+        raise ParalleliseError(f"The problem {folder.name} has no serial routine yet. Make it once "
+                               f"with 'parallelise serial {folder}', read it, and run again.")
+    decl = notebook.declaration(nb)
+    accepted = serial.accepted_sizes(serial_c)
+    if accepted is not None and decl.benchmark_size not in accepted:
+        raise ParalleliseError(
+            f"{serial_c} was accepted at the sizes {accepted}, but the notebook now declares the "
+            f"benchmark size {decl.benchmark_size}, at which the serial routine was never "
+            f"checked. Make it again with 'parallelise serial {folder} --force'.")
     store = ResultsStore(settings.results_path)
     store.ensure_writable()
-    ensure_folder(work_root, "the work root")
-
-    name = problem_name
-    masked = bool(args.masked)
-    if masked:
-        mask = _lazy("study.mask")
-        masked_dir = work_root / "_masked" / problem_name
-        prepare_own_folder(masked_dir, args.force)
-        mask.mask_problem(problem_dir, masked_dir, args.masked)
-        write_marker(masked_dir)
-        problem_dir, name = masked_dir, args.masked
-
-    backend = args.backend
-
-    # Find out now, before the agent spends any time, whether the check can judge this problem.
-    check.require_reference_test(problem_dir, backend)
-
-    agent = agents.get_agent(args.agent)  # may raise AgentUnavailable with an install hint
-    work_dir = work_root / problem_name / backend / _safe(settings.model) / args.agent
-    prepare_own_folder(work_dir, args.force)
-    assemble.assemble_work_dir(problem_dir, backend, work_dir, include_reference=False)
-    write_marker(work_dir)
-
-    task = build_task(name, backend)
+    _require_tools(args.backend)
+    agent = get_agent(args.agent)
+    work_dir = _new_work_folder(Path(settings.work_root) / folder.name / args.backend
+                                / _safe(settings.model) / args.agent)  # fmt: skip
+    name = convert.prepare(nb, decl, serial_c, args.backend, work_dir, alias=args.masked)
     started = time.perf_counter()
-    result = None
-    agent_error = ""
-    with ModelClient(settings) as client:
+    # The check's cache of serial answers at the benchmark size can take gigabytes, so it is
+    # kept only while the agent works.
+    with ModelClient(settings) as client, \
+            tempfile.TemporaryDirectory(prefix="parallelise-check-") as cache:
         try:
-            result = agent.run(work_dir, task, settings, client, step_budget=args.step_budget)
+            result = agent.run(work_dir, convert.task(name, args.backend), settings, client,
+                               args.step_budget,
+                               convert.toolset(nb, decl, work_dir, name, args.backend, Path(cache)),
+                               convert.prompt(name, args.backend))  # fmt: skip
         except AgentUnavailable:
             raise
-        except Exception as exc:  # an agent crash is a result to record, not a reason to stop
-            _log_agent_failure(exc)
-            agent_error = f"{type(exc).__name__}: {exc}"
-        summary = client.summary()
+        except Exception as exc:  # an agent that crashes is a result to record
+            log.error("the agent failed: %s: %s", type(exc).__name__, exc,
+                      exc_info=not isinstance(exc, ParalleliseError))  # fmt: skip
+            result = AgentResult(False, error=f"{type(exc).__name__}: {exc}")
+        used = client.meter.summary()
     agent_time = time.perf_counter() - started
-    if not agent_error and result is not None:
-        agent_error = result.error
 
-    # Judge what is on disk, whatever became of the agent.
-    check_started = time.perf_counter()
-    graded = check.run_check(work_dir, problem_dir, backend, timeout_s=int(args.check_timeout))
-    check_time = time.perf_counter() - check_started
-    try:
-        (work_dir / "check.log").write_text(graded.log, encoding="utf-8")
-    except OSError as exc:
-        log.warning("the check log could not be written to %s: %s", work_dir, exc)
-    passed = graded.passed
-    stage = "none" if passed else graded.failure_stage
-    wall = time.perf_counter() - started
-
-    time_limited = result is not None and result.time_limit_reached
-    notes: list[str] = []
-    if args.notes:
-        notes.append(args.notes)
-    if agent_error:
-        reason = str(agent_error).rstrip(".")
-        notes.append(f"The agent stopped with {reason}.")
-    if time_limited:
+    routine = work_dir / generate.routine_file(name, args.backend)
+    if routine.is_file():
+        verdict = judge.judge(nb, decl, routine, work_dir / "serial.c", args.backend,
+                              timeout_s=args.check_timeout, name=name)  # fmt: skip
+    else:
+        verdict = judge.Verdict(False, "no-files", log=[f"the agent wrote no {routine.name}"])
+    (work_dir / "check.log").write_text("\n".join(verdict.log) + "\n", encoding="utf-8")
+    notes = [args.notes, result.notes]
+    if result.error:
+        notes.append(f"The agent stopped with {result.error.rstrip('.')}.")
+    if result.time_limit_reached:
         notes.append(f"The time limit of {settings.time_limit_s:g} seconds stopped the agent.")
-    if result is not None:
-        if result.notes:
-            notes.append(result.notes)
-        if not result.finished and not agent_error and not time_limited:
-            notes.append("The agent used its step budget without declaring itself finished.")
-    latencies = list(result.latencies_s) if result is not None else []
-    # Prefer the agent's own counts; fall back to the client's when the agent kept none. The
-    # client's cover every call it made, including those before an agent that raised an error.
-    requests = result.requests if result and result.requests else summary["requests"]
-    prompt = result.prompt_tokens if result and result.prompt_tokens else summary["prompt_tokens"]
-    completion = (
-        result.completion_tokens if result and result.completion_tokens
-        else summary["completion_tokens"]
-    )
-    waiting = sum(latencies) if latencies else 0.0
-    record = RunRecord(
-        problem=problem_name,
-        backend=backend,
-        model=settings.model,
-        agent=args.agent,
-        agent_version=_agent_version(agent),
-        masked=masked,
-        result="PASS" if passed else "FAIL",
-        failure_stage=stage,
-        speedup_best=graded.speedup_best,
-        speed_verdict=graded.speed_verdict,
-        wall_time_s=round(wall, 2),
-        requests=requests,
-        prompt_tokens=prompt,
-        completion_tokens=completion,
-        latency_mean_s=(waiting / len(latencies)) if latencies else summary["mean_latency_s"],
-        tokens_per_second=(completion / waiting) if waiting > 0
-        else summary["completion_tokens_per_second"],
-        serving=args.serving,
-        quantisation=args.quantisation,
-        notes=" ".join(notes),
-        temperature=settings.temperature,
-        step_budget=args.step_budget,
-        time_limit_s=settings.time_limit_s,
-        agent_time_s=round(agent_time, 2),
-        check_time_s=round(check_time, 2),
-        framework_versions=provenance.framework_versions(),
-        cpu_count=provenance.cpu_count(),
-        package_version=provenance.package_version(),
-        source_hash=provenance.source_hash(),
-    )
-    try:
-        store.append(record)
-    except ResultsError:
-        log.error("the record that could not be saved was: %s", json.dumps(record.to_dict()))
-        raise
-    print(f"Checked {problem_name} on {backend} with {args.agent} and {settings.model}; "
-          f"record added to {settings.results_path}.")
-    print(verdict_line(passed, stage, graded.speed_verdict, graded.speedup_best,
-                       graded.speedup_floor))
-    return 0 if passed else 1
+    store.append(RunRecord(
+        problem=folder.name, backend=args.backend, model=settings.model, agent=args.agent,
+        correct=verdict.correct, failure_stage=verdict.stage, speedup=verdict.speedup,
+        faster=verdict.faster, scaling=verdict.scaling, parallel=verdict.parallel,
+        masked=bool(args.masked), repeat=args.repeat, serving=args.serving,
+        quantisation=args.quantisation, temperature=settings.temperature,
+        step_budget=args.step_budget, agent_time_s=round(agent_time, 2),
+        cores=provenance.cores(), source_hash=provenance.source_hash(),
+        serial_hash=hashlib.sha256(serial_c.read_bytes()).hexdigest()[:12],
+        work_folder=str(work_dir), notes=" ".join(n for n in notes if n), **used,
+    ))  # fmt: skip
+    print(f"Judged {folder.name} on {args.backend} with {args.agent} and {settings.model}; "
+          f"the record is in {settings.results_path} and the work in {work_dir}.")
+    print(verdict_line(verdict))
+    return 0 if verdict.correct else 1
 
 
-# --- argument parsing ----------------------------------------------------------------
+def cmd_check(args: argparse.Namespace) -> int:
+    """Judge the routine in a finished work folder again, with the problem it was made for.
+
+    The exit status is 0 when the routine is correct, whatever its speed.
+    """
+    work_dir = Path(args.work_dir)
+    _, nb = _problem(args.problem)
+    _require_tools(args.backend)
+    headers = sorted(work_dir.glob("*.h"))
+    if len(headers) != 1 or not (work_dir / "serial.c").is_file():
+        raise ParalleliseError(f"{work_dir} is not a work folder made by 'parallelise run': it "
+                               "should hold one header and serial.c.")  # fmt: skip
+    name = headers[0].stem
+    routine = work_dir / generate.routine_file(name, args.backend)
+    if routine.is_file():
+        verdict = judge.judge(nb, notebook.declaration(nb), routine, work_dir / "serial.c",
+                              args.backend, timeout_s=args.timeout, name=name)  # fmt: skip
+    else:
+        verdict = judge.Verdict(False, "no-files", log=[f"there is no {routine.name}"])
+    print("\n".join(verdict.log))
+    print(verdict_line(verdict))
+    return 0 if verdict.correct else 1
+
+
+def cmd_report(args: argparse.Namespace) -> int:
+    """Print the results tables, and draw the chart of correct runs if asked."""
+    path = _settings(args).results_path
+    records = ResultsStore(path).load()
+    if not records:
+        raise ParalleliseError(f"There are no run records in {path}. Run 'parallelise run' "
+                               "first, or give --results the path of a results file.")
+    print(report.build_tables(records, report.load_prices(args.prices) if args.prices else None))
+    if args.chart:
+        report.build_chart(records, Path(args.chart))
+        print(f"The chart is in {args.chart}.")
+    return 0
+
+
+# --- the parser ------------------------------------------------------------------------------
 
 
 def build_parser() -> argparse.ArgumentParser:
-    """Create the argument parser with all subcommands."""
-    parser = HelpParser(
-        prog="parallelise",
-        description="Turn a serial Python notebook into a verified parallel C program.",
-    )
+    """Create the argument parser with all its commands."""
+    parser = argparse.ArgumentParser(
+        prog="parallelise", description="Turn a serial Python notebook into a parallel C routine "
+                                        "with a language-model agent, and judge the result.")
     parser.add_argument("--version", action="version", version=f"parallelise {__version__}")
-    common = HelpParser(add_help=False)
+    common = argparse.ArgumentParser(add_help=False)
     common.add_argument("--log-level", default="WARNING", help="DEBUG, INFO, WARNING or ERROR")
     common.add_argument("--log-json", action="store_true", help="write log lines as JSON")
-    endpoint = HelpParser(add_help=False)
-    endpoint.add_argument("--gateway-url", help="model endpoint (PARALLELISE_GATEWAY_URL)")
-    endpoint.add_argument("--model", help="model name (PARALLELISE_MODEL)")
-    problems = HelpParser(add_help=False)
-    problems.add_argument("--problems-dir", default="problems",
-                          help="folder holding the shipped examples (default: problems)")
+    endpoint = argparse.ArgumentParser(add_help=False)
+    endpoint.add_argument("--gateway-url", help="the model endpoint (PARALLELISE_GATEWAY_URL)")
+    endpoint.add_argument("--model", help="the model's name (PARALLELISE_MODEL)")
+    sub = parser.add_subparsers(dest="command", required=True, metavar="command")
 
-    sub = parser.add_subparsers(
-        dest="command", required=True, metavar="command", parser_class=HelpParser
-    )
+    def command(name: str, parents: list, words: str, example: str,
+                func: object) -> argparse.ArgumentParser:
+        p = sub.add_parser(name, parents=parents, help=words,
+                           description=words[0].upper() + words[1:] + ".",
+                           epilog=f"Example: {example}")  # fmt: skip
+        p.set_defaults(func=func)
+        return p
 
-    p = sub.add_parser(
-        "health", parents=[common, endpoint],
-        help="check that the model endpoint answers and serves the chosen model",
-        description="Check that the model endpoint answers, lists the chosen model and "
-                    "completes one small chat request.",
-        epilog="Example: parallelise health --gateway-url http://localhost:4000/v1 --model local",
-    )
-    p.set_defaults(func=cmd_health)
+    command("health", [common, endpoint], "check that the model endpoint answers and serves the "
+            "chosen model", "parallelise health --gateway-url http://localhost:4000/v1 "
+            "--model local", cmd_health)
 
-    p = sub.add_parser(
-        "assess", parents=[common, endpoint],
-        help="ask the model which parallel method suits a notebook",
-        description="Ask the model which parallel method suits a notebook, or whether plain "
-                    "serial code is better, and print its reasoning and verdict.",
-        epilog="Example: parallelise assess problems/integrate/integrate.ipynb --out verdict.json",
-    )
-    p.add_argument("notebook", help="the path to the Jupyter notebook to assess")
-    p.add_argument("--out", help="write the verdict, as JSON, to this file")
-    p.set_defaults(func=cmd_assess)
+    p = command("serial", [common, endpoint], "have a model, at temperature zero, translate a "
+                "problem's notebook into its serial routine, serial.c, which names that model and "
+                "is accepted only if it agrees with the Python at every test size and at the "
+                "benchmark size", "parallelise serial problems/integrate --model kimi-k2.5",
+                cmd_serial)
+    p.add_argument("problem", help="a folder holding a notebook of the same name")
+    p.add_argument("--step-budget", type=_positive(int), default=40,
+                   help="the most requests the agent may make to the model (default: 40)")
+    p.add_argument("--force", action="store_true", help="replace a serial routine that exists")
 
-    p = sub.add_parser(
-        "run", parents=[common, endpoint, problems],
-        help="convert a problem with an agent, check the result and record the run",
-        description="Build a work folder for a problem, let an agent write the parallel "
-                    "program in it, check the result and add a record to the results file. "
-                    "The check judges whatever is on disk when the agent stops, whether it "
-                    "finished, used its steps, ran out of time or failed. It makes two "
-                    "judgements: whether the routine is correct, which decides the pass, and "
-                    "how fast it is, which is reported as a speed verdict and never fails the "
-                    "run. The last line gives both, and the exit status is 0 when the routine "
-                    "is correct, whatever its speed. A work folder made "
-                    "by an earlier run of the same cell is replaced; any other folder in the "
-                    "way is refused unless --force is given.",
-        epilog="Example: parallelise run integrate openmp --agent basic --model local",
-    )
-    p.add_argument("problem", help=PROBLEM_HELP)
-    p.add_argument("backend", choices=BACKENDS,
-                   help="the parallel method to use: openmp, mpi or cuda")
-    p.add_argument("--agent", choices=AGENTS, default="basic",
+    p = command("run", [common, endpoint], "have an agent write a problem's parallel routine "
+                "in a new work folder, judge it, and record the run",
+                "parallelise run problems/integrate --backend openmp --model local", cmd_run)
+    p.add_argument("problem", help="a folder holding the notebook and its serial.c")
+    p.add_argument("--backend", required=True, choices=generate.BACKENDS)
+    p.add_argument("--agent", choices=AGENT_NAMES, default="basic",
                    help="the design of agent that drives the model (default: basic)")
     p.add_argument("--masked", metavar="ALIAS",
-                   help="hide the algorithm's name behind this neutral alias, such as problem_a")
-    p.add_argument("--step-budget", type=int, default=80, help="most agent steps allowed")
-    p.add_argument("--time-limit", type=float, metavar="SECONDS",
-                   help="most seconds the agent may run before it is stopped between steps, "
-                        "and the routine on disk is checked (PARALLELISE_TIME_LIMIT; "
-                        "default: 1800)")
-    p.add_argument("--check-timeout", type=float, default=300.0,
-                   help="seconds allowed for the check")
-    p.add_argument("--force", action="store_true",
-                   help="delete a work folder (and a masked copy) that was not made by an "
-                        "earlier run, instead of refusing to")
-    p.add_argument("--work-root", help="folder for work folders (PARALLELISE_WORK_ROOT)")
-    p.add_argument("--results", help="results file (PARALLELISE_RESULTS)")
-    p.add_argument("--serving", default="not recorded", help="who served the model")
-    p.add_argument("--quantisation", default="not disclosed", help="model precision, if known")
-    p.add_argument("--notes", default="", help="free text stored with the record")
-    p.set_defaults(func=cmd_run)
+                   help="hide the routine's name and every telling name behind this alias")
+    p.add_argument("--step-budget", type=_positive(int), default=80,
+                   help="the most requests the agent may make to the model (default: 80)")
+    p.add_argument("--time-limit", type=_positive(float), metavar="SECONDS",
+                   help="the agent's time limit (PARALLELISE_TIME_LIMIT; default: 1800)")
+    p.add_argument("--check-timeout", type=_positive(float), default=900.0,
+                   help="the seconds allowed for the judgement (default: 900)")
+    p.add_argument("--repeat", type=_positive(int), default=1,
+                   help="the number of this run, when it is repeated (default: 1)")
+    p.add_argument("--work-root", help="the folder for work folders (PARALLELISE_WORK_ROOT)")
+    p.add_argument("--results", help="the results file (PARALLELISE_RESULTS)")
+    p.add_argument("--serving", default="not recorded",
+                   help="who served the model, such as its provider")
+    p.add_argument("--quantisation", default="not disclosed",
+                   help="the numeric precision of the model's weights, if known")
+    p.add_argument("--notes", default="", help="free text kept with the record")
 
-    def add_check_arguments(parser_: argparse.ArgumentParser) -> None:
-        parser_.add_argument(
-            "work_dir",
-            help="the path to a finished work folder (not a problem), such as one made by "
-                 "'parallelise run'")
-        parser_.add_argument("--problem", required=True,
-                             help=PROBLEM_HELP + ". Give the problem the work folder was "
-                                  "built from; for a masked run, give the masked copy")
-        parser_.add_argument("--backend", required=True, choices=BACKENDS,
-                             help="the parallel method the work folder was built for")
-        parser_.add_argument("--timeout", type=float, default=300.0,
-                             help="seconds allowed for the whole check (default: 300)")
-        parser_.add_argument("--floor", type=float, default=None,
-                             help="the least best speed-up that counts as faster; it may "
-                                  "only tighten the floor set in the problem's Makefile, and "
-                                  "it changes the speed verdict, never the pass")
-        parser_.add_argument(
-            "--as-assembled", action="store_true",
-            help="judge an old work folder as it was assembled: take the trusted files from the "
-                 "work folder, after checking each against its own fingerprint file "
-                 "(.trusted.json), instead of from the problem's current files. The routine is "
-                 "still judged with the problem's current known-good test and by the present "
-                 "rules. A folder without a fingerprint file, or with a GNUmakefile or "
-                 "makefile, is refused")
+    p = command("check", [common], "judge the routine in a finished work folder again, without "
+                "the agent or the model", "parallelise check work/integrate/openmp/local/basic/"
+                "2026-11-07T09-30-00Z --problem problems/integrate --backend openmp", cmd_check)
+    p.add_argument("work_dir", help="a work folder made by 'parallelise run'")
+    p.add_argument("--problem", required=True, help="the problem folder it was made for")
+    p.add_argument("--backend", required=True, choices=generate.BACKENDS)
+    p.add_argument("--timeout", type=_positive(float), default=900.0,
+                   help="the seconds allowed for the judgement (default: 900)")
 
-    p = sub.add_parser(
-        "check", parents=[common, problems],
-        help="judge a finished work folder again, without the agent or the model",
-        description="Judge the routine in a finished work folder. The check does not use "
-                    "the work folder's own build files or test program: it rebuilds a fresh "
-                    "folder from the problem's own files, copies in only the agent's routine "
-                    "and the problem's own known-good test, and judges that. It builds the "
-                    "routine, runs the problem's test at one worker and at several, and runs "
-                    "the benchmark. It fails a routine whose benchmark table is malformed or "
-                    "invented, and a work folder in which a trusted file has been changed. The "
-                    "routine passes when it is correct, whatever its speed; its speed is "
-                    "reported apart, as faster, no useful speed-up, speed not judged on this "
-                    "machine, or not measured. The last line gives both judgements, and the "
-                    "exit status is 0 when the routine is correct. The agent's own test "
-                    "program is run for the log only. The first argument is a work folder, "
-                    "not a problem; the problem comes from --problem.",
-        epilog="Example: parallelise check work/integrate/openmp/local/basic "
-               "--problem integrate --backend openmp",
-    )
-    add_check_arguments(p)
-    p.set_defaults(func=cmd_check)
-
-    # A subcommand added without a help argument is not listed by "parallelise --help".
-    p = sub.add_parser("grade", parents=[common, problems],
-                       description="The old name of 'check'.")
-    add_check_arguments(p)
-    p.set_defaults(func=cmd_grade)
-
-    study_cli.register(sub, common, problems)  # the study command and its old aliases
-
-    p = sub.add_parser(
-        "oracle", parents=[common],
-        description="Run a notebook and write the reference files (reference.json and "
-                    "reference.h) from the ORACLE dictionary in its last cell.",
-        epilog="Example: parallelise oracle problems/integrate/integrate.ipynb",
-    )
-    p.add_argument("notebook", help="the path to the Jupyter notebook to run")
-    p.add_argument("--out", help="folder for the reference files (default: the notebook's)")
-    p.add_argument("--timeout", type=float, default=600.0, help="seconds allowed for the notebook")
-    p.set_defaults(func=cmd_oracle)
-
-    p = sub.add_parser(
-        "assemble", parents=[common, problems],
-        description="Build a work folder for a problem and a backend, without running an agent.",
-        epilog="Example: parallelise assemble integrate openmp work/try --with-reference",
-    )
-    p.add_argument("problem", help=PROBLEM_HELP)
-    p.add_argument("backend", choices=BACKENDS, help="the parallel method: openmp, mpi or cuda")
-    p.add_argument("dest", help="the folder to create; it must not exist or must be empty, "
-                                "unless --force is given")
-    p.add_argument("--with-reference", action="store_true",
-                   help="also copy the known-good solution (tests the machinery without a model)")
-    p.add_argument("--force", action="store_true",
-                   help="delete what is in the destination folder first, instead of refusing")
-    p.set_defaults(func=cmd_assemble)
-
-    p = sub.add_parser(
-        "bench-check", parents=[common],
-        description="Apply the benchmark table rules to a CSV file of OpenMP or MPI timings.",
-        epilog="Example: parallelise bench-check work/integrate/openmp/local/basic/bench.csv",
-    )
-    p.add_argument("csv", help="the path to the benchmark table to judge")
-    p.add_argument("--floor", type=float, default=0.0,
-                   help="the least best speed-up to accept (default 0: no floor)")
-    p.set_defaults(func=cmd_bench_check)
+    p = command("report", [common], "print the tables of correct runs, speed and model use, "
+                "and draw a chart if asked", "parallelise report --results runs.jsonl "
+                "--chart correct.svg", cmd_report)
+    p.add_argument("--results", help="the results file (PARALLELISE_RESULTS)")
+    p.add_argument("--prices", help="a JSON table of US dollars per million tokens, for costs")
+    p.add_argument("--chart", help="write the chart of correct runs to this SVG file")
     return parser
 
 
 def main(argv: list[str] | None = None) -> int:
     """Run the command line and return the exit status."""
-    parser = build_parser()
     try:
-        args = parser.parse_args(argv)
+        args = build_parser().parse_args(argv)
     except SystemExit as exc:  # argparse exits itself; turn that into a return value
         return exc.code if isinstance(exc.code, int) else (0 if exc.code is None else 2)
     try:
         configure_logging(args.log_level, args.log_json)
         return int(args.func(args))
-    except ConfigError as exc:
-        print(f"parallelise: configuration problem. {exc}", file=sys.stderr)
-        return 1
     except ParalleliseError as exc:
         print(f"parallelise: {exc}", file=sys.stderr)
         return 1

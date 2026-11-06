@@ -1,596 +1,181 @@
-"""Tables and a chart that summarise the graded runs.
+"""Tables, and a chart, that summarise the runs in a results file.
 
-The study runs each combination of problem, backend, model and agent design (a "cell")
-and sometimes runs a cell again. To keep a repeated cell from counting twice, every
-table and the chart use only the latest run of each cell, judged by its timestamp.
-Runs on masked problems (where the algorithm's name was hidden) are a separate
-experiment, so they are left out unless the caller asks for them.
+Every run counts, repeats included. A pass means that the routine was correct; its speed is
+reported apart, for the correct runs only. There are three tables:
 
-Records may be `RunRecord` objects or plain dictionaries with the same field names.
-
-A pass means that the routine is correct: it built with warnings treated as errors, gave
-the right answers with one worker and with several, and its benchmark table was sound. Speed
-is reported apart from that, in a speed table for the correct runs: how many reached each
-speed verdict, and their median best speed-up, by problem, backend and model. Records made
-before the speed verdict was kept have none, and are counted as "not recorded"; they lack
-the field altogether or hold null in it, and either form is read without error. Under the
-rule that applied when those records were made, a correct routine that missed the speed-up
-floor was recorded as a failure at the benchmark stage.
-
-When a store holds both masked and unmasked runs, `build_tables` also compares the two.
-When the records carry request counts, it adds a serving table (latency, speed, tokens and,
-if the caller supplies a price table, cost).
+- correct runs for each model on each backend, with a 95 per cent Wilson interval (a range
+  for the true pass rate that stays sound for small counts);
+- the speed of the correct runs for each problem, backend and model: how many were faster
+  than the serial routine, and their median speed-up and scaling;
+- the use of each model: requests, the median latency of a call, the median rate of
+  completion tokens, the tokens used, the agent's time and, with a price table, the cost.
 """
+
 from __future__ import annotations
 
 import json
-import logging
+import math
 import statistics
 from collections import defaultdict
-from collections.abc import Iterable, Sequence
-from datetime import UTC, datetime
+from collections.abc import Sequence
 from pathlib import Path
-from typing import Any
 
-from ..errors import ResultsError
-from ..results import SPEED_VERDICTS
-
-log = logging.getLogger("parallelise.study.report")
-
-BACKEND_ORDER = ("openmp", "mpi", "cuda")
-CAPTION = ("Counts are passes out of cells. A pass means a correct routine, whatever its "
-           "speed; speed is shown in its own table. A cell is one problem, backend, model and "
-           "agent design; only the latest run of each cell is counted.")
-
-# A palette that stays distinguishable for the common kinds of colour-blindness.
-_BACKEND_COLOURS = {"openmp": "#0072B2", "mpi": "#E69F00", "cuda": "#009E73"}
-_EXTRA_COLOURS = ("#CC79A7", "#56B4E9", "#D55E00")
+from ..errors import ParalleliseError
+from ..generate import BACKENDS
+from ..results import RunRecord
 
 
-def _get(record: Any, name: str) -> Any:
-    """Read a field from a record that is either a dictionary or an object."""
-    if isinstance(record, dict):
-        return record[name]
-    return getattr(record, name)
-
-
-def _speed_verdict_of(record: Any) -> str | None:
-    """Return a record's speed verdict, or None when the record was made before it was kept."""
-    if isinstance(record, dict):
-        value = record.get("speed_verdict")
-    else:
-        value = getattr(record, "speed_verdict", None)
-    return value or None
-
-
-def _when(record: Any) -> datetime:
-    """Parse a record's timestamp; a missing time zone is taken to be UTC.
-
-    Raises ResultsError if the timestamp is not a date and time in ISO 8601 form.
-    """
-    text = str(_get(record, "when"))
-    try:
-        stamp = datetime.fromisoformat(text)
-    except ValueError:
-        raise ResultsError(
-            f"A run record has the timestamp {text!r}, which is not a date and time in ISO 8601 "
-            "form such as 2026-10-11T20:00:16+00:00. Correct the 'when' field of that record."
-        ) from None
-    return stamp if stamp.tzinfo else stamp.replace(tzinfo=UTC)
-
-
-def latest_cells(records: Iterable[Any], masked: bool = False) -> list[Any]:
-    """Return the latest run of each cell, for masked or unmasked problems only.
-
-    Ties on the timestamp go to the record that appears later in the input.
-    """
-    best: dict[tuple, tuple[datetime, int, Any]] = {}
-    for position, record in enumerate(records):
-        if bool(_get(record, "masked")) != masked:
-            continue
-        key = tuple(_get(record, f) for f in ("problem", "backend", "model", "agent"))
-        stamp = _when(record)
-        if key not in best or (stamp, position) >= best[key][:2]:
-            best[key] = (stamp, position, record)
-    return [entry[2] for _, entry in sorted(best.items())]
-
-
-def _ordered_backends(cells: Sequence[Any]) -> list[str]:
-    """Known backends in their usual order, then any others alphabetically."""
-    present = {_get(c, "backend") for c in cells}
-    known = [b for b in BACKEND_ORDER if b in present]
-    return known + sorted(present - set(BACKEND_ORDER))
-
-
-def _count(cells: Iterable[Any]) -> tuple[int, int]:
-    """Return (passes, total) for some cells."""
-    passed = total = 0
-    for cell in cells:
-        total += 1
-        passed += _get(cell, "result") == "PASS"
-    return passed, total
-
-
-def _fmt(passed_total: tuple[int, int]) -> str:
-    """Format a count as `passes/total (percentage)`, or a dash when empty."""
-    passed, total = passed_total
+def wilson(passed: int, total: int, z: float = 1.96) -> tuple[float, float]:
+    """Return the Wilson interval for a pass rate, as two fractions."""
     if total == 0:
-        return "-"
-    return f"{passed}/{total} ({100 * passed / total:.0f}%)"
+        return 0.0, 1.0
+    rate = passed / total
+    scale = 1 + z * z / total
+    centre = (rate + z * z / (2 * total)) / scale
+    half = z * math.sqrt(rate * (1 - rate) / total + z * z / (4 * total * total)) / scale
+    return max(0.0, centre - half), min(1.0, centre + half)
 
 
-def _markdown_table(header: list[str], rows: list[list[str]], left: int = 1) -> str:
-    """Render a Markdown table whose first `left` columns are left-aligned, the rest right."""
+def _table(header: list[str], rows: list[list[str]]) -> str:
     lines = ["| " + " | ".join(header) + " |",
-             "|" + " --- |" * left + " ---: |" * (len(header) - left)]
+             "| " + " | ".join(["---"] + ["---:"] * (len(header) - 1)) + " |"]  # fmt: skip
     lines += ["| " + " | ".join(row) + " |" for row in rows]
     return "\n".join(lines)
 
 
-def _grouped(cells: Sequence[Any], row_field: str, col_field: str,
-             rows: Sequence[str], cols: Sequence[str]) -> list[list[str]]:
-    """Build table rows of pass counts by one field (rows) and another (columns)."""
-    groups: dict[tuple[str, str], list[Any]] = defaultdict(list)
-    for cell in cells:
-        groups[(_get(cell, row_field), _get(cell, col_field))].append(cell)
-    out = []
-    for row in rows:
-        row_cells = [c for c in cells if _get(c, row_field) == row]
-        out.append([row] + [_fmt(_count(groups[(row, col)])) for col in cols]
-                   + [_fmt(_count(row_cells))])
-    return out
+def _models(records: Sequence[RunRecord]) -> list[str]:
+    return sorted({r.model for r in records})
 
 
-def _model_order(cells: Sequence[Any]) -> list[str]:
-    """Models from best to worst overall pass rate, ties broken by name."""
-    def rate(model: str) -> float:
-        passed, total = _count(c for c in cells if _get(c, "model") == model)
-        return passed / total if total else 0.0
-    return sorted({_get(c, "model") for c in cells}, key=lambda m: (-rate(m), m))
+def correctness_table(records: Sequence[RunRecord]) -> str:
+    """Correct runs out of all runs, for each model on each backend, with Wilson intervals."""
+    backends = [b for b in BACKENDS if any(r.backend == b for r in records)]
+    rows = []
+    for model in _models(records):
+        row = [model]
+        for backend in backends:
+            cell = [r for r in records if r.model == model and r.backend == backend]
+            passed = sum(r.correct for r in cell)
+            low, high = wilson(passed, len(cell))
+            shown = f"{passed}/{len(cell)} ({100 * low:.0f} to {100 * high:.0f}%)"
+            row.append(shown if cell else "")
+        rows.append(row)
+    return _table(["Model", *backends], rows)
 
 
-def _number(record: Any, name: str) -> float:
-    """Read a numeric field, treating a missing field as zero.
+def speed_table(records: Sequence[RunRecord]) -> str:
+    """For the correct runs of each problem, backend and model: how many were faster than the
+    serial routine, and their median speed-up and scaling."""
+    groups: dict[tuple[str, str, str], list[RunRecord]] = defaultdict(list)
+    for r in records:
+        if r.correct and r.speedup is not None:
+            groups[(r.problem, r.backend, r.model)].append(r)
+    rows = []
+    for (problem, backend, model), runs in sorted(groups.items()):
+        scalings = [r.scaling for r in runs if r.scaling is not None]
+        rows.append([
+            problem, backend, model, str(len(runs)),
+            str(sum(r.faster for r in runs)),
+            f"{statistics.median(r.speedup or 0.0 for r in runs):.2f}",
+            f"{statistics.median(scalings):.2f}" if scalings else "",
+        ])  # fmt: skip
+    header = ["Problem", "Backend", "Model", "Correct runs", "Faster", "Median speed-up",
+              "Median scaling"]  # fmt: skip
+    return _table(header, rows)
 
-    Raises ResultsError if the field holds something that is not a number.
-    """
-    try:
-        value = _get(record, name)
-    except (KeyError, AttributeError):
-        return 0.0
-    try:
-        return float(value or 0)
-    except (TypeError, ValueError):
-        raise ResultsError(
-            f"A run record has the value {value!r} in the field {name!r}, which is not a "
-            "number. Correct that record."
-        ) from None
+
+def model_table(records: Sequence[RunRecord],
+                prices: dict[str, tuple[float, float]] | None = None) -> str:  # fmt: skip
+    """The use of each model, with its cost when a price table is given."""
+    header = ["Model", "Runs", "Requests", "Median latency of a call (s)",
+              "Median completion tokens per second", "Prompt tokens", "Completion tokens",
+              "Agent time (hours)"]  # fmt: skip
+    if prices:
+        header.append("Cost (US dollars)")
+    rows = []
+    for model in _models(records):
+        runs = [r for r in records if r.model == model]
+        prompt = sum(r.prompt_tokens for r in runs)
+        completion = sum(r.completion_tokens for r in runs)
+        row = [model, str(len(runs)), str(sum(r.requests for r in runs)),
+               f"{statistics.median(r.latency_mean_s for r in runs):.2f}",
+               f"{statistics.median(r.tokens_per_second for r in runs):.0f}",
+               str(prompt), str(completion),
+               f"{sum(r.agent_time_s or 0.0 for r in runs) / 3600:.1f}"]  # fmt: skip
+        if prices:
+            price_in, price_out = prices.get(model, (math.nan, math.nan))
+            row.append(f"{(prompt * price_in + completion * price_out) / 1e6:.2f}")
+        rows.append(row)
+    return _table(header, rows)
+
+
+def build_tables(records: Sequence[RunRecord],
+                 prices: dict[str, tuple[float, float]] | None = None) -> str:  # fmt: skip
+    """All three tables, each under a heading."""
+    if not records:
+        return "There are no runs to report."
+    unjudged = sum(r.failure_stage == "notebook" for r in records)
+    judged = [r for r in records if r.failure_stage != "notebook"]
+    parts = ["Correct runs (every judged run counts; 95 per cent Wilson interval):",
+             correctness_table(judged)]  # fmt: skip
+    if unjudged:
+        parts.append(f"{unjudged} {'run is' if unjudged == 1 else 'runs are'} left out, "
+                     "because the notebook's own Python failed during the judgement.")
+    speed = speed_table(records)
+    if speed.count("\n") > 1:
+        parts += ["Speed of the correct runs against the serial routine:", speed]
+    parts += ["Use of each model:", model_table(records, prices)]
+    return "\n\n".join(parts)
 
 
 def load_prices(path: str | Path) -> dict[str, tuple[float, float]]:
     """Read a price table: US dollars per million tokens, as (input, output) for each model.
 
-    The file is JSON. Each model name maps to an object with `input` and `output`, for
-    example {"some-model": {"input": 3.0, "output": 15.0}}. Entries whose value is not an
-    object, such as a "source" note, are ignored. Raises ResultsError, with a message that
-    names the file, if it cannot be read, is not JSON, has the wrong shape, or lacks a price
-    or holds one that is not a number.
+    The file is JSON that maps each model to an object with "input" and "output", at its top
+    level or under "usd_per_million_tokens"; entries that are not objects, such as a note of
+    the source, are ignored. Raises ParalleliseError, naming the file, if it cannot be used.
     """
     path = Path(path)
     try:
-        text = path.read_text(encoding="utf-8")
-    except (OSError, UnicodeDecodeError) as exc:
-        reason = exc.strerror if isinstance(exc, OSError) and exc.strerror else "not UTF-8 text"
-        raise ResultsError(
-            f"The price file {path} cannot be read ({reason}). Check the path."
+        data = json.loads(path.read_text(encoding="utf-8"))
+        table = data.get("usd_per_million_tokens", data)
+        return {name: (float(entry["input"]), float(entry["output"]))
+                for name, entry in table.items() if isinstance(entry, dict)}  # fmt: skip
+    except (OSError, UnicodeDecodeError, ValueError, AttributeError, KeyError, TypeError) as exc:
+        raise ParalleliseError(
+            f"The price file {path} cannot be used ({exc}). It must be JSON that maps each "
+            'model to an object with "input" and "output" prices in US dollars per million '
+            "tokens."
         ) from exc
+
+
+def build_chart(records: Sequence[RunRecord], dest_svg: Path) -> Path:
+    """Draw the share of correct runs for each model and backend, as an SVG bar chart."""
     try:
-        data = json.loads(text)
-    except ValueError as exc:
-        raise ResultsError(
-            f"The price file {path} is not valid JSON ({exc}). Correct the file."
-        ) from exc
-    table = data.get("usd_per_million_tokens", data) if isinstance(data, dict) else None
-    if not isinstance(table, dict):
-        raise ResultsError(
-            f"The price file {path} must hold a JSON object that maps each model name to an "
-            'object with its "input" and "output" prices.'
-        )
-    prices: dict[str, tuple[float, float]] = {}
-    for name, entry in table.items():
-        if not isinstance(entry, dict):
-            continue
-        for key in ("input", "output"):
-            if key not in entry:
-                raise ResultsError(
-                    f"In the price file {path}, the model {name!r} has no {key!r} price. Add it "
-                    "as a number of US dollars per million tokens."
-                )
-        try:
-            prices[name] = (float(entry["input"]), float(entry["output"]))
-        except (TypeError, ValueError):
-            raise ResultsError(
-                f"In the price file {path}, the prices for the model {name!r} must be numbers "
-                "of US dollars per million tokens."
-            ) from None
-    return prices
+        import matplotlib
 
+        matplotlib.use("Agg")
+        import matplotlib.pyplot as plt
+    except ImportError as exc:
+        raise ParalleliseError("The chart needs matplotlib, which is not installed. Install it "
+                               "with: pip install 'parallelise[report]'.") from exc
 
-def load_reference(path: str | Path) -> dict[tuple[str, str], float]:
-    """Read the known-good solutions' best speed-ups on the machine, by problem and backend.
-
-    The file is JSON: a list of objects, each with the keys `problem`, `backend` and
-    `best_speedup`, for example [{"problem": "scan", "backend": "mpi", "best_speedup": 1.1}].
-    Other keys, such as a note on the machine, are ignored. Raises ResultsError, with a
-    message that names the file, if it cannot be read, is not JSON, is not such a list, or
-    holds an entry without those keys or with a speed-up that is not a number.
-    """
-    path = Path(path)
-    try:
-        text = path.read_text(encoding="utf-8")
-    except (OSError, UnicodeDecodeError) as exc:
-        reason = exc.strerror if isinstance(exc, OSError) and exc.strerror else "not UTF-8 text"
-        raise ResultsError(
-            f"The reference file {path} cannot be read ({reason}). Check the path."
-        ) from exc
-    try:
-        data = json.loads(text)
-    except ValueError as exc:
-        raise ResultsError(
-            f"The reference file {path} is not valid JSON ({exc}). Correct the file."
-        ) from exc
-    shape = ('a JSON list of objects, each with "problem", "backend" and "best_speedup", such '
-             'as [{"problem": "scan", "backend": "mpi", "best_speedup": 1.1}]')
-    if not isinstance(data, list):
-        raise ResultsError(f"The reference file {path} must hold {shape}.")
-    reference: dict[tuple[str, str], float] = {}
-    for number, entry in enumerate(data, start=1):
-        if not isinstance(entry, dict) or not all(
-            k in entry for k in ("problem", "backend", "best_speedup")
-        ):
-            raise ResultsError(
-                f"Entry {number} of the reference file {path} is not an object with "
-                f'"problem", "backend" and "best_speedup". The file must hold {shape}.'
-            )
-        value = entry["best_speedup"]
-        if isinstance(value, bool) or not isinstance(value, int | float):
-            raise ResultsError(
-                f"Entry {number} of the reference file {path} has the best speed-up "
-                f"{value!r}, which is not a number. Correct that entry."
-            )
-        reference[(str(entry["problem"]), str(entry["backend"]))] = float(value)
-    return reference
-
-
-def _optional(record: Any, name: str) -> Any:
-    """Read a field that older records may lack, giving None when it is absent."""
-    if isinstance(record, dict):
-        return record.get(name)
-    return getattr(record, name, None)
-
-
-#: The column headings of the speed table, one for each speed verdict.
-_VERDICT_HEADINGS = {
-    "faster": "Faster",
-    "no useful speed-up": "No useful speed-up",
-    "speed not judged on this machine": "Not judged",
-    "not measured": "Not measured",
-}
-
-
-def build_speed_table(records: Iterable[Any], masked: bool = False,
-                      reference: dict[tuple[str, str], float] | None = None) -> str:
-    """Return a Markdown table of the speed of correct routines, by problem, backend and model.
-
-    It uses the latest run of each cell, and only the cells that passed, since only a correct
-    routine's speed means anything. For each problem, backend and model it counts the runs
-    that reached each speed verdict, and those that recorded none ("not recorded"), and gives
-    the median best speed-up. The median leaves out runs whose speed was not judged, because
-    their timings come from a machine where timings mean nothing. When `reference` maps
-    (problem, backend) to the known-good solution's best speed-up on the machine, a column
-    shows it beside each model's result. Returns "" when no run passed.
-    """
-    cells = [c for c in latest_cells(records, masked=masked) if _get(c, "result") == "PASS"]
-    if not cells:
-        return ""
-    groups: dict[tuple[str, str, str], list[Any]] = defaultdict(list)
-    for cell in cells:
-        groups[(_get(cell, "problem"), _get(cell, "backend"), _get(cell, "model"))].append(cell)
-    header = (["Problem", "Backend", "Model", "Correct runs"]
-              + [_VERDICT_HEADINGS[v] for v in SPEED_VERDICTS]
-              + ["Not recorded", "Median best speed-up"])
-    if reference is not None:
-        header.append("Known-good speed-up")
-    rows = []
-    for problem, backend, model in sorted(groups, key=lambda k: (k[0], _backend_rank(k[1]), k[2])):
-        mine = groups[(problem, backend, model)]
-        verdicts = [_optional(c, "speed_verdict") for c in mine]
-        timed = [_number(c, "speedup_best") for c, v in zip(mine, verdicts, strict=True)
-                 if v != "speed not judged on this machine"
-                 and _optional(c, "speedup_best") is not None]
-        row = [problem, backend, model, f"{len(mine)}"]
-        row += [f"{verdicts.count(v)}" for v in SPEED_VERDICTS]
-        row.append(f"{sum(1 for v in verdicts if v not in SPEED_VERDICTS)}")
-        row.append(f"{statistics.median(timed):.2f}" if timed else "-")
-        if reference is not None:
-            known = reference.get((problem, backend))
-            row.append("-" if known is None else f"{known:.2f}")
-        rows.append(row)
-    note = ("Correct runs only, latest run of each cell. Each count is the number of correct "
-            "runs that reached that speed verdict; \"Not recorded\" counts runs made before the "
-            "verdict was kept. The median best speed-up leaves out runs whose speed was not "
-            "judged on their machine.")
-    if reference is not None:
-        note += (" The known-good speed-up is the best speed-up of the problem's known-good "
-                 "solution, from the reference file supplied.")
-    return ("### Speed of correct routines, by problem, backend and model\n\n" + note + "\n\n"
-            + _markdown_table(header, rows, left=3) + "\n")
-
-
-def _change(unmasked: tuple[int, int], masked: tuple[int, int]) -> str:
-    """Format the change in pass rate from unmasked to masked, in percentage points."""
-    if not unmasked[1] or not masked[1]:
-        return "-"
-    delta = 100 * masked[0] / masked[1] - 100 * unmasked[0] / unmasked[1]
-    rounded = round(delta)
-    return f"{rounded:+d}" if rounded else "0"
-
-
-def _comparison_rows(plain: Sequence[Any], masked: Sequence[Any],
-                     keys: Sequence[tuple[str, dict[str, str]]]) -> list[list[str]]:
-    """Rows of (label, unmasked count, masked count, change) for each labelled field filter."""
-    def pick(cells: Sequence[Any], want: dict[str, str]) -> list[Any]:
-        return [c for c in cells if all(_get(c, k) == v for k, v in want.items())]
-
-    rows = []
-    for label, want in keys:
-        before = _count(pick(plain, want))
-        after = _count(pick(masked, want))
-        rows.append([label, _fmt(before), _fmt(after), _change(before, after)])
-    return rows
-
-
-def build_comparison_tables(records: Iterable[Any]) -> str:
-    """Return Markdown tables comparing masked with unmasked runs, or "" if one is absent."""
-    records = list(records)
-    plain = latest_cells(records)
-    masked = latest_cells(records, masked=True)
-    if not plain or not masked:
-        return ""
-    models = _model_order(plain)
-    pairs = sorted({(_get(c, "problem"), _get(c, "backend")) for c in plain + masked},
-                   key=lambda pb: (pb[0], _backend_rank(pb[1])))
-    header = ["Unmasked", "Masked", "Change (points)"]
-    by_model = [(m, {"model": m}) for m in models] + [("All models", {})]
-    by_pair = [(f"{p} on {b}", {"problem": p, "backend": b}) for p, b in pairs]
-    note = ("Passes out of runs, for the same problems with and without the masking. "
-            "Change is masked minus unmasked pass rate, in percentage points.")
-    return ("### Masked against unmasked, by model\n\n" + note + "\n\n"
-            + _markdown_table(["Model"] + header, _comparison_rows(plain, masked, by_model))
-            + "\n\n### Masked against unmasked, by problem and backend\n\n" + note + "\n\n"
-            + _markdown_table(["Problem and backend"] + header,
-                              _comparison_rows(plain, masked, by_pair)) + "\n")
-
-
-def _backend_rank(backend: str) -> tuple[int, str]:
-    """Sort key that puts known backends first, in their usual order."""
-    return (BACKEND_ORDER.index(backend) if backend in BACKEND_ORDER else len(BACKEND_ORDER),
-            backend)
-
-
-def build_serving_table(records: Iterable[Any],
-                        prices: dict[str, tuple[float, float]] | None = None) -> str:
-    """Return a Markdown table of requests, latency, speed, tokens and cost by model.
-
-    It uses the latest run of each cell, masked and unmasked together. Runs that recorded no
-    requests (for example a run that stopped on an error before its counts were saved) are
-    left out of the medians. The cost is tokens times the price per million tokens that
-    the caller passes in; a model without a price shows a dash. Returns "" when no run
-    recorded any request.
-    """
-    records = list(records)
-    cells = latest_cells(records) + latest_cells(records, masked=True)
-    if not any(_number(c, "requests") for c in cells):
-        return ""
-    prices = prices or {}
-    header = ["Model", "Runs", "Requests", "Median latency per call (s)",
-              "Median completion tokens per second", "Prompt tokens", "Completion tokens",
-              "Agent time (hours)"]
-    if prices:
-        header.append("Cost (US dollars)")
-    rows = []
-    totals = [0.0] * 5
-    total_cost = 0.0
-    for model in _model_order(cells):
-        mine = [c for c in cells if _get(c, "model") == model]
-        timed = [c for c in mine if _number(c, "requests") and _number(c, "latency_mean_s")]
-        speed = [c for c in mine if _number(c, "tokens_per_second")]
-        sums = [float(len(mine))] + [sum(_number(c, f) for c in mine) for f in
-                ("requests", "prompt_tokens", "completion_tokens", "wall_time_s")]
-        row = [model, f"{len(mine)}", f"{sums[1]:,.0f}",
-               f"{statistics.median(_number(c, 'latency_mean_s') for c in timed):.2f}"
-               if timed else "-",
-               f"{statistics.median(_number(c, 'tokens_per_second') for c in speed):.0f}"
-               if speed else "-",
-               f"{sums[2]:,.0f}", f"{sums[3]:,.0f}", f"{sums[4] / 3600:.1f}"]
-        for i in range(5):
-            totals[i] += sums[i]
-        if prices:
-            if model in prices:
-                cost = (sums[2] * prices[model][0] + sums[3] * prices[model][1]) / 1e6
-                total_cost += cost
-                row.append(f"{cost:,.2f}")
-            else:
-                row.append("-")
-        rows.append(row)
-    total_row = ["All models", f"{totals[0]:.0f}", f"{totals[1]:,.0f}", "", "",
-                 f"{totals[2]:,.0f}", f"{totals[3]:,.0f}", f"{totals[4] / 3600:.1f}"]
-    if prices:
-        total_row.append(f"{total_cost:,.2f}")
-    rows.append(total_row)
-    note = ("Totals over the latest run of every cell, masked and unmasked together. "
-            "Medians are over runs. Agent time is the sum of the wall time of the runs.")
-    if prices:
-        note += (" Cost uses the price table supplied, in US dollars per million tokens: "
-                 + "; ".join(f"{m} {i:g} in and {o:g} out"
-                             for m, (i, o) in sorted(prices.items())) + ".")
-    return "### Serving: requests, speed, tokens and cost by model\n\n" + note + "\n\n" \
-        + _markdown_table(header, rows) + "\n"
-
-
-def build_tables(records: Iterable[Any], masked: bool = False,
-                 prices: dict[str, tuple[float, float]] | None = None,
-                 reference: dict[tuple[str, str], float] | None = None) -> str:
-    """Return Markdown tables of pass counts by model and backend, agent and problem.
-
-    A pass means a correct routine, whatever its speed. Only the latest run of each cell is
-    counted; each caption says so. The speed table for the correct runs follows (see
-    `build_speed_table`), with the known-good speed-ups if `reference` is given. When the
-    records hold both masked and unmasked runs, the masked-against-unmasked tables follow.
-    When they hold request counts, a serving table follows, with cost if `prices` maps a
-    model name to (input, output) US dollars per million tokens.
-    """
-    records = list(records)
-    cells = latest_cells(records, masked=masked)
-    if not cells:
-        return "No runs to report.\n"
-    backends = _ordered_backends(cells)
-    models = _model_order(cells)
-    agents = sorted({_get(c, "agent") for c in cells})
-    problems = sorted({_get(c, "problem") for c in cells})
-    caption = CAPTION
-    if any(_speed_verdict_of(c) is None for c in cells):
-        caption += (" Runs recorded before the speed verdict was kept are counted as they were"
-                    " recorded, under the earlier rule, in which a correct routine that missed"
-                    " the speed-up floor failed.")
-    parts = [
-        "### Passes by model and backend\n\n" + caption + "\n\n"
-        + _markdown_table(["Model"] + backends + ["All"],
-                          _grouped(cells, "model", "backend", models, backends)),
-        "### Passes by agent design and model\n\n" + caption + "\n\n"
-        + _markdown_table(["Agent design"] + models + ["All"],
-                          _grouped(cells, "agent", "model", agents, models)),
-        "### Passes by problem and model\n\n" + caption + "\n\n"
-        + _markdown_table(["Problem"] + models + ["All"],
-                          _grouped(cells, "problem", "model", problems, models)),
-    ]
-    text = "\n\n".join(parts) + "\n"
-    for extra in (build_speed_table(records, masked, reference),
-                  build_comparison_tables(records), build_serving_table(records, prices)):
-        if extra:
-            text += "\n" + extra
-    return text
-
-
-def build_chart(records: Iterable[Any], dest_svg: Path, masked: bool = False) -> Path:
-    """Draw a grouped bar chart of pass rate by model and backend, saved as SVG.
-
-    Only the latest run of each cell is counted. The file is written to `dest_svg`,
-    whose folder is created if needed, and the path is returned.
-    """
-    import matplotlib
-
-    matplotlib.use("Agg")
-    import matplotlib.pyplot as plt
-
-    cells = latest_cells(records, masked=masked)
-    dest = Path(dest_svg)
-    dest.parent.mkdir(parents=True, exist_ok=True)
-    backends = _ordered_backends(cells)
-    models = _model_order(cells)
-    colours = {b: _BACKEND_COLOURS.get(b) or _EXTRA_COLOURS[i % len(_EXTRA_COLOURS)]
-               for i, b in enumerate(backends)}
-
-    # Fixed hash salt and text-as-text keep the SVG identical from run to run.
-    with plt.rc_context({"svg.hashsalt": "parallelise", "svg.fonttype": "none",
-                         "font.family": "sans-serif"}):
-        fig, ax = plt.subplots(figsize=(8.5, 4.6))
-        width = 0.8 / max(len(backends), 1)
-        labelled: set[str] = set()
-        for j, backend in enumerate(backends):
-            for i, model in enumerate(models):
-                group = [c for c in cells
-                         if _get(c, "model") == model and _get(c, "backend") == backend]
-                passed, total = _count(group)
-                if not total:
-                    continue
-                x = i + (j - (len(backends) - 1) / 2) * width
-                ax.bar(x, 100 * passed / total, width * 0.92, color=colours[backend],
-                       label=None if backend in labelled else backend)
-                labelled.add(backend)
-                ax.text(x, 100 * passed / total + 1.5, f"{passed}/{total}",
-                        ha="center", va="bottom", fontsize=7.5, color="#333333")
-        ax.set_xticks(range(len(models)))
-        ax.set_xticklabels(models, fontsize=9)
-        ax.set_ylim(0, 112)
-        ax.set_yticks(range(0, 101, 20))
-        ax.set_ylabel("Pass rate (%)")
-        ax.set_title("Share of cells passing the check, by model and backend", fontsize=11,
-                     loc="left")
-        ax.yaxis.grid(True, color="#dddddd", linewidth=0.8)
-        ax.set_axisbelow(True)
-        for side in ("top", "right"):
-            ax.spines[side].set_visible(False)
-        ax.legend(title="Backend", frameon=False, ncol=len(backends), loc="upper right",
-                  fontsize=8.5, title_fontsize=8.5)
-        fig.text(0.01, 0.01, "Labels show passes/cells. Latest run of each cell only.",
-                 fontsize=7.5, color="#555555")
-        fig.tight_layout(rect=(0, 0.03, 1, 1))
-        fig.savefig(dest, format="svg", metadata={"Date": None})
-        plt.close(fig)
-    log.info("wrote chart to %s", dest)
-    return dest
-
-
-def build_comparison_chart(records: Iterable[Any], dest_svg: Path) -> Path:
-    """Draw grouped bars of pass rate by model, unmasked beside masked, saved as SVG.
-
-    Only the latest run of each cell is counted. The file is written to `dest_svg`, whose
-    folder is created if needed, and the path is returned.
-    """
-    import matplotlib
-
-    matplotlib.use("Agg")
-    import matplotlib.pyplot as plt
-
-    records = list(records)
-    plain = latest_cells(records)
-    masked = latest_cells(records, masked=True)
-    dest = Path(dest_svg)
-    dest.parent.mkdir(parents=True, exist_ok=True)
-    models = _model_order(plain or masked)
-    series = (("Unmasked", plain, "#0072B2"), ("Masked", masked, "#E69F00"))
-
-    with plt.rc_context({"svg.hashsalt": "parallelise", "svg.fonttype": "none",
-                         "font.family": "sans-serif"}):
-        fig, ax = plt.subplots(figsize=(8.5, 4.6))
-        width = 0.8 / len(series)
-        for j, (name, cells, colour) in enumerate(series):
-            for i, model in enumerate(models):
-                passed, total = _count(c for c in cells if _get(c, "model") == model)
-                if not total:
-                    continue
-                x = i + (j - (len(series) - 1) / 2) * width
-                ax.bar(x, 100 * passed / total, width * 0.92, color=colour,
-                       label=name if i == 0 else None)
-                ax.text(x, 100 * passed / total + 1.5, f"{passed}/{total}",
-                        ha="center", va="bottom", fontsize=7.5, color="#333333")
-        ax.set_xticks(range(len(models)))
-        ax.set_xticklabels(models, fontsize=9)
-        ax.set_ylim(0, 112)
-        ax.set_yticks(range(0, 101, 20))
-        ax.set_ylabel("Pass rate (%)")
-        ax.set_title("Share of runs passing the check, unmasked and masked", fontsize=11,
-                     loc="left")
-        ax.yaxis.grid(True, color="#dddddd", linewidth=0.8)
-        ax.set_axisbelow(True)
-        for side in ("top", "right"):
-            ax.spines[side].set_visible(False)
-        ax.legend(frameon=False, ncol=len(series), loc="upper right", fontsize=8.5)
-        fig.text(0.01, 0.01, "Labels show passes/runs. Latest run of each cell only.",
-                 fontsize=7.5, color="#555555")
-        fig.tight_layout(rect=(0, 0.03, 1, 1))
-        fig.savefig(dest, format="svg", metadata={"Date": None})
-        plt.close(fig)
-    log.info("wrote chart to %s", dest)
-    return dest
+    records = [r for r in records if r.failure_stage != "notebook"]  # as in the table
+    models = _models(records)
+    backends = [b for b in BACKENDS if any(r.backend == b for r in records)]
+    figure, axes = plt.subplots(figsize=(max(4.0, 1.6 * len(models)), 3.2))
+    width = 0.8 / max(len(backends), 1)
+    for i, backend in enumerate(backends):
+        shares = []
+        for model in models:
+            cell = [r for r in records if r.model == model and r.backend == backend]
+            shares.append(sum(r.correct for r in cell) / len(cell) if cell else 0.0)
+        axes.bar([m + i * width for m in range(len(models))], shares, width, label=backend)
+    axes.set_xticks([m + width * (len(backends) - 1) / 2 for m in range(len(models))], models)
+    axes.set_ylim(0, 1)
+    axes.set_ylabel("share of runs correct")
+    axes.legend(frameon=False)
+    figure.tight_layout()
+    figure.savefig(dest_svg, format="svg")
+    plt.close(figure)
+    return Path(dest_svg)

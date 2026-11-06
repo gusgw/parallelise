@@ -1,286 +1,140 @@
-"""Masking a problem so that a model cannot recognise the algorithm from its names.
+"""Masking what an agent sees of a routine, so that a model cannot recognise the algorithm by name.
 
-A language model may have seen the well-known algorithms many times, so a result on a
-problem called "jacobi" may reflect memory rather than ability. ``mask_problem`` writes a
-copy of a problem in which everything that names the algorithm is replaced by a neutral
-alias, while every number, every line of logic and the oracle values stay as they were.
-A masked problem must still pass its reference check; the tests check that.
+A language model may have seen well-known algorithms many times, so a result on a problem called
+"jacobi" may reflect memory rather than ability. ``mask_sources`` masks the three things an agent
+reads: the notebook's Python, the serial C and the generated header. Every number and every line
+of logic stay as they were; what changes is this:
 
-What changes:
+- the routine's name becomes the alias;
+- every other name that the sources define, from the arguments and results to the local
+  variables, helper functions and constants, becomes a neutral name such as ``v7``, the same
+  for the same original name in all three sources;
+- comments and Python docstrings are removed, except the header's, which states the rules.
 
-- the routine name becomes the alias in file names, header guards, function names, the
-  Makefile ``ROUTINE`` variable, the benchmark and the reference solution;
-- notebook markdown is replaced by one neutral sentence, and cell outputs are cleared;
-- comments (and Python docstrings) are removed from code cells and from C and Makefile
-  sources;
-- identifiers (or parts of identifiers, split at underscores and capitals) that appear in
-  the word list below are renamed to neutral names such as ``mk12``.
-
-Library names are left alone: attributes such as ``math.pi``, imported names, built-ins,
-``M_PI``, ``MPI_Scan``, ``omp_*``, CUDA names, names after ``::``, and the directive
-words of OpenMP pragmas.
-The oracle macros that start with ``REF_`` are also left alone, since they are generated
-from the notebook's dictionary keys.
+Names that the sources do not define are left alone, because they belong to Python, NumPy, the C
+library or the backend. In C, what the system headers declare is found by asking the compiler;
+on OpenMP pragma lines only the text inside parentheses is renamed.
 """
 
 from __future__ import annotations
 
 import ast
-import builtins
-import json
-import logging
 import re
-import shutil
-from collections import Counter
-from dataclasses import dataclass, field
-from pathlib import Path
+import subprocess
 
-from ..errors import InputError
-from ..folders import prepare_destination
+from ..errors import ParalleliseError
 
-log = logging.getLogger("parallelise.study.mask")
-
-#: Words that name an algorithm or its domain. Matching is on whole identifier parts and
-#: ignores case. The position in this tuple fixes the neutral name, so the output is stable.
-WORD_LIST: tuple[str, ...] = (
-    "jacobi", "heat", "stencil", "midpoint", "integrate", "integral", "integrals",
-    "integration", "pi", "matmul", "matrix", "matrices", "gemm", "histogram", "histograms",
-    "bin", "bins", "scan", "prefix", "nbody", "body", "bodies", "gravity", "gravitational",
-    "cg", "conjugate", "gradient", "decay", "reservoir", "laplace", "poisson", "relaxation",
-    "quadrature", "trapezoid", "trapezoidal", "simpson", "riemann", "cumulative", "cumsum",
-    "particle", "particles", "echo", "esn", "leaky", "sor", "gauss", "seidel",
-)  # fmt: skip
-
-NEUTRAL_SENTENCE = (
-    "This notebook implements a numerical routine in serial Python; its final cell defines "
-    "the oracle that a parallel implementation must reproduce."
-)
-
-_C_SUFFIXES = {".c", ".h", ".cu", ".cuh", ".cpp", ".hpp"}
-_PROTECTED_PREFIXES = ("MPI_", "omp_", "OMP_", "cuda", "CUDA", "__", "REF_", "M_", "cub", "thrust")
-_SKIP_DIRS = {"__pycache__", ".git", ".ipynb_checkpoints"}
-_SKIP_SUFFIXES = {".o", ".pyc", ".csv"}
-_PARTS = re.compile(r"[A-Z]+(?![a-z])|[A-Z]?[a-z0-9]+|_+|.")
 _IDENT = re.compile(r"(?<![A-Za-z0-9_])[A-Za-z_][A-Za-z0-9_]*")
-
-
-@dataclass
-class Substitution:
-    """One kind of change made in one file, with how many times it was made."""
-
-    file: str
-    original: str
-    replacement: str
-    count: int
-
-
-@dataclass
-class MaskReport:
-    """Everything that ``mask_problem`` changed, so that the masking can be audited."""
-
-    routine: str
-    alias: str
-    substitutions: list[Substitution] = field(default_factory=list)
-    renamed_files: list[tuple[str, str]] = field(default_factory=list)
-    comments_removed: int = 0
-    markdown_cells_replaced: int = 0
-    notes: list[str] = field(default_factory=list)
-
-    def summary(self) -> str:
-        """Return a plain-text description of all changes, one per line."""
-        lines = [f"masked {self.routine!r} as {self.alias!r}"]
-        lines += [f"renamed file {old} to {new}" for old, new in self.renamed_files]
-        lines += [
-            f"{s.file}: {s.original} -> {s.replacement} ({s.count} times)"
-            for s in self.substitutions
-        ]
-        lines.append(f"comments and docstrings removed: {self.comments_removed}")
-        lines.append(f"notebook markdown cells replaced: {self.markdown_cells_replaced}")
-        lines += self.notes
-        return "\n".join(lines)
-
-
-def _match_case(sample: str, replacement: str) -> str:
-    if sample.isupper():
-        return replacement.upper()
-    if sample.islower():
-        return replacement.lower()
-    return replacement[:1].upper() + replacement[1:].lower()
+# What C itself and its preprocessor reserve; names beginning with two underscores belong to the
+# compiler and the library.
+_C_WORDS = set(
+    "auto break case char const continue default do double else enum extern float for goto if "
+    "inline int long register restrict return short signed sizeof static struct switch typedef "
+    "union unsigned void volatile while _Bool _Complex include define undef ifdef ifndef elif "
+    "endif defined pragma error line".split()
+)
+_C_LITERAL_OR_COMMENT = re.compile(
+    r'("(?:\\.|[^"\\\n])*"|\'(?:\\.|[^\'\\\n])*\'|/\*.*?\*/|//[^\n]*)', re.DOTALL)
 
 
 class _Renamer:
-    """Decides the neutral name of an identifier and records what it changed."""
+    """Gives each name that the sources define a neutral name, the same in every source."""
 
-    def __init__(self, routine: str, alias: str, prefix: str) -> None:
-        self.routine = routine
-        self.alias = alias
-        self.prefix = prefix
-        self.routine_re = re.compile(
-            r"(?<![A-Za-z0-9])" + re.escape(routine) + r"(?![A-Za-z0-9])", re.IGNORECASE
-        )
-        self.neutral = {w: f"{prefix}{i}" for i, w in enumerate(WORD_LIST)}
-        self.counts: Counter[tuple[str, str, str]] = Counter()
-        self.current_file = ""
+    def __init__(self, routine: str, alias: str, taken: set[str]) -> None:
+        self.names = {routine: alias}
+        self.alias, self.taken, self.count = alias, taken, 0
 
-    def _record(self, original: str, replacement: str) -> None:
-        if original != replacement:
-            self.counts[(self.current_file, original, replacement)] += 1
-
-    def routine_only(self, text: str) -> str:
-        """Replace only the routine name, wherever it stands as a word or word part."""
-        return self.routine_re.sub(
-            lambda m: self._note(m.group(0), _match_case(m.group(0), self.alias)), text
-        )
-
-    def _note(self, original: str, replacement: str) -> str:
-        self._record(original, replacement)
-        return replacement
-
-    def identifier(self, token: str, words: bool = True) -> str:
-        """Return the neutral form of one identifier (or the identifier unchanged)."""
-        if token.startswith(_PROTECTED_PREFIXES):
-            return token
-        out = self.routine_re.sub(lambda m: _match_case(m.group(0), self.alias), token)
-        if words:
-            pieces = []
-            for part in _PARTS.findall(out):
-                key = part.lower()
-                if key in self.neutral and key != self.alias.lower():
-                    part = _match_case(part, self.neutral[key])
-                pieces.append(part)
-            out = "".join(pieces)
-        self._record(token, out)
-        return out
-
-    def text(self, source: str, words: bool = True) -> str:
-        """Rename every identifier in free text (a C file, a Makefile, a file name)."""
-
-        def replace(match: re.Match[str]) -> str:
-            before = source[max(0, match.start() - 2) : match.start()]
-            if before == "::":
-                return match.group(0)  # a name inside a library namespace
-            return self.identifier(match.group(0), words)
-
-        return _IDENT.sub(replace, source)
-
-    def c_source(self, source: str) -> str:
-        """Rename identifiers in C text.
-
-        On OpenMP pragma lines only the text inside parentheses is renamed, because the
-        directive words outside them (such as ``scan``) belong to OpenMP, whereas the
-        variable names in clauses belong to the program.
-        """
-        out = []
-        for line in source.splitlines(keepends=True):
-            if line.lstrip().startswith("#pragma"):
-                line = re.sub(r"\([^()]*\)", lambda m: self.text(m.group(0)), line)
-            else:
-                line = self.text(line)
-            out.append(line)
-        return "".join(out)
+    def __call__(self, name: str) -> str:
+        if name in (self.alias, f"{self.alias.upper()}_H"):
+            return name  # the alias, and its header's guard
+        if name not in self.names:
+            self.count += 1
+            while f"v{self.count}" in self.taken:
+                self.count += 1
+            self.names[name] = f"v{self.count}"
+        return self.names[name]
 
 
-def strip_c_comments(source: str) -> tuple[str, int]:
-    """Remove comments from C source, respecting strings and character literals.
+def _system_names(c_source: str) -> set[str]:
+    """The names that the system headers which ``c_source`` includes declare or define.
 
-    Returns the new text and the number of comments removed. Runs of blank lines left
-    behind are collapsed to one.
+    These are their macros, functions, types, tags and variables, read from the compiler's
+    expansion of the headers; the parameters of their prototypes and the bodies of their
+    inline functions are not counted, because those names belong to nobody.
     """
-    out: list[str] = []
-    removed = 0
-    i, n = 0, len(source)
-    while i < n:
-        ch = source[i]
-        nxt = source[i + 1] if i + 1 < n else ""
-        if ch in "\"'":
-            j = i + 1
-            while j < n and source[j] != ch:
-                j += 2 if source[j] == "\\" else 1
-            out.append(source[i : j + 1])
-            i = j + 1
-        elif ch == "/" and nxt == "*":
-            end = source.find("*/", i + 2)
-            i = n if end < 0 else end + 2
-            removed += 1
-            out.append(" ")
-        elif ch == "/" and nxt == "/":
-            end = source.find("\n", i)
-            i = n if end < 0 else end
-            removed += 1
-        else:
-            out.append(ch)
-            i += 1
-    lines = [ln.rstrip() for ln in "".join(out).splitlines()]
-    text = re.sub(r"\n{3,}", "\n\n", "\n".join(lines)).strip("\n")
-    return text + "\n", removed
+    includes = "\n".join(line for line in c_source.splitlines()
+                         if re.match(r"\s*#\s*include\s*<", line))  # fmt: skip
+    try:
+        listed = subprocess.run(["gcc", "-E", "-dD", "-x", "c", "-"], input=includes,
+                                capture_output=True, text=True, timeout=60, check=True).stdout
+    except (OSError, subprocess.SubprocessError) as exc:
+        raise ParalleliseError(f"Masking needs gcc to list the system's names ({exc}).") from exc
+    macros = re.findall(r"^#define\s+(\w+)", listed, re.MULTILINE)
+    flat = re.sub(r"^#.*$", "", listed, flags=re.MULTILINE)
+    while "{" in flat:  # leave out every body, innermost first
+        shorter = re.sub(r"\{[^{}]*\}", " ", flat)
+        if shorter == flat:
+            break
+        flat = shorter
+    functions = re.findall(r"\b(\w+)\s*\(", flat)
+    tags = re.findall(r"\b(?:struct|union|enum)\s+(\w+)", flat)
+    last_of_each = re.findall(r"\b(\w+)\s*(?:\[[^\]]*\]\s*)*;", flat)
+    return set(macros + functions + tags + last_of_each)
 
 
-def strip_makefile_comments(source: str) -> tuple[str, int]:
-    """Remove comments from a Makefile, leaving ``#`` inside quotes alone."""
-    out: list[str] = []
-    removed = 0
-    for line in source.splitlines():
-        if line.lstrip().startswith("#"):
-            removed += 1
-            continue
-        quote = ""
-        cut = None
-        for idx, ch in enumerate(line):
-            if quote:
-                quote = "" if ch == quote else quote
-            elif ch in "\"'":
-                quote = ch
-            elif ch == "#" and idx > 0 and line[idx - 1] in " \t":
-                cut = idx
-                break
-        if cut is not None:
-            line = line[:cut].rstrip()
-            removed += 1
-        out.append(line.rstrip())
-    text = re.sub(r"\n{3,}", "\n\n", "\n".join(out)).strip("\n")
-    return text + "\n", removed
+def _mask_c(source: str, rename: _Renamer, kept: set[str]) -> str:
+    """Rename the names a C source defines, leaving its literals, comments and directives' words."""
+    source = re.sub(r'(#\s*include\s*)"(\w+)\.h"',
+                    lambda m: f'{m.group(1)}"{rename(m.group(2))}.h"', source)
+
+    def names(text: str) -> str:
+        return _IDENT.sub(lambda m: m.group(0) if m.group(0) in kept
+                          or m.group(0).startswith("__") else rename(m.group(0)), text)
+
+    parts = _C_LITERAL_OR_COMMENT.split(source)
+    for i in range(0, len(parts), 2):  # the code between the literals and comments
+        lines = []
+        for line in parts[i].splitlines(keepends=True):
+            if re.match(r"\s*#\s*pragma", line):
+                line = re.sub(r"\([^()]*\)", lambda m: names(m.group(0)), line)
+            elif not re.match(r"\s*#\s*include", line):
+                line = names(line)
+            lines.append(line)
+        parts[i] = "".join(lines)
+    return "".join(parts)
+
+
+def strip_c_comments(source: str) -> str:
+    """Remove the comments from C source, keeping string and character literals."""
+    text = _C_LITERAL_OR_COMMENT.sub(lambda m: " " if m.group(0)[:2] in ("/*", "//")
+                                     else m.group(0), source)  # fmt: skip
+    lines = [line.rstrip() for line in text.splitlines()]
+    return re.sub(r"\n{3,}", "\n\n", "\n".join(lines)).strip("\n") + "\n"
 
 
 class _PythonMasker(ast.NodeTransformer):
-    """Rename user-defined identifiers in Python code and drop docstrings."""
+    """Renames the names that Python code defines, and drops its docstrings."""
 
-    def __init__(self, renamer: _Renamer, keep: set[str], local_args: set[str]) -> None:
-        self.renamer = renamer
-        self.keep = keep
-        self.local_args = local_args
-        self.removed = 0
+    def __init__(self, rename: _Renamer, routine: str, defined: set[str],
+                 functions: set[str]) -> None:
+        self.rename, self.routine = rename, routine
+        self.defined, self.functions = defined, functions
 
     def _name(self, name: str) -> str:
-        return name if name in self.keep else self.renamer.identifier(name)
+        return self.rename(name) if name in self.defined else name
 
     def _drop_docstring(self, node: ast.AST) -> None:
-        body = getattr(node, "body", None)
-        if (
-            body
-            and isinstance(body[0], ast.Expr)
-            and isinstance(body[0].value, ast.Constant)
-            and isinstance(body[0].value.value, str)
-        ):
+        body = getattr(node, "body", [])
+        if body and isinstance(body[0], ast.Expr) and isinstance(body[0].value, ast.Constant) \
+                and isinstance(body[0].value.value, str):
             del body[0]
-            self.removed += 1
-            if not body:
-                body.append(ast.Pass())
+            body[:] = body or [ast.Pass()]
 
     def visit_Module(self, node: ast.Module) -> ast.AST:  # noqa: N802
         self._drop_docstring(node)
         return self.generic_visit(node)
 
     def visit_FunctionDef(self, node: ast.FunctionDef) -> ast.AST:  # noqa: N802
-        self._drop_docstring(node)
-        node.name = self._name(node.name)
-        return self.generic_visit(node)
-
-    def visit_AsyncFunctionDef(self, node: ast.AsyncFunctionDef) -> ast.AST:  # noqa: N802
-        self._drop_docstring(node)
-        node.name = self._name(node.name)
-        return self.generic_visit(node)
-
-    def visit_ClassDef(self, node: ast.ClassDef) -> ast.AST:  # noqa: N802
         self._drop_docstring(node)
         node.name = self._name(node.name)
         return self.generic_visit(node)
@@ -293,211 +147,49 @@ class _PythonMasker(ast.NodeTransformer):
         node.arg = self._name(node.arg)
         return self.generic_visit(node)
 
-    def visit_keyword(self, node: ast.keyword) -> ast.AST:  # noqa: N802
-        if node.arg and node.arg in self.local_args:
-            node.arg = self._name(node.arg)
+    def visit_Global(self, node: ast.Global) -> ast.AST:  # noqa: N802
+        node.names = [self._name(n) for n in node.names]
+        return node
+
+    def visit_Call(self, node: ast.Call) -> ast.AST:  # noqa: N802
+        # The keywords of a call to the notebook's own function name its parameters.
+        if isinstance(node.func, ast.Name) and node.func.id in self.functions:
+            for keyword in node.keywords:
+                keyword.arg = self._name(keyword.arg) if keyword.arg else None
         return self.generic_visit(node)
 
     def visit_Constant(self, node: ast.Constant) -> ast.AST:  # noqa: N802
         if isinstance(node.value, str):
-            node.value = self.renamer.routine_only(node.value)
+            node.value = re.sub(rf"(?<![A-Za-z0-9]){re.escape(self.routine)}(?![A-Za-z0-9])",
+                                self.rename.alias, node.value, flags=re.IGNORECASE)  # fmt: skip
         return node
 
 
-def _mask_python(sources: list[str], renamer: _Renamer, report: MaskReport) -> list[str]:
-    """Mask the code cells of a notebook, which share one namespace."""
-    trees: list[ast.Module | None] = []
-    keep = set(dir(builtins))
-    local_args: set[str] = set()
-    for src in sources:
-        tree: ast.Module | None
-        try:
-            tree = ast.parse(src)
-        except SyntaxError:
-            trees.append(None)
-            continue
-        trees.append(tree)
-        for node in ast.walk(tree):
-            if isinstance(node, ast.Import | ast.ImportFrom):
-                for alias in node.names:
-                    keep.add((alias.asname or alias.name).split(".")[0])
-            elif isinstance(node, ast.arg):
-                local_args.add(node.arg)
-    out: list[str] = []
-    for src, tree in zip(sources, trees, strict=True):
-        if tree is None:
-            report.notes.append(
-                "a code cell could not be parsed; only its routine name and "
-                "whole-line comments were handled"
-            )
-            kept = [ln for ln in src.splitlines() if not ln.lstrip().startswith("#")]
-            report.comments_removed += len(src.splitlines()) - len(kept)
-            out.append(renamer.routine_only("\n".join(kept)))
-            continue
-        masker = _PythonMasker(renamer, keep, local_args)
-        new_tree = ast.fix_missing_locations(masker.visit(tree))
-        report.comments_removed += masker.removed + _count_python_comments(src)
-        out.append(ast.unparse(new_tree))
-    return out
+def _mask_python(source: str, rename: _Renamer, routine: str) -> str:
+    tree = ast.parse(source)
+    imported = {(a.asname or a.name).split(".")[0] for node in ast.walk(tree)
+                if isinstance(node, (ast.Import, ast.ImportFrom)) for a in node.names}
+    functions = {n.name for n in ast.walk(tree) if isinstance(n, ast.FunctionDef)}
+    defined = functions | {n.arg for n in ast.walk(tree) if isinstance(n, ast.arg)} | {
+        n.id for n in ast.walk(tree) if isinstance(n, ast.Name) and isinstance(n.ctx, ast.Store)}
+    masker = _PythonMasker(rename, routine, defined - imported, functions)
+    return ast.unparse(ast.fix_missing_locations(masker.visit(tree))) + "\n"
 
 
-def _count_python_comments(source: str) -> int:
-    import io
-    import tokenize
+def mask_sources(python: str, serial_c: str, header: str, routine: str,
+                 alias: str) -> tuple[str, str, str]:
+    """Mask a routine's Python, its serial C and its header together, and return all three.
 
-    try:
-        return sum(
-            1
-            for tok in tokenize.generate_tokens(io.StringIO(source).readline)
-            if tok.type == tokenize.COMMENT
-        )
-    except (tokenize.TokenError, IndentationError):
-        return 0
-
-
-def _read_notebook(path: Path) -> dict:
-    """Read a notebook file, or raise InputError saying why it cannot be used."""
-    try:
-        notebook = json.loads(path.read_text(encoding="utf-8"))
-        if not isinstance(notebook, dict) or not isinstance(notebook["cells"], list):
-            raise ValueError("it has no list of cells")
-        for cell in notebook["cells"]:
-            if "cell_type" not in cell or "source" not in cell:
-                raise ValueError("a cell lacks its type or its source")
-    except OSError as exc:
-        raise InputError(
-            f"The notebook {path} cannot be read ({exc.strerror or exc}). Check the path."
-        ) from exc
-    except (ValueError, KeyError, TypeError) as exc:
-        raise InputError(
-            f"The file {path.name} is not a usable Jupyter notebook ({exc}). Give a problem "
-            "whose notebook is a valid .ipynb file."
-        ) from exc
-    return notebook
-
-
-def _mask_notebook(path: Path, dest: Path, renamer: _Renamer, report: MaskReport) -> None:
-    notebook = _read_notebook(path)
-    cells = notebook["cells"]
-    code = [c for c in cells if c["cell_type"] == "code"]
-    sources = ["".join(c["source"]) for c in code]
-    for cell, new_source in zip(code, _mask_python(sources, renamer, report), strict=True):
-        cell["source"] = new_source.splitlines(keepends=True)
-        cell["outputs"] = []
-        cell["execution_count"] = None
-    new_cells: list[dict] = []
-    markdown_seen = 0
-    for cell in cells:
-        if cell["cell_type"] == "markdown":
-            markdown_seen += 1
-            if markdown_seen > 1:
-                continue
-            cell = {**cell, "source": [NEUTRAL_SENTENCE]}
-        new_cells.append(cell)
-    if markdown_seen == 0:
-        new_cells.insert(0, {"cell_type": "markdown", "metadata": {}, "source": [NEUTRAL_SENTENCE]})
-    report.markdown_cells_replaced += markdown_seen
-    notebook["cells"] = new_cells
-    dest.write_text(json.dumps(notebook, indent=1, ensure_ascii=False) + "\n", encoding="utf-8")
-
-
-def _choose_prefix(problem_dir: Path) -> str:
-    corpus = ""
-    for path in problem_dir.rglob("*"):
-        if path.is_file() and path.suffix not in _SKIP_SUFFIXES:
-            corpus += path.read_text(encoding="utf-8", errors="ignore")
-    for prefix in ("mk", "nx", "qz", "zz"):
-        if not re.search(rf"(?<![A-Za-z0-9_]){prefix}\d+(?![A-Za-z0-9_])", corpus):
-            return prefix
-    return "zz_"
-
-
-def mask_problem(problem_dir: Path, dest: Path, alias: str, force: bool = False) -> MaskReport:
-    """Write a masked copy of ``problem_dir`` to ``dest`` and report every change.
-
-    ``alias`` must be a plain identifier that is not itself in the word list. ``dest`` must
-    not exist or must be empty: a folder that holds files is refused with a message that
-    names it and ``--force``, and with ``force`` true it is deleted first. The routine name
-    is taken from the problem's notebook. Every problem with the arguments (a bad alias, a
-    folder without exactly one notebook, a notebook that is not valid, a destination that
-    cannot be used) raises ``InputError``, and is found before anything is deleted.
+    The header must already be made under the alias. ``alias`` must be a plain name that the
+    sources do not use, or ParalleliseError is raised.
     """
-    problem_dir, dest = Path(problem_dir), Path(dest)
-    if not re.fullmatch(r"[A-Za-z][A-Za-z0-9_]*", alias):
-        raise InputError(
-            f"The alias {alias!r} must be a plain identifier: letters, digits and underscores, "
-            "starting with a letter. Choose a neutral name such as problem_a."
-        )
-    if alias.lower() in WORD_LIST:
-        raise InputError(
-            f"The alias {alias!r} is itself a word that names an algorithm, so it would give "
-            "the algorithm away. Choose a neutral name such as problem_a."
-        )
-    notebooks = sorted(problem_dir.glob("*.ipynb"))
-    if len(notebooks) != 1:
-        raise InputError(
-            f"The problem folder {problem_dir} must contain exactly one notebook (.ipynb "
-            f"file), but it holds {len(notebooks)}. Give the path of a problem folder."
-        )
-    routine = notebooks[0].stem
-    _read_notebook(notebooks[0])  # a notebook that cannot be used must not cost the destination
-
-    renamer = _Renamer(routine, alias, _choose_prefix(problem_dir))
-    report = MaskReport(routine=routine, alias=alias)
-    prepare_destination(dest, force)
-    try:
-        dest.mkdir(parents=True, exist_ok=True)
-        _write_masked_copy(problem_dir, dest, renamer, report)
-    except OSError as exc:
-        raise InputError(
-            f"The masked copy could not be written to {dest} ({exc.strerror or exc}). Check the "
-            "path and its permissions, or choose another folder."
-        ) from exc
-    for (file, original, replacement), count in sorted(renamer.counts.items()):
-        report.substitutions.append(Substitution(file, original, replacement, count))
-    log.info("masked %s as %s: %d substitutions", routine, alias, len(report.substitutions))
-    return report
-
-
-def _write_masked_copy(
-    problem_dir: Path, dest: Path, renamer: _Renamer, report: MaskReport
-) -> None:
-    """Write every masked file of the problem under ``dest``, noting the changes in ``report``."""
-    for source in sorted(problem_dir.rglob("*")):
-        relative = source.relative_to(problem_dir)
-        if source.is_dir() or _SKIP_DIRS & set(relative.parts) or source.suffix in _SKIP_SUFFIXES:
-            continue
-        renamer.current_file = str(relative)
-        new_parts = [renamer.text(part) for part in relative.parts]
-        target = dest.joinpath(*new_parts)
-        target.parent.mkdir(parents=True, exist_ok=True)
-        if str(relative) != str(Path(*new_parts)):
-            report.renamed_files.append((str(relative), str(Path(*new_parts))))
-        renamer.current_file = str(relative)
-
-        if source.suffix == ".ipynb":
-            _mask_notebook(source, target, renamer, report)
-            continue
-        try:
-            text = source.read_text(encoding="utf-8")
-        except UnicodeDecodeError:
-            shutil.copy2(source, target)
-            continue
-        if source.suffix in _C_SUFFIXES:
-            text, removed = strip_c_comments(text)
-            text = renamer.c_source(text)
-        elif source.name == "Makefile":
-            text, removed = strip_makefile_comments(text)
-            text = renamer.text(text, words=False)
-        else:
-            removed = 0
-            text = renamer.routine_only(text)
-        report.comments_removed += removed
-        target.write_text(text, encoding="utf-8")
-        if os_executable(source):
-            target.chmod(source.stat().st_mode)
-
-
-def os_executable(path: Path) -> bool:
-    """Return whether the owner may execute the file."""
-    return bool(path.stat().st_mode & 0o100)
+    used = set(_IDENT.findall(python + serial_c))
+    kept = _system_names(serial_c) | _C_WORDS
+    if not re.fullmatch(r"[A-Za-z][A-Za-z0-9_]*", alias) or alias in used | kept:
+        raise ParalleliseError(f"The alias {alias!r} must be a plain name, of letters, digits and "
+                               "underscores, that the sources do not use already, such as "
+                               "problem_a.")  # fmt: skip
+    rename = _Renamer(routine, alias, used | kept | set(_IDENT.findall(header)))
+    masked_header = _mask_c(header, rename, kept)
+    masked_python = _mask_python(python, rename, routine)
+    return masked_python, _mask_c(strip_c_comments(serial_c), rename, kept), masked_header

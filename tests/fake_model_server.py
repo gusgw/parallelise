@@ -40,11 +40,11 @@ class FakeModelServer:
 
     After the script is used up, the last step is repeated. ``requests`` keeps every request
     body received, for inspection. A step may carry ``delay_s``, a number of seconds to wait
-    before answering (see ``slowly``). The first ``throttle_first`` chat requests are refused
-    with HTTP 429 (too many requests), with a ``Retry-After`` header of ``retry_after`` when that
-    is given; they are counted in ``throttled`` and are not scripted steps. With
-    ``fail_after`` set, every chat request after that many answered ones gets HTTP 400, which
-    no client retries and so stands in for a model service that fails in the middle of a run.
+    before answering (see ``slowly``). The first chat requests are answered with the HTTP
+    statuses in ``statuses``, in turn, with a ``Retry-After`` header of ``retry_after`` when that
+    is given; they are counted in ``refused`` and are not scripted steps. With ``fail_after``
+    set, every chat request after that many answered ones gets HTTP 400, which no client tries
+    again and so stands in for a model service that fails in the middle of a run.
     """
 
     def __init__(
@@ -52,15 +52,14 @@ class FakeModelServer:
         script: list[dict],
         host: str = "127.0.0.1",
         port: int = 0,
-        throttle_first: int = 0,
+        statuses: list[int] | None = None,
         retry_after: str | None = None,
         fail_after: int | None = None,
     ) -> None:
         self.script = script
         self.requests: list[dict[str, Any]] = []
-        self.throttled = 0
         self.refused = 0
-        self._throttle_first = throttle_first
+        self._statuses = list(statuses or [])
         self._retry_after = retry_after
         self._fail_after = fail_after
         self._lock = threading.Lock()
@@ -124,10 +123,11 @@ class FakeModelServer:
     def _respond(self, body: dict) -> tuple[int, dict[str, str], dict]:
         """Return the status, the extra headers and the body for one chat request."""
         with self._lock:
-            if self.throttled < self._throttle_first:
-                self.throttled += 1
+            if self.refused < len(self._statuses):
+                status = self._statuses[self.refused]
+                self.refused += 1
                 headers = {"Retry-After": self._retry_after} if self._retry_after else {}
-                return 429, headers, {"error": {"message": "slow down", "code": "429"}}
+                return status, headers, {"error": {"message": "refused", "code": str(status)}}
             if self._fail_after is not None and len(self.requests) >= self._fail_after:
                 self.refused += 1
                 return 400, {}, {"error": {"message": "the service refused", "code": "400"}}
@@ -170,23 +170,15 @@ class FakeModelServer:
         }
 
 
-def conversion_script(reference_dir: Path, name: str, backend: str = "openmp") -> list[dict]:
-    """Return a script in which the model writes the known-good solution and then finishes.
-
-    ``reference_dir`` holds ``<name>.c`` (``<name>.cu`` for CUDA) and ``test_<name>.c``, as a
-    problem's ``<backend>/reference`` folder does. The model writes both files, runs
-    ``make check``, and says it has finished.
-    """
-    routine = f"{name}.cu" if backend == "cuda" else f"{name}.c"
-    test = f"test_{name}.c"
+def conversion_script(routine: Path, name: str, backend: str = "openmp") -> list[dict]:
+    """Return a script in which the model reads the Python, writes ``routine`` as its own,
+    calls the check and says it has finished."""
+    target = f"{name}.cu" if backend == "cuda" else f"{name}.c"
     return [
-        tool_call_step(
-            "write_file", {"path": routine, "content": (reference_dir / routine).read_text()},
-            100, 20),
-        tool_call_step(
-            "write_file", {"path": test, "content": (reference_dir / test).read_text()}, 120, 20),
-        tool_call_step("run_shell", {"command": "make check"}, 150, 10),
-        finish_step("The checks pass, so I have finished.", 200, 5),
+        tool_call_step("read_file", {"path": "function.py"}, 80, 10),
+        tool_call_step("write_file", {"path": target, "content": routine.read_text()}, 100, 20),
+        tool_call_step("check", {}, 150, 10),
+        finish_step("The check passes, so I have finished.", 200, 5),
     ]
 
 
@@ -195,12 +187,12 @@ def main(argv: list[str] | None = None) -> int:
 
     ``--script health`` answers every chat request with one plain sentence, which is all
     that ``parallelise health`` needs. ``--script convert`` answers a conversion by writing
-    the known-good solution from ``--reference-dir``. The base URL to use as the gateway is
-    printed on the first line of standard output, and also written to ``--url-file`` if given.
+    the routine in ``--routine`` as its own. The base URL to use as the gateway is printed on
+    the first line of standard output, and also written to ``--url-file`` if given.
     """
     parser = argparse.ArgumentParser(description=main.__doc__)
     parser.add_argument("--script", choices=("health", "convert"), default="health")
-    parser.add_argument("--reference-dir", type=Path, help="folder holding the known-good files")
+    parser.add_argument("--routine", type=Path, help="the routine the model writes as its own")
     parser.add_argument("--name", default="integrate", help="the problem's name")
     parser.add_argument("--backend", default="openmp", choices=("openmp", "mpi", "cuda"))
     parser.add_argument("--host", default="127.0.0.1", help="address to listen on")
@@ -208,9 +200,9 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--url-file", type=Path, help="write the base URL to this file")
     args = parser.parse_args(argv)
     if args.script == "convert":
-        if args.reference_dir is None:
-            parser.error("--script convert needs --reference-dir")
-        script = conversion_script(args.reference_dir, args.name, args.backend)
+        if args.routine is None:
+            parser.error("--script convert needs --routine")
+        script = conversion_script(args.routine, args.name, args.backend)
     else:
         script = [finish_step("ready", 5, 1)]
     with FakeModelServer(script, host=args.host, port=args.port) as server:

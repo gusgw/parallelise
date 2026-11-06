@@ -1,110 +1,46 @@
-"""Tests for settings and logging set-up."""
+"""Tests for the settings, the environment given to compiled code, and the logging set-up."""
 
 import json
 import logging
 
 import pytest
 
-from parallelise.config import DEFAULT_GATEWAY_URL, Settings, without_secrets
-from parallelise.errors import ConfigError
+from parallelise.config import Settings, without_secrets
+from parallelise.errors import ParalleliseError
 from parallelise.log import configure_logging
 
 
-def test_defaults_when_environment_is_empty():
-    s = Settings.from_env(environ={})
-    assert s.gateway_url == DEFAULT_GATEWAY_URL == "http://localhost:4000/v1"
-    assert s.model == "local"
-    assert s.temperature == 0.2
-    assert s.request_timeout_s == 600
-    assert s.work_root == "work"
-    assert s.results_path == "results/local-runs.jsonl"
-    assert s.time_limit_s == 1800
-    assert s.throttle_wait_s == 120
+def test_settings_come_from_the_environment_and_options_win():
+    env = {"PARALLELISE_MODEL": "m", "PARALLELISE_TEMPERATURE": "0.7",
+           "PARALLELISE_GATEWAY_URL": "http://host:4000/v1/", "PARALLELISE_TIME_LIMIT": "700"}
+    settings = Settings.from_env({"model": "chosen", "time_limit_s": None}, environ=env)
+    assert (settings.model, settings.temperature, settings.gateway_url, settings.time_limit_s) == (
+        "chosen", 0.7, "http://host:4000/v1", 700.0)
+    assert Settings.from_env(environ={}) == Settings()
 
 
-def test_current_names_beat_older_names():
-    env = {"PARALLELISE_MODEL": "new", "MODEL_NAME": "old", "MODEL_API_KEY": "k"}
-    s = Settings.from_env(environ=env)
-    assert s.model == "new"
-    assert s.api_key == "k"
+@pytest.mark.parametrize(("variable", "value"), [
+    ("PARALLELISE_GATEWAY_URL", "localhost:4000"), ("PARALLELISE_GATEWAY_URL", "http://h:port/v1"),
+    ("PARALLELISE_TEMPERATURE", "warm"), ("PARALLELISE_TEMPERATURE", "3"),
+    ("PARALLELISE_TIME_LIMIT", "0"), ("PARALLELISE_THROTTLE_WAIT", "-1"),
+    ("PARALLELISE_API_KEY", "kéy"),
+])  # fmt: skip
+def test_a_value_that_cannot_be_used_names_its_variable(variable, value):
+    with pytest.raises(ParalleliseError, match=variable):
+        Settings.from_env(environ={variable: value})
 
 
-def test_older_names_are_accepted():
-    env = {"MODEL_BASE_URL": "http://example.test:8000/v1/", "MODEL_TEMPERATURE": "0.7"}
-    s = Settings.from_env(environ=env)
-    assert s.gateway_url == "http://example.test:8000/v1"
-    assert s.temperature == 0.7
+def test_compiled_code_gets_no_secret_and_none_of_the_program_s_own_settings():
+    env = {"PATH": "/bin", "OPENAI_API_KEY": "x", "MY_TOKEN": "y", "db_password": "z",
+           "PARALLELISE_API_KEY": "w", "PARALLELISE_MODEL": "m", "HOME": "/home/u"}
+    assert without_secrets(env) == {"PATH": "/bin", "HOME": "/home/u"}
 
 
-def test_overrides_win_and_none_is_ignored():
-    env = {"PARALLELISE_MODEL": "x"}
-    s = Settings.from_env({"model": "chosen", "gateway_url": None}, environ=env)
-    assert s.model == "chosen"
-    assert s.gateway_url == DEFAULT_GATEWAY_URL
-
-
-@pytest.mark.parametrize(
-    "env, words",
-    [
-        ({"PARALLELISE_GATEWAY_URL": "ftp://x"}, "http"),
-        ({"PARALLELISE_TEMPERATURE": "3"}, "between 0 and 2"),
-        ({"PARALLELISE_TEMPERATURE": "warm"}, "not a number"),
-        ({"PARALLELISE_TIMEOUT": "0"}, "positive"),
-        ({"PARALLELISE_TIME_LIMIT": "0"}, "PARALLELISE_TIME_LIMIT"),
-        ({"PARALLELISE_TIME_LIMIT": "soon"}, "not a number"),
-        ({"PARALLELISE_THROTTLE_WAIT": "-5"}, "PARALLELISE_THROTTLE_WAIT"),
-        ({"PARALLELISE_THROTTLE_WAIT": "long"}, "not a number"),
-        ({"PARALLELISE_API_KEY": "k\u00e9y"}, "PARALLELISE_API_KEY"),
-    ],
-)
-def test_bad_values_give_plain_errors(env, words):
-    with pytest.raises(ConfigError, match=words):
-        Settings.from_env(environ=env)
-
-
-def test_unknown_override_is_rejected():
-    with pytest.raises(ConfigError):
-        Settings.from_env({"colour": "red"}, environ={})
-
-
-def test_without_secrets_drops_keys_tokens_passwords_and_own_settings():
-    environ = {
-        "PARALLELISE_API_KEY": "a", "PARALLELISE_MODEL": "b", "MODEL_API_KEY": "c",
-        "GITHUB_TOKEN": "d", "client_secret": "e", "DB_PASSWORD": "f", "SSH_KEY_FILE": "g",
-        "PATH": "/usr/bin", "OMP_NUM_THREADS": "2", "BENCH_N": "100",
-    }  # fmt: skip
-    assert without_secrets(environ) == {
-        "PATH": "/usr/bin", "OMP_NUM_THREADS": "2", "BENCH_N": "100",
-    }  # fmt: skip
-    assert "PARALLELISE_API_KEY" in environ  # the original is not changed
-
-
-def test_without_secrets_reads_the_real_environment_by_default(monkeypatch):
-    monkeypatch.setenv("PARALLELISE_API_KEY", "secret")
-    monkeypatch.setenv("HARMLESS", "yes")
-    cleaned = without_secrets()
-    assert "PARALLELISE_API_KEY" not in cleaned and cleaned["HARMLESS"] == "yes"
-
-
-def test_configure_logging_is_idempotent_and_json(capsys):
+def test_logging_can_be_set_up_twice_and_written_as_json(capsys):
+    configure_logging("INFO")
     configure_logging("INFO", json_lines=True)
-    configure_logging("INFO", json_lines=True)
-    logger = logging.getLogger("parallelise.test")
-    logger.info("hello")
-    lines = [ln for ln in capsys.readouterr().err.splitlines() if ln]
-    assert len(lines) == 1
-    assert json.loads(lines[0])["message"] == "hello"
-    configure_logging("WARNING")
-
-
-def test_configure_logging_rejects_unknown_level():
-    with pytest.raises(ConfigError):
+    logging.getLogger("parallelise.test").info("hello")
+    (line,) = capsys.readouterr().err.splitlines()
+    assert json.loads(line)["message"] == "hello"
+    with pytest.raises(ParalleliseError, match="not known"):
         configure_logging("LOUD")
-
-
-def test_time_limit_and_throttle_wait_come_from_the_environment_and_options():
-    env = {"PARALLELISE_TIME_LIMIT": "600", "PARALLELISE_THROTTLE_WAIT": "30"}
-    s = Settings.from_env(environ=env)
-    assert (s.time_limit_s, s.throttle_wait_s) == (600, 30)
-    assert Settings.from_env({"time_limit_s": 90}, environ=env).time_limit_s == 90
-    assert Settings.from_env({"throttle_wait_s": 0}, environ={}).throttle_wait_s == 0

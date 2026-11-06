@@ -2,7 +2,7 @@
 PYTHON ?= python3
 IMAGE  ?= parallelise:cpu
 
-.PHONY: help install lint test test-fast check-references image
+.PHONY: help install lint test test-fast check-known-good image
 
 help:  ## Show this list of targets
 	@grep -E '^[a-z-]+:.*## ' $(MAKEFILE_LIST) | awk -F':.*## ' '{printf "  %-18s %s\n", $$1, $$2}'
@@ -20,8 +20,8 @@ test:  ## Run every test, including the slow and MPI ones (CUDA tests skip thems
 test-fast:  ## Run the tests that do not compile C code
 	$(PYTHON) -m pytest -q -m "not slow"
 
-check-references:  ## Build and test the known-good solution of every problem (skips are listed)
-	$(PYTHON) -m pytest -q -rs -m "slow or mpi" -k reference
+check-known-good:  ## Judge every known-good routine against its serial routine (skips are listed)
+	$(PYTHON) -m pytest -q -rs tests/test_known_good.py
 
 image:  ## Build the CPU container image
 	docker build --target cpu -t $(IMAGE) .

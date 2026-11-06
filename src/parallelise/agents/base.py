@@ -1,244 +1,107 @@
 """Shared definitions for the three agent designs.
 
-The command-line layer and the agents agree on the result type and on the call
-signature defined here. The system prompt is also built here, so that all three designs
-give the model exactly the same instructions and the comparison between them is fair.
+Every design receives the same prompt and the same toolset from its caller, so that the
+comparison between them is fair, and reaches the model through the caller's client, whose meter
+counts every call.
 """
 
 from __future__ import annotations
 
-import time
 from collections.abc import Callable
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING, Protocol
 
 if TYPE_CHECKING:
-    import httpx
-
     from parallelise.config import Settings
     from parallelise.model import ModelClient
-
-from parallelise.errors import AgentUnavailable
-
-__all__ = [
-    "AgentResult",
-    "AgentUnavailable",
-    "Agent",
-    "Deadline",
-    "LatencyRecorder",
-    "build_system_prompt",
-    "check_feedback",
-]
 
 
 @dataclass
 class AgentResult:
-    """What an agent reports when its run ends.
+    """How an agent's run ended.
 
-    ``finished`` is true only when the checks passed at the end of the run. ``steps`` counts
-    turns of the agent's own loop, ``requests`` counts calls made to the model, and the token
-    counts and latencies are summed or listed over those calls.
-
-    ``time_limit_reached`` is true when the run was stopped, between steps, because the time
-    limit in the settings had passed. ``error`` holds a short description when the run ended
-    because the model or the framework failed; the counts then cover the calls that were made
-    before the failure, so that a failed run still reports what it used. An agent returns its
-    result in both cases rather than raising an error, but the command line also copes with an
-    agent that raises.
+    ``finished`` is true only when the check passed at the end. ``time_limit_reached`` is true
+    when the run was stopped, between steps, because the time limit had passed, and ``error``
+    describes a failure of the model or the framework that ended it.
     """
 
     finished: bool
-    steps: int
-    requests: int
-    prompt_tokens: int
-    completion_tokens: int
-    latencies_s: list[float] = field(default_factory=list)
     notes: str = ""
     time_limit_reached: bool = False
     error: str = ""
 
 
-class Deadline:
-    """A wall-clock limit on one agent run.
+@dataclass
+class Toolset:
+    """What an agent may do, and the check that decides when its work is finished.
 
-    Each agent design makes one when its run starts and asks ``expired`` before every call to
-    the model, so that a run past its limit stops cleanly between steps. A step that is
-    already under way is not interrupted, so a run may overrun the limit by the length of
-    its last step.
+    ``schemas`` describe the tools in the form the chat interface expects; ``run`` carries out
+    one call, given the tool's name and arguments, and returns what the model is told; and
+    ``finish`` runs whenever the model says it has finished, and returns whether the work
+    passed and, if it did not, what to tell the model.
     """
 
-    def __init__(self, seconds: float, clock: Callable[[], float] = time.monotonic) -> None:
-        self._clock = clock
-        self._end = clock() + seconds
+    schemas: list[dict]
+    run: Callable[[str, dict], str]
+    finish: Callable[[], tuple[bool, str]]
 
-    def remaining(self) -> float:
-        """Return the seconds left, or 0 when the limit has passed."""
-        return max(0.0, self._end - self._clock())
 
-    def expired(self) -> bool:
-        """Return whether the limit has passed."""
-        return self._clock() >= self._end
+def file_toolset(folder: Path, readable: list[str], writable: str, check_words: str,
+                 check: Callable[[], str], finish: Callable[[], tuple[bool, str]]) -> Toolset:
+    """Tools to read some files in ``folder``, to write one, and to check it.
+
+    ``check`` returns what the model is told when it calls the tool check, and ``finish``
+    decides whether the work passes when the model says it has finished.
+    """
+    readable = [*readable, writable]
+    path_only = {"type": "object", "properties": {"path": {"type": "string"}},
+                 "required": ["path"]}  # fmt: skip
+    path_and_content = {"type": "object", "properties": {"path": {"type": "string"},
+                                                         "content": {"type": "string"}},
+                        "required": ["path", "content"]}  # fmt: skip
+    schemas = [
+        {"type": "function", "function": {
+            "name": "read_file", "description": f"Read one of these files: {', '.join(readable)}.",
+            "parameters": path_only}},
+        {"type": "function", "function": {
+            "name": "write_file", "description": f"Write the whole of {writable}.",
+            "parameters": path_and_content}},
+        {"type": "function", "function": {
+            "name": "check", "description": check_words,
+            "parameters": {"type": "object", "properties": {}}}},
+    ]  # fmt: skip
+
+    def run(tool: str, args: dict) -> str:
+        path = str(args.get("path", "")).removeprefix("./")
+        if tool == "read_file":
+            if path not in readable or not (folder / path).is_file():
+                return f"error: you may read only {', '.join(readable)}"
+            return (folder / path).read_text(encoding="utf-8")
+        if tool == "write_file":
+            if path != writable:
+                return f"error: you may write only {writable}"
+            (folder / writable).write_text(str(args.get("content", "")), encoding="utf-8")
+            return f"wrote {writable}"
+        if tool == "check":
+            if not (folder / writable).is_file():
+                return f"check failed: {writable} has not been written"
+            return check()
+        return f"error: there is no tool named {tool!r}"
+
+    def done() -> tuple[bool, str]:
+        if not (folder / writable).is_file():
+            return False, f"You have not written {writable}. Write it, then call check."
+        return finish()
+
+    return Toolset(schemas, run, done)
 
 
 class Agent(Protocol):
     """The interface every agent design implements."""
 
-    name: str
-
-    def run(
-        self,
-        work_dir: Path,
-        task: str,
-        settings: Settings,
-        client: ModelClient,
-        step_budget: int = 80,
-    ) -> AgentResult:
-        """Work in ``work_dir`` on ``task`` until the checks pass or the budget is spent."""
+    def run(self, work_dir: Path, task: str, settings: Settings, client: ModelClient,
+            step_budget: int, toolset: Toolset, system_prompt: str) -> AgentResult:
+        """Work in ``work_dir`` on ``task``, with ``toolset``, until its check passes or the
+        budget is spent."""
         ...
-
-
-class LatencyRecorder:
-    """Collects the time each model request takes, for the two framework agents.
-
-    The framework agents make their own HTTP calls, so the shared model client cannot time
-    them. This object is attached to their HTTP clients as request and response hooks. The
-    time recorded runs from sending the request to receiving the response headers, which for
-    a non-streaming call is the whole generation time.
-    """
-
-    def __init__(self) -> None:
-        self.latencies_s: list[float] = []
-
-    def _start(self, request: httpx.Request) -> None:
-        request.extensions["parallelise_started"] = time.perf_counter()
-
-    def _finish(self, response: httpx.Response) -> None:
-        # Only answers that were accepted count, as in ``ModelClient``: an answer that refused
-        # the request (HTTP 429, for example) is not a model call, and the call is made again.
-        started = response.request.extensions.get("parallelise_started")
-        if started is not None and response.status_code < 400:
-            self.latencies_s.append(time.perf_counter() - started)
-
-    def sync_hooks(self) -> dict[str, list]:
-        """Event hooks for an ``httpx.Client``."""
-
-        def on_request(request: httpx.Request) -> None:
-            self._start(request)
-
-        def on_response(response: httpx.Response) -> None:
-            self._finish(response)
-
-        return {"request": [on_request], "response": [on_response]}
-
-    def async_hooks(self) -> dict[str, list]:
-        """Event hooks for an ``httpx.AsyncClient``."""
-
-        async def on_request(request: httpx.Request) -> None:
-            self._start(request)
-
-        async def on_response(response: httpx.Response) -> None:
-            self._finish(response)
-
-        return {"request": [on_request], "response": [on_response]}
-
-
-_BACKEND_GUIDANCE = {
-    "openmp": (
-        "Target OpenMP. Parallelise the hot loops with '#pragma omp parallel for', using "
-        "'reduction(+:...)' for sums and taking care with shared writes. The Makefile builds "
-        "with gcc -fopenmp."
-    ),
-    "mpi": (
-        "Target MPI. The routine is collective: assume MPI is already initialised in main(), "
-        "and do NOT call MPI_Init or MPI_Finalize inside the routine. Decompose the work "
-        "across ranks so that each rank computes only its own share (a block of loop "
-        "iterations, output rows or grid rows: lo = total*rank/size, hi = "
-        "total*(rank+1)/size). Then combine the shares with the right MPI operation for this "
-        "algorithm: MPI_Allreduce when every rank forms a partial sum of the same result; "
-        "MPI_Allgather(v) when each rank produces a distinct slice of the output that must "
-        "end up on all ranks; an MPI_Sendrecv halo exchange when each step needs the "
-        "neighbouring ranks' boundary values. In the test, call MPI_Init in main, make every "
-        "rank call the routine the same number of times (otherwise mpirun hangs), let only "
-        "rank 0 assert against reference.h within REF_TOL and print, then call "
-        "MPI_Finalize. Build with mpicc and run the tests with mpirun -np 4."
-    ),
-    "cuda": (
-        "Target CUDA. In the .cu file write a __global__ grid-stride kernel where each "
-        "thread accumulates its share of the work, with a shared-memory reduction within "
-        "each block, and the routine itself: a host function with the exact signature from "
-        'the header (declared extern "C") that launches the kernel, synchronises, checks '
-        "errors (cudaGetLastError, cudaDeviceSynchronize), combines the per-block partial "
-        "results and returns the answer. The test file is plain C, with no MPI and no "
-        "OpenMP: its main() checks the result against reference.h within REF_TOL. Build "
-        "with make, which uses nvcc. The trusted benchmark times one processor core against "
-        "your routine running on the GPU, and the checks require a real GPU speed-up."
-    ),
-}
-
-_NOT_ROUTINE_HEADERS = {"reference.h", "problem.h", "testing.h"}
-
-
-def _detect_backend(work_dir: Path) -> str:
-    """Guess the backend from the work folder's Makefile; OpenMP when unsure."""
-    try:
-        makefile = (work_dir / "Makefile").read_text(encoding="utf-8", errors="replace")
-    except OSError:
-        return "openmp"
-    if "nvcc" in makefile:
-        return "cuda"
-    if "mpicc" in makefile:
-        return "mpi"
-    return "openmp"
-
-
-def _detect_routine(work_dir: Path) -> str:
-    """Name the routine from the one header in the work folder that is not a helper."""
-    headers = sorted(
-        p.stem for p in work_dir.glob("*.h") if p.name not in _NOT_ROUTINE_HEADERS
-    )
-    return headers[0] if headers else "routine"
-
-
-def build_system_prompt(work_dir: Path) -> str:
-    """Return the instructions given to the model, identical for all three designs.
-
-    The backend and the routine name are read from the work folder, so the caller does not
-    have to pass them separately.
-    """
-    backend = _detect_backend(work_dir)
-    routine = _detect_routine(work_dir)
-    source = routine + (".cu" if backend == "cuda" else ".c")
-    return (
-        "You convert a research Jupyter notebook that implements a numerical algorithm into "
-        "a parallel C routine. Read the notebook with read_notebook to learn the algorithm. "
-        f"Read {routine}.h, which gives the exact signature to implement, and reference.h, "
-        "which gives the expected values and REF_TOL. If problem.h is present, read it and "
-        "use its shared helpers (the input fill and the checksum). Then write two files: "
-        f"{source}, the parallel routine that implements {routine}.h, and test_{routine}.c, a "
-        "unit test that checks the routine against reference.h within REF_TOL. A benchmark "
-        "(bench.c) and its driver (bench_sweep.sh) are already provided: do not write or "
-        "modify them. Split the work across the parallel workers so that each does only its "
-        "own share, and combine the results appropriately; never make every worker repeat "
-        "the whole computation. Write C that compiles without warnings, because the build "
-        "treats warnings as errors: include every header whose functions you call (stdlib.h "
-        "for malloc and free, math.h for fabs, string.h for memcpy); get the rank from "
-        "MPI_Comm_rank and use rank == 0 for work that only rank 0 does (never compare "
-        "MPI_COMM_WORLD to 0); guard edge ranks that have no neighbour with MPI_PROC_NULL in "
-        "MPI_Sendrecv; and do not leave parameters unused. "
-        + _BACKEND_GUIDANCE[backend]
-        + " Build and run the tests with run_shell using 'make check', and keep fixing the "
-        "code until it passes. Copy text exactly from what you have read, make small and "
-        "exact edits, and finish only when the checks pass."
-    )
-
-
-def check_feedback(command: list[str], output: str) -> str:
-    """Return the message that tells the model its checks are still failing."""
-    return (
-        "The checks are not passing yet, so you are not finished. Apply the fix by calling "
-        "write_file (do not only describe it), then carry on. The output of `"
-        + " ".join(command)
-        + "` was:\n"
-        + output
-    )

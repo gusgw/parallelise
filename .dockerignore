@@ -9,8 +9,13 @@ __pycache__
 dist
 build
 work
-problems/**/bench
-problems/**/bench.csv
-# The stored run records and evidence are large and are not read when the program runs.
-# The three tests that read them skip themselves when the folder is absent.
+# What a run does not read: the stored records and evidence, the tests, the documents (apart
+# from the README, which the package's metadata names), the scripts and the manifest.
 results
+tests
+docs
+scripts
+k8s
+*.md
+!README.md
+*.pdf

@@ -12,6 +12,7 @@ authors = [{name = "Angus Gray-Weale", email = "gusgw@gusgw.net"}]
 requires-python = ">=3.11"
 dependencies = [
     "httpx>=0.27",
+    "numpy>=2",
 ]
 
 [project.optional-dependencies]
@@ -46,8 +47,6 @@ testpaths = ["tests"]
 pythonpath = ["."]
 markers = [
     "slow: builds and runs C code; needs gcc with OpenMP",
-    "mpi: needs mpicc and mpirun",
-    "cuda: needs nvcc and a GPU",
 ]
 # A notice from Pydantic AI that something we use will be removed in its version 3 is an error
 # in the tests, so that it is dealt with when it first appears.
@@ -63,7 +62,7 @@ ignore_missing_imports = true
 line-length = 100
 target-version = "py311"
 src = ["src", "tests"]
-extend-exclude = ["studies", "problems", "bindings"]
+extend-exclude = ["problems"]
 
 [tool.ruff.lint]
 select = ["E", "F", "W", "I", "UP", "B"]
