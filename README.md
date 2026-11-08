@@ -45,7 +45,9 @@ pinned to exact versions.
 ## Writing a notebook
 
 A problem is a folder that holds a notebook of the same name and the problem's serial routine,
-`serial.c`; thirteen are shipped under `problems/`. The notebook's code cells define three things:
+`serial.c`; thirteen are shipped under `problems/`, each with a copy of the header that its
+serial routine includes, which the harness generates from the declaration. After changing a
+declaration, run `make headers` to write the copy again; a test fails until you do. The notebook's code cells define three things:
 the function, written as a person would write it; `make_inputs(size, rng)`, which draws the
 arguments of one call of the given size with a NumPy random generator and returns them in a
 dictionary keyed by their names; and a dictionary named `ROUTINE`, which names both and declares

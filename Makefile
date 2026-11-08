@@ -2,7 +2,7 @@
 PYTHON ?= python3
 IMAGE  ?= parallelise:cpu
 
-.PHONY: help install lint test test-fast check-known-good image
+.PHONY: help install lint test test-fast check-known-good headers image
 
 help:  ## Show this list of targets
 	@grep -E '^[a-z-]+:.*## ' $(MAKEFILE_LIST) | awk -F':.*## ' '{printf "  %-18s %s\n", $$1, $$2}'
@@ -22,6 +22,9 @@ test-fast:  ## Run the tests that do not compile C code
 
 check-known-good:  ## Judge every known-good routine against its serial routine (skips are listed)
 	$(PYTHON) -m pytest -q -rs tests/test_known_good.py
+
+headers:  ## Write each problem's header beside its serial routine, after a declaration changes
+	$(PYTHON) scripts/write_headers.py
 
 image:  ## Build the CPU container image
 	docker build --target cpu -t $(IMAGE) .

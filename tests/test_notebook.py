@@ -5,10 +5,11 @@ from pathlib import Path
 
 import pytest
 
-from parallelise import notebook
+from parallelise import generate, notebook
 from parallelise.routine import read_inputs, read_results
 
 FIXTURE = Path(__file__).parent / "fixtures" / "midpoint" / "midpoint.ipynb"
+PROBLEMS = sorted((Path(__file__).resolve().parent.parent / "problems").glob("*/*.ipynb"))
 
 
 def write_notebook(path: Path, source: str) -> Path:
@@ -74,3 +75,12 @@ ROUTINE = {"function": f, "make_inputs": make_inputs, "arguments": {"x": "float6
         assert kept in shown
     for dropped in ("UNUSED", "data", "print", "make_inputs", "ROUTINE"):
         assert dropped not in shown
+
+
+@pytest.mark.parametrize("nb", PROBLEMS, ids=[nb.parent.name for nb in PROBLEMS])
+def test_each_problem_keeps_the_header_that_its_declaration_generates(nb):
+    decl = notebook.declaration(nb)
+    kept = nb.parent / f"{decl.name}.h"
+    generated = generate.header(decl, decl.name)
+    assert kept.is_file() and kept.read_text(encoding="utf-8") == generated, \
+        f"{kept} is missing or differs from what its declaration generates: run 'make headers'"
