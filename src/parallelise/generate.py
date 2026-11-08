@@ -285,13 +285,7 @@ int main(int argc, char **argv)
 _SHARE_MPI = """
 static inline void drv_share(void *p, size_t count, MPI_Datatype type)
 {
-    int size = 0;
-    MPI_Type_size(type, &size);
-    for (size_t done = 0; done < count;) {
-        size_t piece = count - done < ((size_t)1 << 28) ? count - done : ((size_t)1 << 28);
-        MPI_Bcast((char *)p + done * (size_t)size, (int)piece, type, 0, MPI_COMM_WORLD);
-        done += piece;
-    }
+    MPI_Bcast(p, (int)count, type, 0, MPI_COMM_WORLD);
 }
 
 /* Wait until the harness has noted the START mark before the routine starts, so that it reads
