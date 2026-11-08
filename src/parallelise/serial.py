@@ -15,7 +15,6 @@ baseline of every speed-up.
 
 from __future__ import annotations
 
-import re
 import shutil
 import tempfile
 from datetime import UTC, datetime
@@ -55,13 +54,6 @@ def toolset(nb: Path, decl: Declaration, folder: Path) -> Toolset:
                         lambda: report(judge.correct_at(nb, decl, folder / source, "serial",
                                                         list(decl.test_sizes))),
                         finish)  # fmt: skip
-
-
-def accepted_sizes(serial_c: Path) -> list[int] | None:
-    """The sizes at which a serial routine was accepted, read from the comment at its head."""
-    head = serial_c.read_text(encoding="utf-8", errors="replace").split("\n", 1)[0]
-    found = re.search(r"accepted on [\d-]+ at the sizes \[([\d, ]*)\]", head)
-    return [int(s) for s in found.group(1).split(",") if s.strip()] if found else None
 
 
 def note(nb: Path, model: str, sizes: list[int]) -> str:

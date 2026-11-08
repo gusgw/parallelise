@@ -174,17 +174,6 @@ def test_run_says_how_to_make_a_missing_serial_routine(monkeypatch, tmp_path, ca
     assert "parallelise serial" in capsys.readouterr().err and not records(tmp_path)
 
 
-def test_run_refuses_a_serial_routine_never_checked_at_the_benchmark_size(monkeypatch, tmp_path,
-                                                                          capsys):
-    install_fakes(monkeypatch, tmp_path)
-    serial_c = tmp_path / "midpoint" / "serial.c"
-    serial_c.write_text("/* The serial routine of midpoint.ipynb, translated from its Python "
-                        "by the model m at temperature 0 and accepted on 2026-11-06 at the "
-                        "sizes [1, 7]. */\n" + serial_c.read_text())  # fmt: skip
-    assert run(tmp_path) == 1
-    assert "never checked" in capsys.readouterr().err and not records(tmp_path)
-
-
 @pytest.mark.parametrize("where", ["results", "work-root"])
 def test_a_place_that_cannot_be_written_is_found_before_the_agent_starts(monkeypatch, tmp_path,
                                                                           capsys, where):

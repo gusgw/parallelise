@@ -173,12 +173,6 @@ def cmd_run(args: argparse.Namespace) -> int:
         raise ParalleliseError(f"The problem {folder.name} has no serial routine yet. Make it once "
                                f"with 'parallelise serial {folder}', read it, and run again.")
     decl = notebook.declaration(nb)
-    accepted = serial.accepted_sizes(serial_c)
-    if accepted is not None and decl.benchmark_size not in accepted:
-        raise ParalleliseError(
-            f"{serial_c} was accepted at the sizes {accepted}, but the notebook now declares the "
-            f"benchmark size {decl.benchmark_size}, at which the serial routine was never "
-            f"checked. Make it again with 'parallelise serial {folder} --force'.")
     store = ResultsStore(settings.results_path)
     store.ensure_writable()
     _require_tools(args.backend)

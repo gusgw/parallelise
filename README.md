@@ -110,7 +110,8 @@ the notebook.
 `serial.c` only if the translation agrees with the Python on fresh inputs at every test size and at
 the benchmark size. Use one model for every problem, and not one of those under study; all thirteen
 shipped routines were translated by `kimi-k2.5`. Read the translation before relying on it, because
-it referees every later run and sets the baseline of every speed-up.
+it referees every later run and sets the baseline of every speed-up. When a notebook's sizes
+change, translate it again with `--force`, so that its serial routine is checked at the new ones.
 
 `run` makes a new work folder under `work/`, has the model under study write the parallel routine
 there, judges the routine, and appends a record to `results/local-runs.jsonl`. Its last line gives
