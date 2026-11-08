@@ -142,7 +142,7 @@ otherwise the work goes on until the budget of requests (`--step-budget`) or the
 recognise a famous algorithm by its name and recall a solution, `--masked ALIAS` renames the
 routine to the alias and every other name that the agent's files define to a neutral one such as
 `v7`, and removes the comments and docstrings, except the header's statement of the rules; the
-numbers and the logic are unchanged.
+numbers and the logic are unchanged, and the agent's check uses the same names in its messages.
 
 ## Containers and Kubernetes
 

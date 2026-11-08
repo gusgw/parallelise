@@ -32,7 +32,7 @@ from __future__ import annotations
 import math
 import re
 from collections.abc import Mapping
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Any
 
@@ -123,6 +123,20 @@ class Declaration:
     def returns_value(self) -> bool:
         """True when the C routine returns its one result, a number, instead of writing it."""
         return len(self.results) == 1 and not self.results[0].is_array and not self.updated
+
+    def renamed(self, names: Mapping[str, str]) -> Declaration:
+        """The same declaration under other names, such as those a masked run shows an agent.
+
+        ``names`` must give a new name for the routine and for every argument, result and size.
+        """
+
+        def value(v: Value) -> Value:
+            return replace(v, name=names[v.name], shape=tuple(names.get(s, s) for s in v.shape))
+
+        return replace(self, name=names[self.name], arguments=tuple(map(value, self.arguments)),
+                       results=tuple(map(value, self.results)),
+                       tolerance={names[k]: t for k, t in self.tolerance.items()},
+                       c_order=tuple(names[n] for n in self.c_order))  # fmt: skip
 
 
 def parse_value(name: str, text: object) -> Value:

@@ -45,17 +45,25 @@ PROMPT = (
 )
 
 def prepare(nb: Path, decl: Declaration, serial: Path, backend: str, folder: Path,
-            alias: str | None = None) -> str:
-    """Write the files the agent may read into ``folder``; return the routine's name there."""
+            alias: str | None = None) -> Declaration:
+    """Write the files the agent may read into ``folder``, and return the declaration as the
+    agent sees it, whose name is the routine's name there.
+
+    In a masked run that declaration has the masked names, so that the agent's check builds
+    against the header the agent read and names the arguments and results as the agent knows
+    them.
+    """
     python, c_source = notebook.python_source(nb), serial.read_text(encoding="utf-8")
-    name = alias or decl.name
-    header = generate.header(decl, name)
+    shown = decl
     if alias:
-        python, c_source, header = mask_sources(python, c_source, header, decl.name, alias)
+        declared = [v.name for v in (*decl.arguments, *decl.results)] + list(decl.sizes)
+        python, c_source, _, names = mask_sources(python, c_source, generate.header(decl, alias),
+                                                  decl.name, alias, declared)  # fmt: skip
+        shown = decl.renamed(names)
     (folder / "function.py").write_text(python, encoding="utf-8")
     (folder / "serial.c").write_text(c_source, encoding="utf-8")
-    (folder / f"{name}.h").write_text(header, encoding="utf-8")
-    return name
+    (folder / f"{shown.name}.h").write_text(generate.header(shown, shown.name), encoding="utf-8")
+    return shown
 
 
 def prompt(name: str, backend: str) -> str:
@@ -71,12 +79,17 @@ def toolset(nb: Path, decl: Declaration, folder: Path, name: str, backend: str,
             cache: Path) -> Toolset:
     """The agent's tools: read its three files and its routine, write the routine, check it.
 
+    ``decl`` is the declaration that ``prepare`` returned, so that in a masked run the check
+    shows only masked names.
+
     ``cache`` is a folder outside the agent's reach in which the check keeps the serial
     routine's answers and times at the benchmark size; the caller deletes it afterwards.
     """
     source = generate.routine_file(name, backend)
 
     def report(verdict: judge.Verdict) -> str:
+        if verdict.stage == "notebook":  # its message names the notebook, which masking hides
+            return "check failed: the Python could not be run, which is no fault of your routine"
         if not verdict.correct:
             return "check failed: " + "; ".join(verdict.log)
         faster = (verdict.speedup or 0) >= AGENT_GOAL

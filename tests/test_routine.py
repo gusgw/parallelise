@@ -60,6 +60,16 @@ def test_a_declaration_that_cannot_work_is_refused(arguments, results, extra):
         declare(arguments, results, **extra)
 
 
+def test_a_renamed_declaration_keeps_everything_but_the_names():
+    decl = declare({"u": "float64[n, 3]", "t": "float64"}, {"u": "float64[n, 3]",
+                   "idx": "int64[<=n]"}, c_order=["u", "n", "t", "idx"])  # fmt: skip
+    shown = decl.renamed({"f": "g", "u": "v1", "t": "v2", "n": "v3", "idx": "v4"})
+    assert c_prototype(shown, "g") == ("void g(double *v1, long v3, double v2, long *v4, "
+                                       "long *v4_count)")  # fmt: skip
+    assert shown.updated == {"v1"} and set(shown.tolerance) == {"v1", "v4"}
+    assert (shown.test_sizes, shown.benchmark_size) == (decl.test_sizes, decl.benchmark_size)
+
+
 def test_inputs_and_results_survive_their_files(tmp_path):
     decl = declare({"x": "float64[n, m]", "k": "int32"}, {"idx": "int64[<=n]", "s": "float32"})
     x = np.arange(6.0).reshape(2, 3)

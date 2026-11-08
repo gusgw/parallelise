@@ -185,7 +185,8 @@ def cmd_run(args: argparse.Namespace) -> int:
     agent = get_agent(args.agent)
     work_dir = _new_work_folder(Path(settings.work_root) / folder.name / args.backend
                                 / _safe(settings.model) / args.agent)  # fmt: skip
-    name = convert.prepare(nb, decl, serial_c, args.backend, work_dir, alias=args.masked)
+    shown = convert.prepare(nb, decl, serial_c, args.backend, work_dir, alias=args.masked)
+    name = shown.name
     started = time.perf_counter()
     # The check's cache of serial answers at the benchmark size can take gigabytes, so it is
     # kept only while the agent works.
@@ -194,7 +195,8 @@ def cmd_run(args: argparse.Namespace) -> int:
         try:
             result = agent.run(work_dir, convert.task(name, args.backend), settings, client,
                                args.step_budget,
-                               convert.toolset(nb, decl, work_dir, name, args.backend, Path(cache)),
+                               convert.toolset(nb, shown, work_dir, name, args.backend,
+                                               Path(cache)),
                                convert.prompt(name, args.backend))  # fmt: skip
         except AgentUnavailable:
             raise

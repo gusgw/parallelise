@@ -135,9 +135,11 @@ that all three designs are measured alike.
 
 Masking renames every name that the sources define, the same in the Python, the C and the header,
 and removes the comments and docstrings, except the header's statement of the contract, so that a
-model cannot recognise an algorithm by its name and recall a solution. Names that belong to Python,
-NumPy, the C library or the backend stay, so the masked prefix sum still calls `np.cumsum`: masking
-makes recall harder but cannot prevent it.
+model cannot recognise an algorithm by its name and recall a solution. The agent's check builds the
+routine against the same masked header and calls the arguments and results by their masked names,
+so that neither a compiler's message nor the report of a wrong answer gives the old names away.
+Names that belong to Python, NumPy, the C library or the backend stay, so the masked prefix sum
+still calls `np.cumsum`: masking makes recall harder but cannot prevent it.
 
 ## The problems
 

@@ -21,6 +21,7 @@ from __future__ import annotations
 import ast
 import re
 import subprocess
+from collections.abc import Iterable
 
 from ..errors import ParalleliseError
 
@@ -176,12 +177,14 @@ def _mask_python(source: str, rename: _Renamer, routine: str) -> str:
     return ast.unparse(ast.fix_missing_locations(masker.visit(tree))) + "\n"
 
 
-def mask_sources(python: str, serial_c: str, header: str, routine: str,
-                 alias: str) -> tuple[str, str, str]:
-    """Mask a routine's Python, its serial C and its header together, and return all three.
+def mask_sources(python: str, serial_c: str, header: str, routine: str, alias: str,
+                 also: Iterable[str] = ()) -> tuple[str, str, str, dict[str, str]]:
+    """Mask a routine's Python, its serial C and its header together.
 
-    The header must already be made under the alias. ``alias`` must be a plain name that the
-    sources do not use, or ParalleliseError is raised.
+    Returns the three masked sources and the new name of every name that was changed, with a
+    new name too for each of ``also``, such as a result that no source names. The header must
+    already be made under the alias. ``alias`` must be a plain name that the sources do not
+    use, or ParalleliseError is raised.
     """
     used = set(_IDENT.findall(python + serial_c))
     kept = _system_names(serial_c) | _C_WORDS
@@ -192,4 +195,7 @@ def mask_sources(python: str, serial_c: str, header: str, routine: str,
     rename = _Renamer(routine, alias, used | kept | set(_IDENT.findall(header)))
     masked_header = _mask_c(header, rename, kept)
     masked_python = _mask_python(python, rename, routine)
-    return masked_python, _mask_c(strip_c_comments(serial_c), rename, kept), masked_header
+    masked_c = _mask_c(strip_c_comments(serial_c), rename, kept)
+    for name in also:
+        rename(name)
+    return masked_python, masked_c, masked_header, dict(rename.names)
