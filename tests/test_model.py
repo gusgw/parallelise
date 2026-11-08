@@ -2,7 +2,6 @@
 
 import asyncio
 
-import httpx
 import httpx2
 import pytest
 
@@ -75,8 +74,8 @@ def test_the_throttle_doubles_its_wait_up_to_thirty_seconds():
     assert [throttle.next_wait(None) for _ in range(6)] == [2, 4, 8, 16, 30, 30]
 
 
-@pytest.mark.parametrize("library", [httpx, httpx2], ids=["httpx", "httpx2"])
-def test_asynchronous_clients_wait_and_are_counted_by_the_same_meter(library):
+def test_the_asynchronous_client_of_pydantic_ai_waits_and_is_counted_by_the_same_meter():
+    transport = pytest.importorskip("parallelise.agents.pydantic_agent").MeteredTransport
     waits: list[float] = []
 
     async def asleep(seconds):
@@ -87,8 +86,7 @@ def test_asynchronous_clients_wait_and_are_counted_by_the_same_meter(library):
             client.meter.async_sleep = asleep
 
             async def ask():
-                transport = client.meter.async_transport(library)
-                async with library.AsyncClient(transport=transport) as c:
+                async with httpx2.AsyncClient(transport=transport(client.meter)) as c:
                     await c.post(f"{server.url}/chat/completions", json={"model": "local"})
 
             asyncio.run(ask())

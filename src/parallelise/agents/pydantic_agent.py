@@ -7,7 +7,9 @@ allows, so that this design has the same budget as the others.
 
 The framework's graph is driven one node at a time, so that the time limit can be checked
 before each call to the model. The model is reached through an ``httpx2`` client, the HTTP
-library that Pydantic AI uses, whose transport is the run's meter.
+library that Pydantic AI uses, with a transport defined here that counts and times each answer
+in the run's meter and waits out refusals, as the plain client's transport does; the OpenAI
+library's own retries are off, so that they do not repeat that waiting.
 """
 
 from __future__ import annotations
@@ -18,8 +20,11 @@ import time
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
+import httpx2
+
 from parallelise.agents.base import AgentResult, Toolset
 from parallelise.errors import AgentUnavailable
+from parallelise.model import Meter, Throttle
 
 if TYPE_CHECKING:
     from parallelise.config import Settings
@@ -30,18 +35,45 @@ log = logging.getLogger("parallelise.agents.pydantic")
 INSTALL_HINT = "install the framework with: pip install 'parallelise[agents]'"
 
 
+class MeteredTransport(httpx2.AsyncBaseTransport):
+    """The asynchronous transport through which Pydantic AI reaches the model."""
+
+    def __init__(self, meter: Meter) -> None:
+        self.meter, self.inner = meter, httpx2.AsyncHTTPTransport()
+
+    async def handle_async_request(self, request: httpx2.Request) -> httpx2.Response:
+        throttle = Throttle(self.meter.throttle_wait_s)
+        while True:
+            started = time.perf_counter()
+            response = await self.inner.handle_async_request(request)
+            if response.status_code == 429:
+                wait = throttle.next_wait(response.headers.get("retry-after"))
+                if wait is not None:
+                    await response.aclose()
+                    await self.meter.async_sleep(wait)
+                    continue
+            await response.aread()
+            self.meter.record(request, response, time.perf_counter() - started)
+            return response
+
+    async def aclose(self) -> None:
+        await self.inner.aclose()
+
+
 def build_agent(toolset: Toolset, system_prompt: str, settings: Settings, http_client: Any,
                 step_budget: int) -> tuple[Any, dict[str, bool]]:
     """Build the Pydantic AI agent with the shared tools; return it and its exit's state."""
     try:
         import pydantic_ai
+        from openai import AsyncOpenAI
         from pydantic_ai.models.openai import OpenAIChatModel
         from pydantic_ai.providers.openai import OpenAIProvider
         from pydantic_ai.settings import ModelSettings
     except ImportError as exc:
         raise AgentUnavailable(f"the pydantic agent needs pydantic-ai; {INSTALL_HINT}") from exc
-    provider = OpenAIProvider(base_url=settings.gateway_url,
-                              api_key=settings.api_key or "not-needed", http_client=http_client)
+    provider = OpenAIProvider(openai_client=AsyncOpenAI(
+        base_url=settings.gateway_url, api_key=settings.api_key or "not-needed",
+        http_client=http_client, max_retries=0))  # fmt: skip
     model = OpenAIChatModel(settings.model, provider=provider)
 
     def caller(name: str):
@@ -100,12 +132,8 @@ class PydanticAgent:
     def run(self, work_dir: Path, task: str, settings: Settings, client: ModelClient,
             step_budget: int, toolset: Toolset, system_prompt: str) -> AgentResult:
         """Run the agent; ``step_budget`` limits the number of model requests."""
-        try:
-            import httpx2
-        except ImportError as exc:
-            raise AgentUnavailable(f"the pydantic agent needs httpx2; {INSTALL_HINT}") from exc
         http_client = httpx2.AsyncClient(timeout=settings.request_timeout_s,
-                                         transport=client.meter.async_transport(httpx2))
+                                         transport=MeteredTransport(client.meter))
         agent, exit_ = build_agent(toolset, system_prompt, settings, http_client, step_budget)
         outcome: dict[str, Any] = {"notes": "ended without passing checks"}
 

@@ -7,7 +7,7 @@ conversation continues with the failure appended, until the step budget is spent
 
 The graph is streamed state by state, which lets the agent stop between steps when the time
 limit has passed, and keeps the messages when a run ends in an error. The model is reached
-through HTTP clients whose transports are the run's meter; the OpenAI library's own retries are
+through an HTTP client whose transport is the run's meter; the OpenAI library's own retries are
 off, so that they do not repeat the meter's waiting.
 """
 
@@ -49,8 +49,6 @@ def build_agent(toolset: Toolset, system_prompt: str, settings: Settings,
         model=settings.model, temperature=settings.temperature, max_retries=0,
         http_client=httpx.Client(timeout=settings.request_timeout_s,
                                  transport=client.meter.transport()),
-        http_async_client=httpx.AsyncClient(timeout=settings.request_timeout_s,
-                                            transport=client.meter.async_transport()),
     )  # fmt: skip
 
     def caller(name: str):

@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from parallelise.agents.base import Agent, AgentResult
-from parallelise.errors import ParalleliseError
+from parallelise.errors import AgentUnavailable, ParalleliseError
 
 __all__ = ["Agent", "AgentResult", "AGENT_NAMES", "get_agent"]
 
@@ -17,8 +17,11 @@ def get_agent(name: str) -> Agent:
 
         return BasicAgent()
     if name == "pydantic":
-        from parallelise.agents.pydantic_agent import PydanticAgent
-
+        try:
+            from parallelise.agents.pydantic_agent import PydanticAgent
+        except ImportError as exc:
+            raise AgentUnavailable(f"the pydantic agent needs httpx2 ({exc}); install the "
+                                   "framework with: pip install 'parallelise[agents]'") from exc
         return PydanticAgent()
     if name == "langgraph":
         from parallelise.agents.langgraph_agent import LangGraphAgent

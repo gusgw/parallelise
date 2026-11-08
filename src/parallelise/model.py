@@ -18,7 +18,6 @@ import math
 import time
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
-from functools import cache
 from typing import Any
 
 import httpx
@@ -99,11 +98,6 @@ class Meter:
         """A transport for an ``httpx.Client`` that reaches the model."""
         return _MeteredTransport(self, httpx.HTTPTransport())
 
-    def async_transport(self, library: Any = httpx) -> Any:
-        """A transport for an asynchronous client of ``library``: httpx, or httpx2, which
-        Pydantic AI uses."""
-        return _async_transport_class(library)(self, library.AsyncHTTPTransport())
-
     def summary(self) -> dict[str, Any]:
         """The requests, tokens, mean latency and completion tokens per second so far.
 
@@ -136,44 +130,12 @@ class _MeteredTransport(httpx.BaseTransport):
                     response.close()
                     self.meter.sleep(wait)
                     continue
-                # The OpenAI library obeys this, and so does not wait all over again.
-                response.headers["x-should-retry"] = "false"
             response.read()
             self.meter.record(request, response, time.perf_counter() - started)
             return response
 
     def close(self) -> None:
         self.inner.close()
-
-
-@cache
-def _async_transport_class(library: Any) -> Any:
-    """The asynchronous form of ``_MeteredTransport``, for httpx or for httpx2."""
-
-    class _MeteredAsyncTransport(library.AsyncBaseTransport):  # type: ignore[misc, name-defined]
-        def __init__(self, meter: Meter, inner: Any) -> None:
-            self.meter, self.inner = meter, inner
-
-        async def handle_async_request(self, request: Any) -> Any:
-            throttle = Throttle(self.meter.throttle_wait_s)
-            while True:
-                started = time.perf_counter()
-                response = await self.inner.handle_async_request(request)
-                if response.status_code == 429:
-                    wait = throttle.next_wait(response.headers.get("retry-after"))
-                    if wait is not None:
-                        await response.aclose()
-                        await self.meter.async_sleep(wait)
-                        continue
-                    response.headers["x-should-retry"] = "false"
-                await response.aread()
-                self.meter.record(request, response, time.perf_counter() - started)
-                return response
-
-        async def aclose(self) -> None:
-            await self.inner.aclose()
-
-    return _MeteredAsyncTransport
 
 
 class ModelClient:
