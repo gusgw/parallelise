@@ -134,8 +134,8 @@ no need for: an import other than math and NumPy, a file, a clock, the environme
 between calls, a call to code that the translation does not define, a loop that only waits, a
 write to an argument that the routine may only read, or a comparison of the number of workers
 with a fixed number. The routine is also checked against the notebook at every size where the
-translation shows its code changing, from the translator's own list and from the fixed numbers
-that its sizes are compared with. A repeat with one worker or a kept answer thus shows as an
+translation shows its code changing, from the fixed numbers that its sizes are compared with.
+A repeat with one worker or a kept answer thus shows as an
 obviously silly serial algorithm, and a shortened loop as a wrong answer at the size where it
 begins. When anything is flagged, the fixed model is shown the notebook's Python and the
 translation, and nothing else, and asked whether the two compute the same results; its answer

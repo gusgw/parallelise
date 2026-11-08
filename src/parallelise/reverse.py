@@ -17,8 +17,8 @@ translation of a numerical routine has no need for: an import other than math an
 file, a clock, the environment, state kept between calls, a call to a function that the
 translation does not define, an empty loop that only waits, a write to an argument that the
 routine may only read, or a comparison of the number of workers with a fixed number. It also
-collects every size at which the code changes what it does, from the translator's list and from
-the fixed numbers that the routine's integer parameters are compared with, and the routine is
+collects every size at which the code changes what it does, from the fixed numbers that the
+routine's integer parameters are compared with, and the routine is
 checked against the notebook's Python at each of them. When anything is flagged, the fixed model
 is shown the notebook's Python and the translation, and nothing else, and asked whether the two
 compute the same results; its answer goes to the user beside the flags, never into a verdict.
@@ -91,11 +91,8 @@ PROMPT = (
     "Translate every statement, including those that change no result. Write the work of the "
     "threads, processes or graphics-card threads as loops over them in order, every message or "
     "copy between them as an assignment, and every call that gives their number as workers. "
-    "Use only Python, math and NumPy. At the top of the file, set SIZES to a list of every "
-    "value of a size at which the routine does something different, such as a value of n at "
-    "which it branches, or to [] if there is none. Call the tool check to compare your Python "
-    "with the C on fresh inputs, and when check reports that they agree, reply that you have "
-    "finished."
+    "Use only Python, math and NumPy. Call the tool check to compare your Python with the C on "
+    "fresh inputs, and when check reports that they agree, reply that you have finished."
 )
 
 OPINION = (
@@ -330,9 +327,8 @@ def read_translation(text: str, decl: Declaration) -> tuple[list[str], list[int]
     """Apply the fixed rule to a translation: return what it flags, each finding once with the
     lines where it occurs, and the sizes at which its code changes.
 
-    The sizes are those in the translator's SIZES and every whole number that an integer
-    parameter of the routine is compared with, each with the next one, since a branch on
-    n > k changes at k + 1.
+    The sizes are every whole number that an integer parameter of the routine is compared with,
+    each with the next one, since a branch on n > k changes at k + 1.
     """
     try:
         tree = ast.parse(text)
@@ -357,7 +353,7 @@ def read_translation(text: str, decl: Declaration) -> tuple[list[str], list[int]
     defined = _bound(tree) | set(dir(builtins))
     # Module-level names, which keep their values between calls, and the nodes inside functions.
     kept = {n.id for s in tree.body if isinstance(s, ast.Assign) for n in s.targets
-            if isinstance(n, ast.Name) and n.id != "SIZES"} | {
+            if isinstance(n, ast.Name)} | {
         s.name for s in tree.body if isinstance(s, (ast.FunctionDef, ast.ClassDef))}  # fmt: skip
     inside = {id(n) for s in tree.body if isinstance(s, ast.FunctionDef) for n in ast.walk(s)}
     for node in ast.walk(tree):
@@ -401,7 +397,6 @@ def read_translation(text: str, decl: Declaration) -> tuple[list[str], list[int]
     for arguments in (function.args.defaults, function.args.kw_defaults):
         if any(isinstance(d, (ast.List, ast.Dict, ast.Set, ast.Call)) for d in arguments if d):
             flag("it keeps state between calls in a default argument", function)
-    changes |= _listed_sizes(tree, flag)
     ordered = sorted(found.items(), key=lambda item: min(item[1], default=0))
     return [finding + _where(lines) for finding, lines in ordered], sorted(changes)
 
@@ -489,18 +484,6 @@ def _call_flags(node: ast.Call, defined: set[str], read_only: set[str], kept: se
     for keyword in node.keywords:
         if keyword.arg == "out" and _base(keyword.value) in read_only:
             flag(f"it writes to {_base(keyword.value)}, which the routine may only read", node)
-
-
-def _listed_sizes(tree: ast.Module, flag: Callable[[str, ast.AST], None]) -> set[int]:
-    """The sizes in the translator's SIZES list, each with the next one."""
-    for node in tree.body:
-        if isinstance(node, ast.Assign) and any(isinstance(t, ast.Name) and t.id == "SIZES"
-                                                for t in node.targets):  # fmt: skip
-            try:
-                return {int(v) + d for v in ast.literal_eval(node.value) for d in (0, 1)}
-            except (ValueError, TypeError, SyntaxError):
-                flag("its SIZES is not a list of whole numbers", node)
-    return set()
 
 
 # --- the child's side --------------------------------------------------------------------------

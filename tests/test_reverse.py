@@ -31,8 +31,6 @@ COMPACT = parse_declaration({"arguments": {"x": "float64[n]", "t": "float64"},
 HONEST = """
 import math
 
-SIZES = []
-
 
 def routine(a, b, n, workers):
     h = (b - a) / n
@@ -45,8 +43,6 @@ def routine(a, b, n, workers):
 
 REPEATS = """
 import math
-
-SIZES = []
 
 
 def serial_sum(a, b, n):
@@ -69,7 +65,6 @@ def routine(a, b, n, workers):
 STORED = """
 import math
 
-SIZES = []
 last_n = -1
 last_r = 0.0
 last_t = 0.0
@@ -95,8 +90,6 @@ def routine(a, b, n, workers):
 SHORTENED = """
 import math
 
-SIZES = [1000000]
-
 
 def routine(a, b, n, workers):
     m = n // 10 if n > 1000000 else n
@@ -118,7 +111,7 @@ def test_a_faithful_translation_of_an_honest_routine_is_not_flagged():
 
 def test_work_that_depends_on_the_number_of_workers_is_flagged():
     flags, _ = reverse.read_translation(REPEATS, DECL)
-    assert flags == ["its work depends on the number of workers: w >= 4 (line 17)"]
+    assert flags == ["its work depends on the number of workers: w >= 4 (line 15)"]
 
 
 def test_state_kept_between_calls_a_clock_and_a_wait_are_flagged():
