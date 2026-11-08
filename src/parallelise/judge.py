@@ -47,7 +47,7 @@ from pathlib import Path
 
 from . import generate, notebook, provenance, rules
 from .config import without_secrets
-from .routine import Declaration, compare, extents, read_results, read_sizes
+from .routine import Declaration, compare, extents, read_results
 
 TIMED_CALLS = 5
 #: The most seconds that one call at a test size may take. An honest routine takes far less,
@@ -352,43 +352,6 @@ def run_routine(decl: Declaration, routine: Path, backend: str, name: str,
     return _in_fresh_folder(decl, name, backend, routine, None, timeout_s, work)
 
 
-def quick_check(nb: Path, decl: Declaration, routine: Path, serial: Path, backend: str,
-                name: str, cache: Path, timeout_s: float = 600.0) -> Verdict:
-    """The check an agent calls: correctness at the test sizes, and speed at the benchmark size.
-
-    The routine is compared with the Python on fresh inputs at every declared test size, and
-    then timed at the benchmark size against the serial routine, whose answers and times on
-    those inputs are measured once and kept in ``cache``. The final judgement does not use
-    this check; it draws new inputs of its own.
-    """
-
-    def work(folder: Path, deadline: float, log: list[str]) -> Verdict:
-        _build(folder, name, backend, "driver")
-        log.append(_against_python(nb, decl, folder, "driver", backend, list(decl.test_sizes),
-                                   deadline))  # fmt: skip
-        inputs = [cache / f"bench{i}.in" for i in range(4)]
-        if not (cache / "serial.times").is_file():
-            cache.mkdir(parents=True, exist_ok=True)
-            notebook.write_input_files(nb, [(decl.benchmark_size, 1000 + i, f)
-                                            for i, f in enumerate(inputs)], _left(deadline))
-            _build(folder, name, backend, "serial_driver")
-            spent = _time_calls(Driver(folder, "serial_driver", "serial", 1, deadline), inputs)
-            (cache / "serial.times").write_text(" ".join(map(str, spent)))
-        serial_times = [float(x) for x in (cache / "serial.times").read_text().split()]
-        sizes = [read_sizes(f, decl) for f in inputs]
-        most = max(_widths(backend, max(_bytes_of(decl, s) for s in sizes)))
-        spent = _time_calls(Driver(folder, "driver", backend, most, deadline), inputs,
-                            lambda i, result: _check_against_serial(decl, inputs[i], result,
-                                                                    sizes[i]))  # fmt: skip
-        speedup = _compared(serial_times, spent)[0]
-        log.append(f"at the benchmark size it takes {statistics.median(spent):.4f} s with {most} "
-                   f"workers against the serial routine's {statistics.median(serial_times):.4f} s: "
-                   f"a speed-up of {speedup:.2f}")  # fmt: skip
-        return Verdict(True, "none", speedup)
-
-    return _in_fresh_folder(decl, name, backend, routine, serial, timeout_s, work)
-
-
 def _compared(slower: list[float], faster: list[float]) -> tuple[float, bool]:
     """Compare two programs' times on the same inputs, input by input.
 
@@ -407,27 +370,6 @@ def _check_against_serial(decl: Declaration, inputs: Path, result: Path,
     result.unlink()
     if wrong:
         raise _Stop("benchmark", "wrong at the benchmark size: " + "; ".join(wrong))
-
-
-def _time_calls(driver: Driver, inputs: list[Path],
-                check: Callable[[int, Path], None] | None = None) -> list[float]:
-    """One untimed call on the first input, then a timed call on each of the others.
-
-    Without ``check`` the results are kept beside the inputs as the serial routine's; with
-    it, ``check(i, result)`` is called on each result as soon as it is written.
-    """
-    try:
-        times = []
-        for i, f in enumerate(inputs):
-            result = f.with_suffix(".serial" if check is None else ".routine")
-            spent = driver.call(f, result, timed=i > 0)
-            if check is not None:
-                check(i, result)
-            if spent is not None:
-                times.append(spent)
-        return times
-    finally:
-        driver.close()
 
 
 def _benchmark(nb: Path, folder: Path, decl: Declaration, backend: str, deadline: float,

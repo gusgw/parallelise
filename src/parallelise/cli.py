@@ -10,7 +10,6 @@ import argparse
 import hashlib
 import logging
 import sys
-import tempfile
 import time
 from collections.abc import Callable
 from pathlib import Path
@@ -182,15 +181,11 @@ def cmd_run(args: argparse.Namespace) -> int:
     shown = convert.prepare(nb, decl, serial_c, args.backend, work_dir, alias=args.masked)
     name = shown.name
     started = time.perf_counter()
-    # The check's cache of serial answers at the benchmark size can take gigabytes, so it is
-    # kept only while the agent works.
-    with ModelClient(settings) as client, \
-            tempfile.TemporaryDirectory(prefix="parallelise-check-") as cache:
+    with ModelClient(settings) as client:
         try:
             result = agent.run(work_dir, convert.task(name, args.backend), settings, client,
                                args.step_budget,
-                               convert.toolset(nb, shown, work_dir, name, args.backend,
-                                               Path(cache)),
+                               convert.toolset(nb, shown, work_dir, name, args.backend),
                                convert.prompt(name, args.backend))  # fmt: skip
         except AgentUnavailable:
             raise

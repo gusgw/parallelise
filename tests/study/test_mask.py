@@ -75,7 +75,7 @@ def test_the_check_of_a_masked_run_names_nothing_that_masking_hid(tmp_path):
     folder.mkdir()
     shown = convert.prepare(nb, notebook.declaration(nb), FIXTURE / "serial.c", "openmp", folder,
                             alias="problem_a")  # fmt: skip
-    tools = convert.toolset(nb, shown, folder, shown.name, "openmp", tmp_path / "cache")
+    tools = convert.toolset(nb, shown, folder, shown.name, "openmp")
     a, b, n = (v.name for v in shown.arguments)
     wrong = (f'#include "problem_a.h"\ndouble problem_a(double {a}, double {b}, long {n})\n'
              f"{{ (void){a}; (void){b}; (void){n}; return -1.0; }}\n")

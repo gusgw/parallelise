@@ -3,9 +3,10 @@
 The agent works in a folder that holds three files it may read: the notebook's Python
 (``function.py``), the problem's serial routine (``serial.c``) and the generated header.
 In a study run all three are masked: the routine's name becomes an alias, and comments and
-telling names are removed. The agent writes one file, its routine. Its check builds the
-routine, compares it with the Python on fresh inputs at the test sizes, and times it
-against the serial routine at the benchmark size. It finishes when the check finds the
+telling names are removed. The agent writes one file, its routine. Its check is the
+judgement itself, made afresh each time: the routine is compared with the Python on fresh
+inputs and timed against the serial routine at the benchmark size. It finishes when the check
+finds the
 routine correct and at least ``AGENT_GOAL`` times as fast as the serial routine; a routine
 that never gets there is still judged when the agent stops.
 
@@ -73,15 +74,11 @@ def task(name: str, backend: str) -> str:
     return f"Write {generate.routine_file(name, backend)}, the parallel version of {name}."
 
 
-def toolset(nb: Path, decl: Declaration, folder: Path, name: str, backend: str,
-            cache: Path) -> Toolset:
+def toolset(nb: Path, decl: Declaration, folder: Path, name: str, backend: str) -> Toolset:
     """The agent's tools: read its three files and its routine, write the routine, check it.
 
     ``decl`` is the declaration that ``prepare`` returned, so that in a masked run the check
     shows only masked names.
-
-    ``cache`` is a folder outside the agent's reach in which the check keeps the serial
-    routine's answers and times at the benchmark size; the caller deletes it afterwards.
     """
     source = generate.routine_file(name, backend)
 
@@ -95,8 +92,7 @@ def toolset(nb: Path, decl: Declaration, folder: Path, name: str, backend: str,
                 "check: correct, but not yet faster than serial.c; ") + "; ".join(verdict.log)
 
     def check() -> judge.Verdict:
-        return judge.quick_check(nb, decl, folder / source, folder / "serial.c", backend, name,
-                                 cache)  # fmt: skip
+        return judge.judge(nb, decl, folder / source, folder / "serial.c", backend, name=name)
 
     def finish() -> tuple[bool, str]:
         verdict = check()
