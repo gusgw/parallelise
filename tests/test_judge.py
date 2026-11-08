@@ -45,6 +45,15 @@ def test_the_known_good_routine_is_correct_and_its_speed_is_measured(decl, tmp_p
     assert verdict.speedup is not None and verdict.speedup > 0
 
 
+def test_a_serial_routine_is_checked_against_the_python_at_the_sizes_given(decl, tmp_path):
+    verdict = judge.correct_at(NOTEBOOK, decl, SERIAL, "serial", [1, 1000])
+    assert verdict.correct and verdict.log == ["correct at sizes [1, 1000] with [1] workers"]
+    wrong = tmp_path / "serial.c"
+    wrong.write_text(SERIAL.read_text().replace("return sum * h;", "return 2.0 * sum * h;"))
+    verdict = judge.correct_at(NOTEBOOK, decl, wrong, "serial", [1, 1000])
+    assert not verdict.correct and verdict.stage == "test", verdict.log
+
+
 def test_a_routine_wrong_only_above_the_test_sizes_fails_at_the_benchmark(decl, tmp_path):
     verdict = verdict_for(decl, tmp_path, cheat("wrong_at_benchmark_size"))
     assert not verdict.correct and verdict.stage == "benchmark", verdict.log

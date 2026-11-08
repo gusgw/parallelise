@@ -47,13 +47,13 @@ def toolset(nb: Path, decl: Declaration, folder: Path) -> Toolset:
         return ("check passed: " if verdict.correct else "check failed: ") + "; ".join(verdict.log)
 
     def finish() -> tuple[bool, str]:
-        verdict = judge.check_serial(nb, decl, folder / source)
+        verdict = judge.correct_at(nb, decl, folder / source, "serial")
         return verdict.correct, report(verdict) + "\nFix the C file, call check, then finish."
 
     return file_toolset(folder, ["function.py", f"{decl.name}.h"], source,
                         "Build your C file and compare it with the Python.",
-                        lambda: report(judge.check_serial(nb, decl, folder / source,
-                                                          list(decl.test_sizes))),
+                        lambda: report(judge.correct_at(nb, decl, folder / source, "serial",
+                                                        list(decl.test_sizes))),
                         finish)  # fmt: skip
 
 
@@ -94,7 +94,7 @@ def translate(nb: Path, settings: Settings, dest: Path,
         if not written.is_file():
             return judge.Verdict(False, "no-files", log=["no translation was written"]), used
         sizes = [*decl.test_sizes, decl.benchmark_size]
-        verdict = judge.check_serial(nb, decl, written, sizes, timeout_s=3600)
+        verdict = judge.correct_at(nb, decl, written, "serial", sizes, timeout_s=3600)
         if verdict.correct:
             dest.write_text(note(nb, settings.model, sizes) + written.read_text(encoding="utf-8"),
                             encoding="utf-8")  # fmt: skip

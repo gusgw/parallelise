@@ -308,34 +308,26 @@ def judge(nb: Path, decl: Declaration, routine: Path, serial: Path, backend: str
     return _in_fresh_folder(decl, name, backend, routine, serial, timeout_s, work)
 
 
-def check_serial(nb: Path, decl: Declaration, serial: Path, sizes: list[int] | None = None,
-                 timeout_s: float = 600.0) -> Verdict:
-    """Check a serial routine against the notebook's Python at the given sizes.
+def correct_at(nb: Path, decl: Declaration, routine: Path, backend: str,
+               sizes: list[int] | None = None, name: str | None = None,
+               timeout_s: float = 900.0) -> Verdict:
+    """Check a routine against the notebook's Python at the given sizes, or at the test sizes
+    and two drawn at random when none are given.
 
-    The sizes are the declared test sizes and two at random when none are given. This is the
-    check by which the translation of step 1 is accepted.
+    The backend "serial" checks a serial routine, as step 1 does before it accepts one.
     """
-
-    def work(folder: Path, deadline: float, log: list[str]) -> Verdict:
-        _build(folder, decl.name, "serial", "serial_driver")
-        log.append(_against_python(nb, decl, folder, "serial_driver", "serial",
-                                   sizes or _test_sizes(decl), deadline))  # fmt: skip
-        return Verdict(True, "none")
-
-    return _in_fresh_folder(decl, decl.name, "serial", None, serial, timeout_s, work)
-
-
-def correct_at(nb: Path, decl: Declaration, routine: Path, backend: str, sizes: list[int],
-               name: str | None = None, timeout_s: float = 900.0) -> Verdict:
-    """Check a routine against the notebook's Python at the given sizes alone."""
     name = name or decl.name
+    serial = backend == "serial"
+    program = "serial_driver" if serial else "driver"
 
     def work(folder: Path, deadline: float, log: list[str]) -> Verdict:
-        _build(folder, name, backend, "driver")
-        log.append(_against_python(nb, decl, folder, "driver", backend, sizes, deadline))
+        _build(folder, name, backend, program)
+        log.append(_against_python(nb, decl, folder, program, backend, sizes or _test_sizes(decl),
+                                   deadline))  # fmt: skip
         return Verdict(True, "none")
 
-    return _in_fresh_folder(decl, name, backend, routine, None, timeout_s, work)
+    return _in_fresh_folder(decl, name, backend, None if serial else routine,
+                            routine if serial else None, timeout_s, work)  # fmt: skip
 
 
 def run_routine(decl: Declaration, routine: Path, backend: str, name: str,
