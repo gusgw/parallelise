@@ -71,8 +71,6 @@ NAME = "routine"
 TRANSLATION = "translation.py"
 #: The longest that one call of a translation may take.
 PYTHON_CALL_S = 120.0
-#: The most sizes at which a routine is checked again where its code changes.
-MOST_SIZES = 8
 
 BACKEND_WORDS = {
     "openmp": "OpenMP threads",
@@ -113,14 +111,12 @@ class Reading:
     """What step 5 found for one routine.
 
     ``compared`` says how the translation compared with the C at the end: "agrees", "differs",
-    or "not compared" when the C could not be run or no translation was written, and ``ended``
-    how the agent's run ended. ``flags`` are
+    or "not compared" when the C could not be run or no translation was written. ``flags`` are
     the rule's findings, ``sizes`` the sizes at which the routine was checked again against the
     notebook, and ``opinion`` the fixed model's answer, asked for only when something is flagged.
     """
 
     compared: str
-    ended: str = ""
     flags: list[str] = field(default_factory=list)
     sizes: list[int] = field(default_factory=list)
     opinion: str = ""
@@ -163,12 +159,10 @@ def translate_back(nb: Path, decl: Declaration, routine: Path, backend: str, set
         runs = judge.run_routine(decl, folder / source, backend, NAME, []).correct
         prompt = PROMPT.format(source=source, words=BACKEND_WORDS[backend])
         with ModelClient(settings) as client:
-            ended = BasicAgent().run(folder, f"Write {TRANSLATION}, the translation of {source}.",
-                                     settings, client, step_budget,
-                                     toolset(nb, decl, folder, source, backend, runs), prompt)
+            BasicAgent().run(folder, f"Write {TRANSLATION}, the translation of {source}.",
+                             settings, client, step_budget,
+                             toolset(nb, decl, folder, source, backend, runs), prompt)
             reading = _read(nb, decl, folder, source, backend, runs)
-            reading.ended = ended.error or ended.notes or (
-                "the time limit stopped the agent" if ended.time_limit_reached else "")
             if reading.flags and (folder / TRANSLATION).is_file():
                 reading.opinion = _opinion(client, nb, (folder / TRANSLATION).read_text())
             reading.used = client.meter.summary()
@@ -280,7 +274,6 @@ def _read(nb: Path, decl: Declaration, folder: Path, source: str, backend: str,
         compared = "agrees" if compare_with_c(nb, decl, folder, source, backend)[0] else "differs"
     flags, changes = read_translation(path.read_text(encoding="utf-8"), decl)
     sizes = [s for s in changes if 1 <= s <= decl.benchmark_size and s not in decl.test_sizes]
-    sizes = sizes[:MOST_SIZES]
     if runs and sizes:
         verdict = judge.correct_at(nb, decl, folder / source, backend, sizes, name=NAME)
         if not verdict.correct:

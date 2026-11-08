@@ -244,5 +244,5 @@ def test_a_routine_wrong_above_a_size_is_flagged_where_its_code_changes(tmp_path
 @pytest.mark.slow
 def test_a_routine_the_rule_refuses_is_translated_without_being_run(tmp_path):
     reading = step(tmp_path, "midpoint_stored_answer.c", STORED, "No.")
-    assert reading.compared == "not compared" and reading.ended == "the checks passed"
+    assert reading.compared == "not compared"
     assert any("keeps state between calls" in flag for flag in reading.flags)

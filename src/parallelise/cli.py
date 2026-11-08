@@ -280,8 +280,6 @@ def cmd_reverse(args: argparse.Namespace) -> int:
                                      settings, out, name=args.name,
                                      step_budget=args.step_budget)  # fmt: skip
     print(f"The translation {_COMPARED[reading.compared]}.")
-    if reading.ended:
-        print(f"How the agent's run ended: {reading.ended}.")
     print("The rule flags nothing." if not reading.flags else
           "The rule flags this:\n" + "\n".join(f"  - {flag}" for flag in reading.flags))
     if reading.sizes:
