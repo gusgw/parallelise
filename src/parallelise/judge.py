@@ -325,6 +325,41 @@ def check_serial(nb: Path, decl: Declaration, serial: Path, sizes: list[int] | N
     return _in_fresh_folder(decl, decl.name, "serial", None, serial, timeout_s, work)
 
 
+def correct_at(nb: Path, decl: Declaration, routine: Path, backend: str, sizes: list[int],
+               name: str | None = None, timeout_s: float = 900.0) -> Verdict:
+    """Check a routine against the notebook's Python at the given sizes alone."""
+    name = name or decl.name
+
+    def work(folder: Path, deadline: float, log: list[str]) -> Verdict:
+        _build(folder, name, backend, "driver")
+        log.append(_against_python(nb, decl, folder, "driver", backend, sizes, deadline))
+        return Verdict(True, "none")
+
+    return _in_fresh_folder(decl, name, backend, routine, None, timeout_s, work)
+
+
+def run_routine(decl: Declaration, routine: Path, backend: str, name: str,
+                calls: list[tuple[Path, Path, int]], timeout_s: float = 600.0) -> Verdict:
+    """Build a routine under the rule, and run it once on each (inputs, results, workers).
+
+    Each call writes its results where it says. The verdict is correct when the routine was
+    built and every call ran; it says nothing about the results themselves.
+    """
+
+    def work(folder: Path, deadline: float, log: list[str]) -> Verdict:
+        _build(folder, name, backend, "driver")
+        for inputs, results, workers in calls:
+            limit = min(deadline, time.monotonic() + TEST_CALL_S)
+            driver = Driver(folder, "driver", backend, workers, limit, stage="test")
+            try:
+                driver.call(inputs, results, timed=False)
+            finally:
+                driver.close()
+        return Verdict(True, "none")
+
+    return _in_fresh_folder(decl, name, backend, routine, None, timeout_s, work)
+
+
 def quick_check(nb: Path, decl: Declaration, routine: Path, serial: Path, backend: str,
                 name: str, cache: Path, timeout_s: float = 600.0) -> Verdict:
     """The check an agent calls: correctness at the test sizes, and speed at the benchmark size.

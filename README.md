@@ -18,8 +18,9 @@ an expected answer or the code that judges it, and the verdict comes from fixed 
 [docs/DESIGN.md](docs/DESIGN.md) sets out the design of the experiment, and
 [docs/RESULTS.md](docs/RESULTS.md) reports the measurements so far.
 
-A further check is planned and not yet built: an independent agent will translate each parallel
-routine back into plain Python, in which a trick hidden in the C would stand out. The larger goal
+A further check is built but not yet tried with a real model: an independent agent translates a
+parallel routine back into plain Python, in which a trick hidden in the C stands out, and a fixed
+rule flags whatever an honest numerical routine has no need for. The larger goal
 is an agent that also chooses the backend, deciding from the notebook alone whether threads,
 processes, a graphics card or plain serial code suit the algorithm.
 
@@ -100,6 +101,8 @@ the notebook.
     parallelise run problems/integrate --backend openmp --agent basic
     parallelise check work/integrate/openmp/gpt-oss-120b/basic/2026-11-07T09-30-00Z \
         --problem problems/integrate --backend openmp
+    parallelise reverse work/integrate/openmp/gpt-oss-120b/basic/2026-11-07T09-30-00Z/integrate.c \
+        --problem problems/integrate --backend openmp --model kimi-k2.5
     parallelise report --chart correct.svg
 
 `health` checks that the service answers, offers the model and completes one small request.
@@ -113,7 +116,10 @@ it referees every later run and sets the baseline of every speed-up.
 there, judges the routine, and appends a record to `results/local-runs.jsonl`. Its last line gives
 the verdict, such as `PASS: correct; faster than the serial routine (speed-up 3.21)`. `check`
 judges a finished work folder again, and `report` prints tables of correctness, speed and the use
-of each model. Every command explains itself with `--help` and takes `--log-level` (WARNING by
+of each model. `reverse` has the fixed model of `serial` translate a parallel routine back into
+plain Python, and reads the translation by a fixed rule; it prints what the rule flags and, when
+something is flagged, the model's opinion of whether the translation and the notebook's function
+compute the same results, which is never a verdict. Every command explains itself with `--help` and takes `--log-level` (WARNING by
 default) and `--log-json`, which writes each log line as JSON (JavaScript Object Notation). Every
 new record names the model's provider and the numeric precision of its weights, from `--serving`
 and `--quantisation`, which say "not recorded" and "not disclosed" unless they are given. The

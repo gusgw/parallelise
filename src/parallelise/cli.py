@@ -1,4 +1,4 @@
-"""The command line: parallelise health, serial, run, check and report.
+"""The command line: parallelise health, serial, run, check, reverse and report.
 
 An error that a person can cause is printed as one line that says what went wrong and what to
 do next, and the exit status is then 1.
@@ -15,7 +15,7 @@ import time
 from collections.abc import Callable
 from pathlib import Path
 
-from . import __version__, convert, generate, judge, notebook, provenance, serial
+from . import __version__, convert, generate, judge, notebook, provenance, reverse, serial
 from .agents import AGENT_NAMES, AgentResult, get_agent
 from .config import Settings
 from .errors import AgentUnavailable, ModelError, ParalleliseError
@@ -260,6 +260,42 @@ def cmd_check(args: argparse.Namespace) -> int:
     return 0 if verdict.correct else 1
 
 
+_COMPARED = {"agrees": "agrees with the C", "differs": "differs from the C",
+             "not compared": "could not be compared with the C"}  # fmt: skip
+
+
+def cmd_reverse(args: argparse.Namespace) -> int:
+    """Have a model translate a parallel routine back into plain Python, and read the
+    translation by the fixed rule. The exit status is 0 when the rule flags nothing."""
+    folder, nb = _problem(args.problem)
+    routine = Path(args.routine)
+    if not routine.is_file():
+        raise ParalleliseError(f"There is no routine at {routine}. Give its source file.")
+    _require_tools(args.backend)
+    settings = _settings(args)
+    settings.temperature = 0.0
+    out = Path(args.out) if args.out else _new_work_folder(
+        Path(settings.work_root) / "reverse" / folder.name / args.backend)  # fmt: skip
+    reading = reverse.translate_back(nb, notebook.declaration(nb), routine, args.backend,
+                                     settings, out, name=args.name,
+                                     step_budget=args.step_budget)  # fmt: skip
+    print(f"The translation {_COMPARED[reading.compared]}.")
+    if reading.ended:
+        print(f"How the agent's run ended: {reading.ended}.")
+    print("The rule flags nothing." if not reading.flags else
+          "The rule flags this:\n" + "\n".join(f"  - {flag}" for flag in reading.flags))
+    if reading.sizes:
+        print(f"The routine was checked again at the sizes {reading.sizes}.")
+    if reading.opinion:
+        print(f"The fixed model's opinion, which is no verdict: {reading.opinion}")
+    used = reading.used
+    print(f"The model made {used.get('requests', 0)} requests, with "
+          f"{used.get('prompt_tokens', 0)} prompt and {used.get('completion_tokens', 0)} "
+          "completion tokens.")  # fmt: skip
+    print(f"The translation and the reading are in {out}.")
+    return 1 if reading.flags else 0
+
+
 def cmd_report(args: argparse.Namespace) -> int:
     """Print the results tables, and draw the chart of correct runs if asked."""
     path = _settings(args).results_path
@@ -346,6 +382,21 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--backend", required=True, choices=generate.BACKENDS)
     p.add_argument("--timeout", type=_positive(float), default=900.0,
                    help="the seconds allowed for the judgement (default: 900)")
+
+    p = command("reverse", [common, endpoint], "have a model translate a parallel routine back "
+                "into plain Python, and flag what a faithful numerical routine has no need for",
+                "parallelise reverse work/integrate/openmp/local/basic/2026-11-08T09-30-00Z/"
+                "integrate.c --problem problems/integrate --backend openmp --model kimi-k2.5",
+                cmd_reverse)
+    p.add_argument("routine", help="the routine's source file")
+    p.add_argument("--problem", required=True, help="the problem folder it was written for")
+    p.add_argument("--backend", required=True, choices=generate.BACKENDS)
+    p.add_argument("--name", help="the routine's own name, if it is not the declared one, as "
+                   "in a masked run")
+    p.add_argument("--step-budget", type=_positive(int), default=40,
+                   help="the most requests the agent may make to the model (default: 40)")
+    p.add_argument("--out", help="the folder for the translation and the reading (default: a "
+                   "new folder under work/reverse)")
 
     p = command("report", [common], "print the tables of correct runs, speed and model use, "
                 "and draw a chart if asked", "parallelise report --results runs.jsonl "

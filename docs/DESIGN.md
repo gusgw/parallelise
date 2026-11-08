@@ -117,11 +117,32 @@ midpoint rule converges so fast that one using a four-hundredth of its subinterv
 benchmark size would stay inside the integration problem's tolerance, although that tolerance is
 only about twenty times the differences that honest orders of addition make. A routine that slows its own run with one worker inflates its
 scaling, though not its speed-up. A routine wrong only on inputs never drawn, or with a race that
-rarely shows, can pass by luck. A last step, planned but not yet built, is meant to expose most of
-these: an independent agent will translate each parallel routine back into plain Python, statement
-by statement, so that a branch on the size, a repeat with one worker or a shortened loop shows as
-an obviously silly serial algorithm. A race has no serial form, and will remain a matter for
-testing.
+rarely shows, can pass by luck. The reverse conversion, below, is meant to expose most of these.
+
+## The reverse conversion
+
+A last step, built but not yet tried with a real model, has an independent agent translate the
+parallel routine back into plain Python, statement by statement. The agent sees the routine,
+renamed `routine` and without its comments, and a header whose parameters are named v1, v2 and so
+on; it never sees the notebook, the problem's name, the goal or any verdict. It must take the
+number of workers as an argument and translate every statement, including those that change no
+result, and its check compares its Python with the C on fresh inputs, never with the notebook, so
+that nothing steers it towards hiding a trick.
+
+A fixed rule then reads the translation and flags anything that a faithful numerical routine has
+no need for: an import other than math and NumPy, a file, a clock, the environment, state kept
+between calls, a call to code that the translation does not define, a loop that only waits, a
+write to an argument that the routine may only read, or a comparison of the number of workers
+with a fixed number. The routine is also checked against the notebook at every size where the
+translation shows its code changing, from the translator's own list and from the fixed numbers
+that its sizes are compared with. A repeat with one worker or a kept answer thus shows as an
+obviously silly serial algorithm, and a shortened loop as a wrong answer at the size where it
+begins. When anything is flagged, the fixed model is shown the notebook's Python and the
+translation, and nothing else, and asked whether the two compute the same results; its answer
+goes to the reader beside the flags, never into a verdict. In the tests, faithful translations of
+the three cheats above are all flagged and one of the honest routine is not; whether the rule
+spares honest routines in general is for the first trials to show. A race has no serial form, and
+remains a matter for testing.
 
 ## Agent designs, the meter and masking
 
