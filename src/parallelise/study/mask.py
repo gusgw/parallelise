@@ -1,9 +1,9 @@
 """Masking what an agent sees of a routine, so that a model cannot recognise the algorithm by name.
 
 A language model may have seen well-known algorithms many times, so a result on a problem called
-"jacobi" may reflect memory rather than ability. ``mask_sources`` masks the three things an agent
-reads: the notebook's Python, the serial C and the generated header. Every number and every line
-of logic stay as they were; what changes is this:
+"jacobi" may reflect memory rather than ability. ``mask_sources`` masks the notebook's Python and
+the serial C, and gives the new names with which the agent's header is generated. Every number
+and every line of logic stay as they were; what changes is this:
 
 - the routine's name becomes the alias;
 - every other name that the sources define, from the arguments and results to the local
@@ -21,9 +21,9 @@ from __future__ import annotations
 import ast
 import re
 import subprocess
-from collections.abc import Iterable
 
 from ..errors import ParalleliseError
+from ..routine import Declaration
 
 _IDENT = re.compile(r"(?<![A-Za-z0-9_])[A-Za-z_][A-Za-z0-9_]*")
 # What C itself and its preprocessor reserve; names beginning with two underscores belong to the
@@ -177,13 +177,14 @@ def _mask_python(source: str, rename: _Renamer, routine: str) -> str:
     return ast.unparse(ast.fix_missing_locations(masker.visit(tree))) + "\n"
 
 
-def mask_sources(python: str, serial_c: str, header: str, routine: str, alias: str,
-                 also: Iterable[str] = ()) -> tuple[str, str, str, dict[str, str]]:
-    """Mask a routine's Python, its serial C and its header together.
+def mask_sources(python: str, serial_c: str, decl: Declaration,
+                 alias: str) -> tuple[str, str, dict[str, str]]:
+    """Mask the Python and the serial C of the routine that ``decl`` declares, together.
 
-    Returns the three masked sources and the new name of every name that was changed, with a
-    new name too for each of ``also``, such as a result that no source names. The header must
-    already be made under the alias. ``alias`` must be a plain name that the sources do not
+    The routine's parameters are renamed first, in their order, so that v1, v2 and so on follow
+    the prototype; then every name that the sources define; then any declared name left, such
+    as a result that the routine returns. Returns the masked Python, the masked C and the new
+    name of every name that was changed. ``alias`` must be a plain name that the sources do not
     use, or ParalleliseError is raised.
     """
     used = set(_IDENT.findall(python + serial_c))
@@ -192,10 +193,14 @@ def mask_sources(python: str, serial_c: str, header: str, routine: str, alias: s
         raise ParalleliseError(f"The alias {alias!r} must be a plain name, of letters, digits and "
                                "underscores, that the sources do not use already, such as "
                                "problem_a.")  # fmt: skip
-    rename = _Renamer(routine, alias, used | kept | set(_IDENT.findall(header)))
-    masked_header = _mask_c(header, rename, kept)
-    masked_python = _mask_python(python, rename, routine)
-    masked_c = _mask_c(strip_c_comments(serial_c), rename, kept)
-    for name in also:
+    bounded = {r.name for r in decl.results if r.bounded}
+    parameters = [name for item in decl.c_order
+                  for name in ([item, f"{item}_count"] if item in bounded else [item])]
+    rename = _Renamer(decl.name, alias, used | kept | set(parameters))
+    for name in parameters:
         rename(name)
-    return masked_python, masked_c, masked_header, dict(rename.names)
+    masked_python = _mask_python(python, rename, decl.name)
+    masked_c = _mask_c(strip_c_comments(serial_c), rename, kept)
+    for value in (*decl.arguments, *decl.results):
+        rename(value.name)
+    return masked_python, masked_c, dict(rename.names)

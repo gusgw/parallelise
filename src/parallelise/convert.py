@@ -56,9 +56,7 @@ def prepare(nb: Path, decl: Declaration, serial: Path, backend: str, folder: Pat
     python, c_source = notebook.python_source(nb), serial.read_text(encoding="utf-8")
     shown = decl
     if alias:
-        declared = [v.name for v in (*decl.arguments, *decl.results)] + list(decl.sizes)
-        python, c_source, _, names = mask_sources(python, c_source, generate.header(decl, alias),
-                                                  decl.name, alias, declared)  # fmt: skip
+        python, c_source, names = mask_sources(python, c_source, decl, alias)
         shown = decl.renamed(names)
     (folder / "function.py").write_text(python, encoding="utf-8")
     (folder / "serial.c").write_text(c_source, encoding="utf-8")
