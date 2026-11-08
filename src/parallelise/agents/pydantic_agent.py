@@ -47,7 +47,7 @@ class MeteredTransport(httpx2.AsyncBaseTransport):
             started = time.perf_counter()
             response = await self.inner.handle_async_request(request)
             if response.status_code == 429:
-                wait = throttle.next_wait(response.headers.get("retry-after"))
+                wait = throttle.next_wait()
                 if wait is not None:
                     await response.aclose()
                     await self.meter.async_sleep(wait)

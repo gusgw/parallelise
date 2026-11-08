@@ -76,17 +76,17 @@ def test_each_design_waits_out_refusals_through_the_meter(tmp_path, design):
     waits: list[float] = []
     result, used, _ = run(design, tmp_path, [WRITE, READ, DONE], waits=waits,
                           server={"statuses": [429, 429], "retry_after": "3"})
-    assert result.finished and waits == [3.0, 3.0] and used["requests"] == 3
+    assert result.finished and waits == [10.0, 10.0] and used["requests"] == 3
 
 
 @pytest.mark.parametrize("design", DESIGNS)
 def test_waiting_stops_once_the_allowance_is_spent_and_is_not_repeated(tmp_path, design):
     waits: list[float] = []
-    result, used, server = run(design, tmp_path, [READ], waits=waits, throttle_wait_s=3,
-                               server={"statuses": [429] * 100, "retry_after": "1"})
+    result, used, server = run(design, tmp_path, [READ], waits=waits, throttle_wait_s=25,
+                               server={"statuses": [429] * 100})
     assert not result.finished and "429" in result.error and used["requests"] == 0
-    # Four answers in all: the first, and one after each wait; no library may begin again.
-    assert waits == [1.0, 1.0, 1.0] and server.refused == 4
+    # Three answers in all: the first, and one after each pause; no library may begin again.
+    assert waits == [10.0, 10.0] and server.refused == 3
 
 
 def test_an_unknown_design_is_refused():

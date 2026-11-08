@@ -1,20 +1,20 @@
 """The client for an OpenAI-compatible chat endpoint, and the meter that every call goes through.
 
 One ``Meter`` serves a whole run. Every HTTP client that reaches the model, the plain agent's
-and the frameworks' alike, sends its requests through a transport that the meter makes, so
+and the frameworks' alike, sends its requests through a transport that reports to the meter, so
 each answer is timed and its tokens counted once, in the same way, whichever agent design
-asked. The same transport waits out HTTP 429 (too many requests): a shared model service often
-refuses requests for a while when it is busy, and giving up at the first refusal would end a run
-that only needed to wait. The wait is the number of seconds in the ``Retry-After`` header when
-there is one, and otherwise doubles from two seconds up to thirty; the waits for one request are
-limited, in total, by ``Settings.throttle_wait_s``.
+asked: the meter's own transport for synchronous clients, and one in the Pydantic AI design's
+module for its asynchronous client. Both wait out HTTP 429 (too many requests): a shared model
+service often refuses requests for a while when it is busy, and giving up at the first refusal
+would end a run that only needed to wait. A transport pauses for ``PAUSE_S`` seconds after each
+refusal and asks again, until the pauses for one request would pass
+``Settings.throttle_wait_s``.
 """
 
 from __future__ import annotations
 
 import asyncio
 import logging
-import math
 import time
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
@@ -28,39 +28,25 @@ from .errors import ModelError, ParalleliseError
 log = logging.getLogger("parallelise.model")
 
 MAX_ATTEMPTS = 3
-FIRST_WAIT_S, LONGEST_WAIT_S, SHORTEST_WAIT_S = 2.0, 30.0, 1.0
+#: The pause, in seconds, after each refusal of a busy model service (HTTP 429).
+PAUSE_S = 10.0
 
 
 class Throttle:
-    """Decides how long to wait after each HTTP 429 answer to one request, or to give up."""
+    """Decides whether to pause after each HTTP 429 answer to one request, or to give up."""
 
     def __init__(self, allowance_s: float) -> None:
-        self.allowance_s, self.waited_s, self.answers = allowance_s, 0.0, 0
+        self.allowance_s, self.waited_s = allowance_s, 0.0
 
-    def next_wait(self, retry_after: str | None) -> float | None:
-        """Return the seconds to wait before asking again, or None to give up.
-
-        A ``Retry-After`` of a number of seconds is obeyed, but never less than one second, and
-        if it is more than what is left of the allowance there is no point in waiting at all.
-        """
-        self.answers += 1
-        left = self.allowance_s - self.waited_s
-        try:
-            told = float(retry_after) if retry_after is not None else math.nan
-        except ValueError:
-            told = math.nan
-        if math.isfinite(told) and told >= 0:
-            wait = max(told, SHORTEST_WAIT_S)
-            if wait > left:
-                return None
-        else:
-            wait = min(FIRST_WAIT_S * 2 ** min(self.answers - 1, 20), LONGEST_WAIT_S, left)
-        if wait <= 0:
+    def next_wait(self) -> float | None:
+        """Return the seconds to pause before asking again, or None when another pause would pass
+        the allowance."""
+        if self.waited_s + PAUSE_S > self.allowance_s:
             return None
-        self.waited_s += wait
+        self.waited_s += PAUSE_S
         log.warning("the endpoint answered HTTP 429 (too many requests); waiting %g seconds "
-                    "(%g of %g seconds of waiting used)", wait, self.waited_s, self.allowance_s)
-        return wait
+                    "(%g of %g seconds of waiting used)", PAUSE_S, self.waited_s, self.allowance_s)
+        return PAUSE_S
 
 
 @dataclass
@@ -125,7 +111,7 @@ class _MeteredTransport(httpx.BaseTransport):
             started = time.perf_counter()
             response = self.inner.handle_request(request)
             if response.status_code == 429:
-                wait = throttle.next_wait(response.headers.get("retry-after"))
+                wait = throttle.next_wait()
                 if wait is not None:
                     response.close()
                     self.meter.sleep(wait)

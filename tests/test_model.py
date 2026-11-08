@@ -43,13 +43,13 @@ def test_an_endpoint_that_cannot_be_reached_is_reported_after_three_attempts():
         client.chat([])
 
 
-def test_refusals_are_waited_out_for_the_time_named_and_not_counted():
+def test_refusals_are_waited_out_with_a_fixed_pause_and_not_counted():
     waits: list[float] = []
     with FakeModelServer([finish_step("ok", 1, 1)], statuses=[429, 429], retry_after="3") as server:
         with client_for(server, waits) as client:
             client.chat([])
             assert client.meter.summary()["requests"] == 1
-    assert waits == [3.0, 3.0]
+    assert waits == [10.0, 10.0]
 
 
 def test_waiting_stops_when_the_allowance_is_spent():
@@ -61,17 +61,10 @@ def test_waiting_stops_when_the_allowance_is_spent():
     assert sum(waits) == 10
 
 
-@pytest.mark.parametrize(("told", "allowance", "first"), [
-    (None, 120, 2.0), ("5", 120, 5.0), ("0", 120, 1.0), ("soon", 120, 2.0), ("300", 120, None),
-    (None, 0, None),
-])  # fmt: skip
-def test_the_throttle_obeys_retry_after_within_its_allowance(told, allowance, first):
-    assert Throttle(allowance).next_wait(told) == first
-
-
-def test_the_throttle_doubles_its_wait_up_to_thirty_seconds():
-    throttle = Throttle(1000)
-    assert [throttle.next_wait(None) for _ in range(6)] == [2, 4, 8, 16, 30, 30]
+def test_the_throttle_pauses_until_its_allowance_is_spent():
+    throttle = Throttle(25)
+    assert [throttle.next_wait() for _ in range(3)] == [10.0, 10.0, None]
+    assert Throttle(0).next_wait() is None
 
 
 def test_the_asynchronous_client_of_pydantic_ai_waits_and_is_counted_by_the_same_meter():
@@ -91,7 +84,7 @@ def test_the_asynchronous_client_of_pydantic_ai_waits_and_is_counted_by_the_same
 
             asyncio.run(ask())
             assert client.meter.summary()["completion_tokens"] == 2
-    assert waits == [2.0]
+    assert waits == [10.0]
 
 
 def test_the_endpoint_lists_its_models_or_says_it_cannot_be_reached():
