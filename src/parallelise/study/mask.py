@@ -15,17 +15,13 @@ import re
 import subprocess
 
 from ..errors import ParalleliseError
-from ..routine import Declaration
+from ..routine import C_KEYWORDS, Declaration
 
 _IDENT = re.compile(r"(?<![A-Za-z0-9_])[A-Za-z_][A-Za-z0-9_]*")
 # What C itself and its preprocessor reserve; names beginning with two underscores belong to the
 # compiler and the library.
-_C_WORDS = set(
-    "auto break case char const continue default do double else enum extern float for goto if "
-    "inline int long register restrict return short signed sizeof static struct switch typedef "
-    "union unsigned void volatile while _Bool _Complex include define undef ifdef ifndef elif "
-    "endif defined pragma error line".split()
-)
+_C_WORDS = C_KEYWORDS | set("_Bool _Complex include define undef ifdef ifndef elif endif "
+                            "defined pragma error line".split())  # fmt: skip
 _C_LITERAL_OR_COMMENT = re.compile(
     r'("(?:\\.|[^"\\\n])*"|\'(?:\\.|[^\'\\\n])*\'|/\*.*?\*/|//[^\n]*)', re.DOTALL)
 

@@ -35,13 +35,14 @@ C_LIBRARY = (
 ).split()
 C_NAMES = set(C_LIBRARY) | {f"{m}{s}" for m in C_MATHS for s in ("", "f", "l")}
 
-# Names that C reserves, that the C library uses, or that the generated driver uses for itself,
-# cannot be declared.
-_RESERVED = C_NAMES | set(
+C_KEYWORDS = set(
     "auto break case char const continue default do double else enum extern float for goto if "
     "inline int long register restrict return short signed sizeof static struct switch typedef "
-    "union unsigned void volatile while bool true false main".split()
+    "union unsigned void volatile while".split()
 )
+# Names that C reserves, that the C library uses, or that the generated driver uses for itself,
+# cannot be declared.
+_RESERVED = C_NAMES | C_KEYWORDS | {"bool", "true", "false", "main"}
 
 
 def _usable(name: str) -> bool:
