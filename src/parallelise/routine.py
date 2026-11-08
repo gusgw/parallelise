@@ -391,25 +391,28 @@ def as_results(declaration: Declaration, returned: Any) -> dict[str, Any]:
 # --- comparing results -------------------------------------------------------------------------
 
 
-def compare(declaration: Declaration, got: Mapping[str, Any], want: Mapping[str, Any]) -> list[str]:
+def compare(declaration: Declaration, got: Mapping[str, Any], want: Mapping[str, Any],
+            labels: Mapping[str, str] | None = None) -> list[str]:
     """Return what is wrong with ``got`` against the trusted ``want``; empty when they agree.
 
     Each result must have the declared kind of number, the trusted result's shape and finite
     values. Integers must be equal. Real numbers must agree within the result's tolerance:
     a relative tolerance is a fraction of the largest magnitude in the trusted result.
+    ``labels`` gives the words by which a message calls each result, its name by default.
     """
     problems = []
     for value in declaration.results:
         a, b = np.asarray(got[value.name]), np.asarray(want[value.name])
+        label = (labels or {}).get(value.name, value.name)
         integer = value.dtype.startswith("int")
         if (a.dtype.kind in "iu") != integer:
-            problems.append(f"{value.name} holds {a.dtype} values, not {value.dtype}")
+            problems.append(f"{label} holds {a.dtype} values, not {value.dtype}")
         elif a.shape != b.shape:
-            problems.append(f"{value.name} has shape {a.shape}, not {b.shape}")
+            problems.append(f"{label} has shape {a.shape}, not {b.shape}")
         elif not integer and not np.all(np.isfinite(a)):
-            problems.append(f"{value.name} holds a value that is not a finite number")
+            problems.append(f"{label} holds a value that is not a finite number")
         elif integer and not np.array_equal(a, b):
-            problems.append(f"{value.name} differs in {int(np.sum(a != b))} places")
+            problems.append(f"{label} differs in {int(np.sum(a != b))} places")
         elif not integer and a.size:
             kind, tol = declaration.tolerance[value.name]
             scale = float(np.max(np.abs(b))) if kind == "relative" else 1.0
@@ -417,6 +420,6 @@ def compare(declaration: Declaration, got: Mapping[str, Any], want: Mapping[str,
             if error > tol * (scale or 1.0):
                 limit = "of its largest magnitude" if kind == "relative" else "absolute"
                 problems.append(
-                    f"{value.name} differs by up to {error:.3g}; the tolerance is {tol:g} {limit}"
+                    f"{label} differs by up to {error:.3g}; the tolerance is {tol:g} {limit}"
                 )
     return problems

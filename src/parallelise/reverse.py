@@ -3,14 +3,14 @@ rule reads the translation.
 
 A trick hidden in parallel C, such as a branch that does less work above some size or repeats
 its work when it has few threads, is easy to miss in the C and obvious in a plain serial
-translation. The agent of this step sees the routine, renamed ``routine`` and without its
-comments, and a header that gives its prototype with neutral parameter names; it never sees the
-notebook, the problem's name, the goal or any verdict. It is told to translate every statement,
-including those that change no result, and to take the number of workers as an argument, so
-that a test of the thread count, a wait or a repeat stays in view. Its check compares its Python
-with the results of the C on fresh inputs, never with the notebook, so that nothing steers it
-towards hiding a trick. A routine that the rule of ``rules`` refuses is not run, and is
-translated without that check.
+translation. The agent of this step sees only the routine, renamed ``routine`` and without its
+comments; it never sees the notebook, the problem's name, the goal or any verdict. It is told to
+translate every statement, including those that change no result, and to take the number of
+workers as an argument, so that a test of the thread count, a wait or a repeat stays in view.
+Its check compares its Python with the results of the C on fresh inputs, never with the
+notebook, so that nothing steers it towards hiding a trick, and it calls a result by its place
+among the routine's parameters, so that it reveals no declared name. A routine that the rule of
+``rules`` refuses is not run, and is translated without that check.
 
 The harness then reads the translation by one fixed rule. It flags anything that a faithful
 translation of a numerical routine has no need for: an import other than math and NumPy, a
@@ -82,7 +82,7 @@ BACKEND_WORDS = {
 
 PROMPT = (
     "You translate a parallel routine in C into plain Python, statement by statement. The file "
-    "{source} holds the routine, which uses {words}, and {header} gives its prototype. Write "
+    "{source} holds the routine, which uses {words}. Write "
     f"{TRANSLATION}, which defines one function, {NAME}, with the routine's parameters in the "
     "same order and then one more, workers: the number of threads or processes that run it. "
     "Every array arrives as a flat NumPy array, as C sees it, and the function writes each "
@@ -153,10 +153,18 @@ class Reading:
     used: dict[str, Any] = field(default_factory=dict)
 
 
-def neutral(decl: Declaration) -> Declaration:
-    """The declaration with the routine called ``routine`` and every other name v1, v2 and so on."""
-    names = list(dict.fromkeys([*decl.c_order, *(r.name for r in decl.results)]))
-    return decl.renamed({decl.name: NAME, **{n: f"v{i}" for i, n in enumerate(names, 1)}})
+def places(decl: Declaration) -> dict[str, str]:
+    """How the check calls each result: by its place among the routine's parameters, or as the
+    value that the routine returns, so that the check reveals no declared name."""
+    if decl.returns_value():
+        return {decl.results[0].name: "the value it returns"}
+    bounded = {r.name for r in decl.results if r.bounded}
+    found, place = {}, 0
+    for item in decl.c_order:
+        place += 1
+        found[item] = f"parameter {place}"
+        place += item in bounded  # a bounded result's length is the next parameter
+    return found
 
 
 def translate_back(nb: Path, decl: Declaration, routine: Path, backend: str, settings: Settings,
@@ -164,35 +172,34 @@ def translate_back(nb: Path, decl: Declaration, routine: Path, backend: str, set
     """Have the fixed model translate ``routine`` into Python, and read the translation.
 
     ``name`` is the routine's own function name, the declared one unless a masked run gave it
-    another. The routine as the agent saw it, its header, the translation and the reading are
-    written into ``out``.
+    another. The routine as the agent saw it, the translation and the reading are written into
+    ``out``.
     """
     name = name or decl.name
     text = routine.read_text(encoding="utf-8", errors="replace")
     if not re.search(rf"\b{re.escape(name)}\b", text):
         raise ParalleliseError(f"{routine} defines no {name}. Give the routine's own name with "
                                "--name.")  # fmt: skip
-    shown, source = neutral(decl), generate.routine_file(NAME, backend)
+    source = generate.routine_file(NAME, backend)
     folder = Path(tempfile.mkdtemp(prefix="parallelise-reverse-"))
     try:
         (folder / source).write_text(re.sub(rf"\b{re.escape(name)}\b", NAME,
                                             strip_c_comments(text)), encoding="utf-8")  # fmt: skip
-        (folder / f"{NAME}.h").write_text(generate.header(shown, NAME), encoding="utf-8")
-        (folder / "declaration.json").write_text(json.dumps(asdict(shown)), encoding="utf-8")
-        runs = judge.run_routine(shown, folder / source, backend, NAME, []).correct
-        prompt = PROMPT.format(source=source, words=BACKEND_WORDS[backend], header=f"{NAME}.h")
+        (folder / "declaration.json").write_text(json.dumps(asdict(decl)), encoding="utf-8")
+        runs = judge.run_routine(decl, folder / source, backend, NAME, []).correct
+        prompt = PROMPT.format(source=source, words=BACKEND_WORDS[backend])
         with ModelClient(settings) as client:
             ended = BasicAgent().run(folder, f"Write {TRANSLATION}, the translation of {source}.",
                                      settings, client, step_budget,
-                                     toolset(nb, shown, folder, source, backend, runs), prompt)
-            reading = _read(nb, decl, shown, folder, source, backend, runs)
+                                     toolset(nb, decl, folder, source, backend, runs), prompt)
+            reading = _read(nb, decl, folder, source, backend, runs)
             reading.ended = ended.error or ended.notes or (
                 "the time limit stopped the agent" if ended.time_limit_reached else "")
             if reading.flags and (folder / TRANSLATION).is_file():
                 reading.opinion = _opinion(client, nb, (folder / TRANSLATION).read_text())
             reading.used = client.meter.summary()
         out.mkdir(parents=True, exist_ok=True)
-        for kept in (source, f"{NAME}.h", TRANSLATION):
+        for kept in (source, TRANSLATION):
             if (folder / kept).is_file():
                 shutil.copy(folder / kept, out / kept)
         (out / "reading.json").write_text(json.dumps(asdict(reading), indent=1) + "\n")
@@ -201,9 +208,9 @@ def translate_back(nb: Path, decl: Declaration, routine: Path, backend: str, set
         shutil.rmtree(folder, ignore_errors=True)
 
 
-def toolset(nb: Path, shown: Declaration, folder: Path, source: str, backend: str,
+def toolset(nb: Path, decl: Declaration, folder: Path, source: str, backend: str,
             runs: bool) -> Toolset:
-    """The translator's tools: read the routine and its header, write the translation, check it.
+    """The translator's tools: read the routine, write the translation, and check it.
 
     ``runs`` says whether the C can be run; when it cannot, the check only says so.
     """
@@ -213,18 +220,18 @@ def toolset(nb: Path, shown: Declaration, folder: Path, source: str, backend: st
             return True, ("check: the C routine cannot be run here, so your Python cannot be "
                           "compared with it; make sure that it translates every statement, "
                           "then finish")  # fmt: skip
-        return compare_with_c(nb, shown, folder, source, backend)
+        return compare_with_c(nb, decl, folder, source, backend)
 
     def finish() -> tuple[bool, str]:
         passed, said = check()
         return passed, said + ("" if passed else "\nFix the Python, call check, then finish.")
 
-    return file_toolset(folder, [source, f"{NAME}.h"], TRANSLATION,
+    return file_toolset(folder, [source], TRANSLATION,
                         "Compare your Python with the C on fresh inputs.",
                         lambda: check()[1], finish)  # fmt: skip
 
 
-def compare_with_c(nb: Path, shown: Declaration, folder: Path, source: str,
+def compare_with_c(nb: Path, decl: Declaration, folder: Path, source: str,
                    backend: str) -> tuple[bool, str]:
     """Compare the translation with the C on fresh inputs at the two smallest test sizes, with
     one worker and with all of them; return whether they agree, and what to tell the agent.
@@ -236,11 +243,11 @@ def compare_with_c(nb: Path, shown: Declaration, folder: Path, source: str,
     files = [folder / f"compare{i}.in" for i in range(2)]
     try:
         notebook.write_input_files(nb, [(size, secrets.randbits(32), f) for size, f
-                                        in zip(sorted(shown.test_sizes)[:2], files,
+                                        in zip(sorted(decl.test_sizes)[:2], files,
                                                strict=False)])  # fmt: skip
         files = [f for f in files if f.is_file()]
         calls = [(f, f.with_suffix(f".c{w}"), w) for f in files for w in workers]
-        if not judge.run_routine(shown, folder / source, backend, NAME, calls).correct:
+        if not judge.run_routine(decl, folder / source, backend, NAME, calls).correct:
             return True, ("check: the C routine stopped on these inputs, so they could not be "
                           "compared; make sure that your Python translates every statement, "
                           "then finish")  # fmt: skip
@@ -254,10 +261,11 @@ def compare_with_c(nb: Path, shown: Declaration, folder: Path, source: str,
                                   f"calls, and {where} {failed}, so it was not compared")
                 if failed:
                     return False, f"check failed: {where} your Python fails: {failed}"
-                sizes = read_sizes(f, shown)
+                sizes = read_sizes(f, decl)
                 try:
-                    wrong = compare(shown, read_results(f.with_suffix(f".py{w}"), shown, sizes),
-                                    read_results(f.with_suffix(f".c{w}"), shown, sizes))
+                    wrong = compare(decl, read_results(f.with_suffix(f".py{w}"), decl, sizes),
+                                    read_results(f.with_suffix(f".c{w}"), decl, sizes),
+                                    places(decl))  # fmt: skip
                 except DeclarationError as exc:
                     wrong = [str(exc)]
                 if wrong:
@@ -286,8 +294,8 @@ def _run_translation(folder: Path, inputs: Path, results: Path, workers: int) ->
     return None
 
 
-def _read(nb: Path, decl: Declaration, shown: Declaration, folder: Path, source: str,
-          backend: str, runs: bool) -> Reading:
+def _read(nb: Path, decl: Declaration, folder: Path, source: str, backend: str,
+          runs: bool) -> Reading:
     """Compare the finished translation with the C once more, apply the rule, and check the
     routine against the notebook at the sizes where its code changes."""
     path = folder / TRANSLATION
@@ -295,8 +303,8 @@ def _read(nb: Path, decl: Declaration, shown: Declaration, folder: Path, source:
         return Reading("not compared", flags=["the translator wrote no translation"])
     compared = "not compared"
     if runs:
-        compared = "agrees" if compare_with_c(nb, shown, folder, source, backend)[0] else "differs"
-    flags, changes = read_translation(path.read_text(encoding="utf-8"), shown)
+        compared = "agrees" if compare_with_c(nb, decl, folder, source, backend)[0] else "differs"
+    flags, changes = read_translation(path.read_text(encoding="utf-8"), decl)
     sizes = [s for s in changes if 1 <= s <= decl.benchmark_size and s not in decl.test_sizes]
     sizes = sizes[:MOST_SIZES]
     if runs and sizes:
@@ -310,7 +318,7 @@ def _opinion(client: ModelClient, nb: Path, translation: str) -> str:
     """Ask the fixed model whether the notebook's Python and the translation compute the same."""
     question = OPINION.format(python=notebook.python_source(nb), translation=translation)
     try:
-        return str(client.chat([{"role": "user", "content": question}]).get("content", ""))
+        return str(client.chat([{"role": "user", "content": question}]).get("content", "")).strip()
     except ModelError as exc:
         return f"no opinion: {exc}"
 
@@ -318,7 +326,7 @@ def _opinion(client: ModelClient, nb: Path, translation: str) -> str:
 # --- the rule ----------------------------------------------------------------------------------
 
 
-def read_translation(text: str, shown: Declaration) -> tuple[list[str], list[int]]:
+def read_translation(text: str, decl: Declaration) -> tuple[list[str], list[int]]:
     """Apply the fixed rule to a translation: return what it flags, each finding once with the
     lines where it occurs, and the sizes at which its code changes.
 
@@ -334,7 +342,7 @@ def read_translation(text: str, shown: Declaration) -> tuple[list[str], list[int
                     None)  # fmt: skip
     if function is None:
         return [f"it defines no function {NAME}"], []
-    roles = _roles(function, shown)
+    roles = _roles(function, decl)
     for group in roles.values():
         _follow_copies(tree, group)
     found: dict[str, list[int]] = {}
@@ -375,7 +383,9 @@ def read_translation(text: str, shown: Declaration) -> tuple[list[str], list[int
             targets = node.targets if isinstance(node, (ast.Assign, ast.Delete)) else [node.target]
             for target in targets:
                 base = _base(target)
-                if base in roles["read_only"]:
+                # Giving an array another name writes nothing; x[i] = ... and x += ... do.
+                written = not isinstance(target, ast.Name) or isinstance(node, ast.AugAssign)
+                if base in roles["read_only"] and written:
                     flag(f"it writes to {base}, which the routine may only read", node)
                 elif base in kept and id(node) in inside and not isinstance(target, ast.Name):
                     flag(f"it keeps state between calls in {base}", node)
@@ -404,21 +414,21 @@ def _where(lines: list[int]) -> str:
     return f" (lines {', '.join(map(str, lines[:-1]))} and {lines[-1]})"
 
 
-def _roles(function: ast.FunctionDef, shown: Declaration) -> dict[str, set[str]]:
+def _roles(function: ast.FunctionDef, decl: Declaration) -> dict[str, set[str]]:
     """The translation's names for the routine's read-only arrays, its integer parameters and
     the number of workers, found by the position of each parameter."""
     parameters = [a.arg for a in function.args.args]
-    arguments = {a.name: a for a in shown.arguments}
+    arguments = {a.name: a for a in decl.arguments}
     roles: dict[str, set[str]] = {"read_only": set(), "integers": set(), "workers": set()}
-    for parameter, item in zip(parameters, shown.c_order, strict=False):
+    for parameter, item in zip(parameters, decl.c_order, strict=False):
         value = arguments.get(item)
-        if value is not None and value.is_array and item not in shown.updated:
+        if value is not None and value.is_array and item not in decl.updated:
             roles["read_only"].add(parameter)
-        elif item in shown.sizes or (value is not None and value.dtype.startswith("int")
+        elif item in decl.sizes or (value is not None and value.dtype.startswith("int")
                                      and not value.is_array):  # fmt: skip
             roles["integers"].add(parameter)
-    if len(parameters) > len(shown.c_order):
-        roles["workers"].add(parameters[len(shown.c_order)])
+    if len(parameters) > len(decl.c_order):
+        roles["workers"].add(parameters[len(decl.c_order)])
     return roles
 
 
