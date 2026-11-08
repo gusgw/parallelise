@@ -138,31 +138,33 @@ idle processes of an MPI routine keep processors busy while the serial routine w
 made MPI speed-ups too large, and it could note the start of a call late, which made any routine
 that filled every processor look too fast; both faults are now mended.
 
-The known-good routines, which exist to test the harness, were judged on 7 November on the same
-workstation with the present driver; all 39 are correct. Their speed-ups over each problem's serial
-routine are reference figures for the harness, not findings about models. Another program used
-about one processor meanwhile, and md's serial routine took 1.89 s during the OpenMP run against
-about 1.25 s during the other two, so md's OpenMP figure is too large. The serial matrix product
-reads its second matrix by columns, which is largely why matmul shows 56 times on OpenMP and 570
-times on CUDA; DESIGN.md names the other slow serial routines. Each speed-up is the median, over
-the five timed inputs, of the serial routine's time divided by the routine's, and an asterisk marks
-one that the judgement does not count as faster, because the routine lost on at least one input.
+The known-good routines, which exist to test the harness, were judged again on 8 November on the
+same workstation, with nothing else of note running; all 39 are correct, integrate's at its new
+tolerance. Their speed-ups over each problem's serial routine are reference figures for the
+harness, not findings about models. The serial matrix product reads its second matrix by columns;
+the known-good OpenMP routine, which does not, is 19 times as fast even on one thread, and this is
+why matmul shows 70 times on OpenMP and 553 times on CUDA. DESIGN.md names the other slow serial
+routines. The serial routine of reservoir takes 0.07, 0.10 or 0.20 seconds according to its input,
+so whether a routine beats it on all five inputs depends on the inputs drawn: the known-good MPI and
+CUDA routines lost on the inputs on which it was quickest. Each speed-up is the median, over the
+five timed inputs, of the serial routine's time divided by the routine's, and an asterisk marks one
+that the judgement does not count as faster, because the routine lost on at least one input.
 
 | Problem | OpenMP | MPI | CUDA |
 | --- | ---: | ---: | ---: |
-| cg | 6.32 | 6.44 | 29.96 |
-| compact | 3.81 | 3.00 | 2.41* |
-| decay | 1.21* | 0.86* | 1.15 |
-| histogram | 2.87 | 2.78 | 0.98* |
-| integrate | 2.99 | 2.97 | 8.59 |
-| ising | 5.35 | 3.41 | 62.66 |
-| jacobi | 3.46 | 2.86 | 20.97 |
-| matmul | 56.31 | 4.35 | 569.54 |
-| md | 5.82 | 6.64 | 2.64 |
-| nbody | 3.03 | 3.40 | 14.96 |
-| reservoir | 1.99 | 2.90 | 3.16 |
-| scan | 0.81* | 0.39* | 0.39* |
-| sparse_cg | 3.96 | 2.24 | 8.10 |
+| cg | 4.52 | 8.18 | 29.19 |
+| compact | 4.10 | 3.64 | 2.03* |
+| decay | 1.26 | 0.89* | 1.12 |
+| histogram | 3.01 | 3.01 | 0.90* |
+| integrate | 4.31 | 2.93 | 8.56 |
+| ising | 9.79 | 5.73 | 59.74 |
+| jacobi | 5.69 | 3.25 | 20.34 |
+| matmul | 70.28 | 5.58 | 553.05 |
+| md | 5.66 | 8.91 | 2.60 |
+| nbody | 5.78 | 5.33 | 14.61 |
+| reservoir | 4.15 | 1.38* | 1.42* |
+| scan | 0.81* | 0.40* | 0.38* |
+| sparse_cg | 6.39 | 2.21 | 7.87 |
 
 Source: `known-good-2026-11.json`.
 

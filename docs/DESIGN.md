@@ -157,10 +157,11 @@ whole numbers exactly. A known-good routine for each problem and backend, 39 in 
 
 ## Limits
 
-The serial routines are plain translations, and some are slow: the matrix product reads its second
-matrix by columns, the Ising model calls the exponential function for every spin, and the stencil
-copies its grid twice in every sweep. Speed-ups against them are larger than against careful serial
-code, which is one reason the scaling is reported. At the benchmark size each program keeps one process for all six inputs,
+The serial routines are plain translations, and some are slower than careful serial code: the
+matrix product reads its second matrix by columns, which costs a factor of about nineteen, and the
+routines for conjugate gradients, the Ising model and molecular dynamics take up to twice as long as
+they need. Speed-ups against them are larger than against careful serial code, which is one reason
+the scaling is reported. At the benchmark size each program keeps one process for all six inputs,
 so that one-time costs stay out of the timed calls; new inputs defeat a stored answer, but a
 routine could keep other state between those calls against its contract. Timings mean something
 only on a quiet machine, so judgements should be made one at a time, and each judgement's log
