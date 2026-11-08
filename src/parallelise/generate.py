@@ -203,6 +203,15 @@ static inline void drv_spoil(void *p, size_t bytes)
     for (size_t i = 0; i < bytes; i++) c[i] = (unsigned char)(rand() | 0x80);
 }}
 {share}
+/* Wait until the harness has noted the START mark before the routine starts, so that it reads
+ * the mark while a processor is free and the routine's own work cannot delay it. */
+static inline void drv_go(void)
+{{
+    char line[8];
+    if (drv_rank == 0 && !fgets(line, sizeof line, stdin)) drv_fail("the signal to start");
+    {barrier}
+}}
+
 static inline void drv_mark(FILE *marks, const char *what)
 {{
     if (drv_rank == 0) {{
@@ -224,7 +233,7 @@ static void drv_call(FILE *drv_in, FILE *drv_out, int drv_timed, FILE *drv_marks
 {{
 {read}
     {{
-        {before}
+        {barrier}
         if (drv_timed) {{
             drv_mark(drv_marks, "START");
             drv_go();
@@ -278,15 +287,6 @@ static inline void drv_share(void *p, size_t count, MPI_Datatype type)
     MPI_Bcast(p, (int)count, type, 0, MPI_COMM_WORLD);
 }
 
-/* Wait until the harness has noted the START mark before the routine starts, so that it reads
- * the mark while a processor is free and the routine's own work cannot delay it. */
-static inline void drv_go(void)
-{
-    char line[8];
-    if (drv_rank == 0 && !fgets(line, sizeof line, stdin)) drv_fail("the signal to start");
-    MPI_Barrier(MPI_COMM_WORLD);
-}
-
 /* The other processes wait for each command asleep, so that they take no processor time from
  * a program that is being timed meanwhile, such as the serial routine. */
 static inline void drv_wait(int *values, int count)
@@ -318,25 +318,13 @@ static inline void drv_wait(int *values, int count)
     (void)values;
     (void)count;
 }
-
-/* Wait until the harness has noted the START mark before the routine starts, so that it reads
- * the mark while a processor is free and the routine's own work cannot delay it. */
-static inline void drv_go(void)
-{
-    char line[8];
-    if (!fgets(line, sizeof line, stdin)) drv_fail("the signal to start");
-}
 """
 
 
 def driver(declaration: Declaration, name: str, backend: str) -> str:
     """Return the driver's source for a backend: openmp, mpi, cuda or serial."""
     mpi, cuda = backend == "mpi", backend == "cuda"
-    after = ""
-    if mpi:
-        after = "MPI_Barrier(MPI_COMM_WORLD);"
-    elif cuda:
-        after = 'if (cudaDeviceSynchronize() != cudaSuccess) drv_fail("the graphics card");'
+    barrier = "MPI_Barrier(MPI_COMM_WORLD);" if mpi else ""
     return DRIVER.format(
         name=name,
         backend=backend,
@@ -344,9 +332,10 @@ def driver(declaration: Declaration, name: str, backend: str) -> str:
         else "#include <cuda_runtime.h>" if cuda else "",
         share=_SHARE_MPI if mpi else _SHARE_NONE,
         read="\n".join(_read(declaration)),
-        before="MPI_Barrier(MPI_COMM_WORLD);" if mpi else "",
+        barrier=barrier,
         call=_call(declaration, name),
-        after=after,
+        after='if (cudaDeviceSynchronize() != cudaSuccess) drv_fail("the graphics card");'
+        if cuda else barrier,
         write="\n".join(_write(declaration)),
         free="\n".join(_free(declaration)),
         start="    MPI_Init(&argc, &argv);\n    MPI_Comm_rank(MPI_COMM_WORLD, &drv_rank);"
