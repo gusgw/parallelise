@@ -92,10 +92,7 @@ class Driver:
 
     def _mark(self) -> tuple[str, float]:
         while b"\n" not in self.buffer:
-            left = self.deadline - time.monotonic()
-            if left <= 0:
-                raise _Stop("timeout", "the time allowed for the judgement ran out")
-            ready, _, _ = select.select([self.marks], [], [], min(left, 1.0))
+            ready, _, _ = select.select([self.marks], [], [], min(_left(self.deadline), 1.0))
             if ready:
                 self.buffer += os.read(self.marks, 4096)
             elif self.proc.poll() is not None:
@@ -262,6 +259,9 @@ def _in_fresh_folder(decl: Declaration, name: str, backend: str, routine: Path |
                      work: Callable[[Path, float, list[str]], Verdict]) -> Verdict:
     """Run ``work`` in a fresh folder with a deadline and a log, turn a failed step into a
     verdict, and delete the folder afterwards."""
+    missing = [path for path in (routine, serial) if path is not None and not path.is_file()]
+    if missing:
+        return Verdict(False, "no-files", log=[f"there is no {missing[0].name}"])
     deadline = time.monotonic() + timeout_s
     log: list[str] = []
     folder = _prepare(decl, name, backend, routine, serial)

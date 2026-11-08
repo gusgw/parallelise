@@ -45,6 +45,12 @@ def test_the_known_good_routine_is_correct_and_its_speed_is_measured(decl, tmp_p
     assert verdict.speedup is not None and verdict.speedup > 0
 
 
+def test_a_missing_routine_is_judged_to_have_no_files(decl, tmp_path):
+    verdict = judge.judge(NOTEBOOK, decl, tmp_path / "midpoint.c", SERIAL, "openmp")
+    assert (verdict.correct, verdict.stage, verdict.log) == (False, "no-files",
+                                                             ["there is no midpoint.c"])
+
+
 def test_a_serial_routine_is_checked_against_the_python_at_the_sizes_given(decl, tmp_path):
     verdict = judge.correct_at(NOTEBOOK, decl, SERIAL, "serial", [1, 1000])
     assert verdict.correct and verdict.log == ["correct at sizes [1, 1000] with [1] workers"]

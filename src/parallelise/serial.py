@@ -76,8 +76,6 @@ def translate(nb: Path, settings: Settings, dest: Path,
                              toolset(nb, decl, folder), prompt)  # fmt: skip
             used = client.meter.summary()
         written = folder / f"{decl.name}.c"
-        if not written.is_file():
-            return judge.Verdict(False, "no-files", log=["no translation was written"]), used
         sizes = [*decl.test_sizes, decl.benchmark_size]
         verdict = judge.correct_at(nb, decl, written, "serial", sizes, timeout_s=3600)
         if verdict.correct:

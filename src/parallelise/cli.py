@@ -197,11 +197,8 @@ def cmd_run(args: argparse.Namespace) -> int:
     agent_time = time.perf_counter() - started
 
     routine = work_dir / generate.routine_file(name, args.backend)
-    if routine.is_file():
-        verdict = judge.judge(nb, decl, routine, work_dir / "serial.c", args.backend,
-                              timeout_s=args.check_timeout, name=name)  # fmt: skip
-    else:
-        verdict = judge.Verdict(False, "no-files", log=[f"the agent wrote no {routine.name}"])
+    verdict = judge.judge(nb, decl, routine, work_dir / "serial.c", args.backend,
+                          timeout_s=args.check_timeout, name=name)  # fmt: skip
     (work_dir / "check.log").write_text("\n".join(verdict.log) + "\n", encoding="utf-8")
     notes = [args.notes, result.notes]
     if result.error:
@@ -239,11 +236,8 @@ def cmd_check(args: argparse.Namespace) -> int:
                                "should hold one header and serial.c.")  # fmt: skip
     name = headers[0].stem
     routine = work_dir / generate.routine_file(name, args.backend)
-    if routine.is_file():
-        verdict = judge.judge(nb, notebook.declaration(nb), routine, work_dir / "serial.c",
-                              args.backend, timeout_s=args.timeout, name=name)  # fmt: skip
-    else:
-        verdict = judge.Verdict(False, "no-files", log=[f"there is no {routine.name}"])
+    verdict = judge.judge(nb, notebook.declaration(nb), routine, work_dir / "serial.c",
+                          args.backend, timeout_s=args.timeout, name=name)  # fmt: skip
     print("\n".join(verdict.log))
     print(verdict_line(verdict))
     return 0 if verdict.correct else 1

@@ -87,6 +87,8 @@ def install_fakes(monkeypatch, tmp_path, behaviour="ok", verdict=None):
 
     def judge(nb, decl, routine, serial, backend, timeout_s=900.0, name=None):
         calls["judged"] = (Path(routine), Path(serial), backend, name)
+        if not Path(routine).is_file():  # as the judgement itself says
+            return Verdict(False, "no-files")
         return verdict or Verdict(True, "none", 3.2, True, 2.0, True, log=["the judgement's log"])
 
     monkeypatch.setattr(cli.judge, "judge", judge)
