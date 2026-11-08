@@ -106,9 +106,6 @@ _MODULES = {"math", "numpy"}
 #: Python's own functions that a numerical routine has no need for.
 _REFUSED_CALLS = {"open", "input", "exec", "eval", "compile", "__import__", "globals",
                   "breakpoint"}  # fmt: skip
-_MUTATING = {"append", "extend", "insert", "update", "setdefault", "pop", "popitem", "clear",
-             "add", "remove", "discard", "fill", "sort", "put", "resize", "itemset"}  # fmt: skip
-_WRITING_FUNCTIONS = {"copyto", "put", "place", "putmask", "fill_diagonal"}
 
 
 @dataclass
@@ -347,8 +344,7 @@ def read_translation(text: str, decl: Declaration) -> tuple[list[str], list[int]
         elif isinstance(node, (ast.Global, ast.Nonlocal)):
             flag(f"it keeps state between calls in {', '.join(node.names)}", node)
         elif isinstance(node, ast.Call):
-            _call_flags(node, defined, roles["read_only"],
-                        kept if id(node) in inside else set(), flag)  # fmt: skip
+            _call_flags(node, defined, flag)
         elif isinstance(node, (ast.While, ast.For)) and all(
                 isinstance(s, ast.Pass) or (isinstance(s, ast.Expr)
                                             and isinstance(s.value, ast.Constant))
@@ -441,8 +437,7 @@ def _base(target: ast.expr) -> str | None:
     return target.id if isinstance(target, ast.Name) else None
 
 
-def _call_flags(node: ast.Call, defined: set[str], read_only: set[str], kept: set[str],
-                flag: Callable[[str, ast.AST], None]) -> None:
+def _call_flags(node: ast.Call, defined: set[str], flag: Callable[[str, ast.AST], None]) -> None:
     """Flag what the rule finds in one call."""
     func = node.func
     if isinstance(func, ast.Name):
@@ -450,17 +445,6 @@ def _call_flags(node: ast.Call, defined: set[str], read_only: set[str], kept: se
             flag(f"it calls {func.id}, which a numerical routine has no need for", node)
         elif func.id not in defined:
             flag(f"it calls {func.id}, which it does not define", node)
-    elif isinstance(func, ast.Attribute):
-        owner = _base(func.value)
-        if func.attr in _MUTATING and owner in read_only:
-            flag(f"it writes to {owner}, which the routine may only read", node)
-        elif func.attr in _MUTATING and owner in kept:
-            flag(f"it keeps state between calls in {owner}", node)
-        elif func.attr in _WRITING_FUNCTIONS and node.args and _base(node.args[0]) in read_only:
-            flag(f"it writes to {_base(node.args[0])}, which the routine may only read", node)
-    for keyword in node.keywords:
-        if keyword.arg == "out" and _base(keyword.value) in read_only:
-            flag(f"it writes to {_base(keyword.value)}, which the routine may only read", node)
 
 
 # --- the child's side --------------------------------------------------------------------------

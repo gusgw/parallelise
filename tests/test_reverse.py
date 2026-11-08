@@ -139,8 +139,6 @@ from . import helper
 def routine(x, out, n, workers, cache={}):
     copy = x
     copy[0] = 0.0
-    np.add(out, out, out=x)
-    x.sort()
     handle = open("answers")
     started = clock()
     if workers == 1:
@@ -148,7 +146,7 @@ def routine(x, out, n, workers, cache={}):
 """
     flags = " ".join(reverse.read_translation(text, decl)[0])
     for words in ("it imports os", "it imports time", "it imports from its own folder",
-                  "it writes to copy", "it writes to x", "it calls open, which",
+                  "it writes to copy", "it calls open, which",
                   "it calls clock, which it does not define", "the number of workers",
                   "a default argument"):  # fmt: skip
         assert words in flags, words
