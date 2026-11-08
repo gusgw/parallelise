@@ -52,6 +52,7 @@ from . import generate, judge, notebook, provenance
 from .agents.base import Toolset, file_toolset
 from .agents.basic import BasicAgent
 from .config import Settings, without_secrets
+from .convert import BACKEND_WORDS
 from .errors import ModelError, ParalleliseError
 from .model import ModelClient
 from .routine import (
@@ -71,12 +72,6 @@ NAME = "routine"
 TRANSLATION = "translation.py"
 #: The longest that one call of a translation may take.
 PYTHON_CALL_S = 120.0
-
-BACKEND_WORDS = {
-    "openmp": "OpenMP threads",
-    "mpi": "MPI processes",
-    "cuda": "CUDA on an NVIDIA graphics card",
-}
 
 PROMPT = (
     "You translate a parallel routine in C into plain Python, statement by statement. The file "
