@@ -1,13 +1,9 @@
 """The client for an OpenAI-compatible chat endpoint, and the meter that every call goes through.
 
-One ``Meter`` serves a whole run. Every HTTP client that reaches the model, the plain agent's
-and the frameworks' alike, sends its requests through a transport that reports to the meter, so
-each answer is timed and its tokens counted once, in the same way, whichever agent design
-asked: the meter's own transport for synchronous clients, and one in the Pydantic AI design's
-module for its asynchronous client. Both wait out HTTP 429 (too many requests): a shared model
-service often refuses requests for a while when it is busy, and giving up at the first refusal
-would end a run that only needed to wait. A transport pauses for ``PAUSE_S`` seconds after each
-refusal and asks again, until the pauses for one request would pass
+One ``Meter`` serves a whole run, so that every design's requests are timed and counted in the
+same way: the meter's transport serves the synchronous clients, and the Pydantic AI design's
+module has one for its asynchronous client. Both pause for ``PAUSE_S`` seconds after each
+refusal of a busy service (HTTP 429) and ask again, until the pauses for one request would pass
 ``Settings.throttle_wait_s``.
 """
 

@@ -1,22 +1,12 @@
 """Generate the C files for a declared routine: its header, the driver that calls it, a Makefile.
 
-Every backend gets the same header text and the same driver, apart from a few lines: MPI
-starts its processes, shares the inputs and waits for every process, and CUDA waits for the
-graphics card. The driver takes commands on its standard input, each of three lines: CALL
-(call the routine once, untimed) or TIME (the same, between a START and an END mark), then the
-inputs file, then the results file. It writes START, END and DONE marks, one per line, to the
-named pipe given as its only argument, and after START it waits for the line GO before it calls
-the routine, so that the harness notes the START mark while a processor is free. The harness
-times a call by the arrival of the START and END marks, so a routine cannot forge its own
-timing; and since a routine may read no file (see ``rules``), it cannot write to the pipe
-either. For MPI, only process 0 reads commands and files
-and writes marks, every process holds all the inputs when the routine is called, and the other
-processes wait for each command asleep, so that they take no processor time from a program that
-is being timed meanwhile.
-
-The serial routine of a problem is built with the same driver, for the plain C backend
-"serial", so that it is timed in exactly the same way as the routine it is compared with. The
-driver's own names all begin with ``drv_``, which no declared name may do.
+The driver takes commands on its standard input, each of three lines: CALL (call the routine
+once, untimed) or TIME (the same, between a START and an END mark), then the inputs file, then
+the results file. It writes START, END and DONE marks to the named pipe given as its argument,
+and after START it waits for the line GO, so that the harness notes the mark while a processor
+is free. For MPI, only process 0 reads commands and files and writes marks, and the other
+processes wait for each command asleep. The serial routine is built with the same driver, for
+the backend "serial". The driver's own names begin with ``drv_``, which no declared name may do.
 """
 
 from __future__ import annotations

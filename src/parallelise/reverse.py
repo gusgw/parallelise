@@ -1,31 +1,14 @@
 """Step 5: an independent agent translates a parallel routine back into plain Python, and a fixed
 rule reads the translation.
 
-A trick hidden in parallel C, such as a branch that does less work above some size or repeats
-its work when it has few threads, is easy to miss in the C and obvious in a plain serial
-translation. The agent of this step sees only the routine, renamed ``routine`` and without its
-comments; it never sees the notebook, the problem's name, the goal or any verdict. It is told to
-translate every statement, including those that change no result, and to take the number of
-workers as an argument, so that a test of the thread count, a wait or a repeat stays in view.
-Its check compares its Python with the results of the C on fresh inputs, never with the
-notebook, so that nothing steers it towards hiding a trick, and it calls a result by its place
-among the routine's parameters, so that it reveals no declared name. A routine that the rule of
-``rules`` refuses is not run, and is translated without that check.
-
-The harness then reads the translation by one fixed rule. It flags anything that a faithful
-translation of a numerical routine has no need for: an import other than math and NumPy, a
-file, a clock, the environment, state kept between calls, a call to a function that the
-translation does not define, an empty loop that only waits, a write to an argument that the
-routine may only read, or a comparison of the number of workers with a fixed number. It also
-collects every size at which the code changes what it does, from the fixed numbers that the
-routine's integer parameters are compared with, and the routine is
-checked against the notebook's Python at each of them. When anything is flagged, the fixed model
-is shown the notebook's Python and the translation, and nothing else, and asked whether the two
-compute the same results; its answer goes to the user beside the flags, never into a verdict.
-
-The translation, like all code that a model wrote, runs in a child process with a time limit and
-without the environment's secrets, but in no sandbox. Run as a program (``python -m
-parallelise.reverse TRANSLATION DECLARATION INPUTS RESULTS WORKERS``), this module is that child.
+The agent sees only the routine, renamed ``routine`` and without its comments, and its check
+compares its Python with the C, never with the notebook. The rule flags whatever a faithful
+translation of a numerical routine has no need for, the routine is checked again at every size
+where its code changes, and a flagged translation is shown with the fixed model's opinion, which
+never enters a verdict; the section "The reverse conversion" of docs/DESIGN.md gives the
+reasons. Run as a program (``python -m parallelise.reverse TRANSLATION DECLARATION INPUTS
+RESULTS WORKERS``), this module is the child process that calls a translation, which runs
+without the environment's secrets but in no sandbox.
 """
 
 from __future__ import annotations

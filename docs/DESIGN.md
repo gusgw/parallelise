@@ -122,12 +122,13 @@ rarely shows, can pass by luck. The reverse conversion, below, is meant to expos
 ## The reverse conversion
 
 A last step, built but not yet tried with a real model, has an independent agent translate the
-parallel routine back into plain Python, statement by statement. The agent sees the routine,
-renamed `routine` and without its comments, and a header whose parameters are named v1, v2 and so
-on; it never sees the notebook, the problem's name, the goal or any verdict. It must take the
-number of workers as an argument and translate every statement, including those that change no
-result, and its check compares its Python with the C on fresh inputs, never with the notebook, so
-that nothing steers it towards hiding a trick.
+parallel routine back into plain Python, statement by statement. The agent sees only the
+routine, renamed `routine` and without its comments; it never sees the notebook, the problem's
+name, the goal or any verdict. It must take the number of workers as an argument and translate
+every statement, including those that change no result. Its check compares its Python with the C
+on fresh inputs, never with the notebook, so that nothing steers it towards hiding a trick, and it
+names each result by its place among the routine's parameters, so that it gives away no declared
+name.
 
 A fixed rule then reads the translation and flags anything that a faithful numerical routine has
 no need for: an import other than math and NumPy, a file, a clock, the environment, state kept

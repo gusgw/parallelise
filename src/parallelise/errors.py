@@ -1,9 +1,5 @@
-"""Exceptions raised by the package.
-
-Every error that a person can cause, by a wrong name, a wrong path, a setting that cannot be
-used or a file that cannot be read or written, is a ParalleliseError. The command line prints
-its message as one line instead of a stack trace, so each message says what went wrong and
-what to do next.
+"""Exceptions raised by the package. Every error that a person can cause is a ParalleliseError, and
+the command line prints its message as one line that says what went wrong and what to do next.
 """
 
 

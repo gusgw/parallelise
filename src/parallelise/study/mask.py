@@ -1,19 +1,11 @@
 """Masking what an agent sees of a routine, so that a model cannot recognise the algorithm by name.
 
-A language model may have seen well-known algorithms many times, so a result on a problem called
-"jacobi" may reflect memory rather than ability. ``mask_sources`` masks the notebook's Python and
-the serial C, and gives the new names with which the agent's header is generated. Every number
-and every line of logic stay as they were; what changes is this:
-
-- the routine's name becomes the alias;
-- every other name that the sources define, from the arguments and results to the local
-  variables, helper functions and constants, becomes a neutral name such as ``v7``, the same
-  for the same original name in all three sources;
-- comments and Python docstrings are removed, except the header's, which states the rules.
-
-Names that the sources do not define are left alone, because they belong to Python, NumPy, the C
-library or the backend. In C, what the system headers declare is found by asking the compiler;
-on OpenMP pragma lines only the text inside parentheses is renamed.
+``mask_sources`` masks the notebook's Python and the serial C, and gives the new names from which
+the agent's header is generated. The routine's name becomes the alias, every other name that the
+sources define becomes a neutral one such as ``v7``, the same in every source, and comments and
+docstrings go; the numbers and the logic stay as they were. Names that belong to Python, NumPy,
+the C library or the backend stay too; in C, the system's names are found by asking the
+compiler, and on OpenMP pragma lines only the text inside parentheses is renamed.
 """
 
 from __future__ import annotations

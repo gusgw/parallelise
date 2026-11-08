@@ -1,17 +1,10 @@
 """Step 2: the model under study writes the parallel routine.
 
-The agent works in a folder that holds three files it may read: the notebook's Python
-(``function.py``), the problem's serial routine (``serial.c``) and the generated header.
-In a study run all three are masked: the routine's name becomes an alias, and comments and
-telling names are removed. The agent writes one file, its routine. Its check is the
-judgement itself, made afresh each time: the routine is compared with the Python on fresh
-inputs and timed against the serial routine at the benchmark size. It finishes when the check
-finds the
-routine correct and at least ``AGENT_GOAL`` times as fast as the serial routine; a routine
-that never gets there is still judged when the agent stops.
-
-The agent never sees an expected value, a file it could alter other than its own routine, or
-the code that judges it.
+The agent may read three files, masked in a study run: the notebook's Python (``function.py``),
+the problem's serial routine (``serial.c``) and the generated header. It writes one file, its
+routine, and its check is the judgement itself. It finishes when the check finds the routine
+correct and at least ``AGENT_GOAL`` times as fast as the serial routine. It never sees an
+expected value, the code that judges it, or a file it could change other than its routine.
 """
 
 from __future__ import annotations

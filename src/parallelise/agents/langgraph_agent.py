@@ -1,14 +1,12 @@
-"""The LangGraph agent: a tool-calling graph inside a re-check loop.
+"""The LangGraph agent: a tool-calling graph inside a loop that re-runs the shared check.
 
-LangChain's ``create_agent`` builds a graph that alternates between the model and the shared
-tools until the model stops asking for tools. That alone would let the model finish by
-describing a fix, so each pass of the graph is followed by the shared check; if it fails, the
-conversation continues with the failure appended, until the step budget is spent.
-
-The graph is streamed state by state, which lets the agent stop between steps when the time
-limit has passed, and keeps the messages when a run ends in an error. The model is reached
-through an HTTP client whose transport is the run's meter; the OpenAI library's own retries are
-off, so that they do not repeat the meter's waiting.
+LangChain's ``create_agent`` builds a graph that runs until the model stops asking for tools,
+which alone would let the model finish by describing a fix; so each pass of the graph is followed
+by the shared check, and if it fails, the conversation goes on with the failure appended, until
+the step budget is spent. The graph is streamed state by state, so that the agent can stop
+between steps when the time limit has passed. The model is reached through an HTTP client whose
+transport is the run's meter; the OpenAI library's own retries are off, so that they do not
+repeat the meter's waiting.
 """
 
 from __future__ import annotations

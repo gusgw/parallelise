@@ -1,13 +1,8 @@
 """Run a notebook's code, and ask its functions for inputs and for the trusted answers.
 
-The notebook's code cells run in a child Python process with a time limit, so that a
-notebook that fails, loops or exits cannot take the harness down with it. Each request runs
-the cells once and then does all its work: reading the declaration, building inputs from
-seeds, or computing the answers for input files. Inputs and answers pass through the binary
-files described in ``routine``.
-
-Run as a program (``python -m parallelise.notebook NOTEBOOK REQUEST REPLY``), this module is
-the child's side of the exchange.
+The cells run in a child Python process with a time limit, so that a notebook that fails, loops
+or exits cannot take the harness down with it. Run as a program (``python -m
+parallelise.notebook NOTEBOOK REQUEST REPLY``), this module is that child.
 """
 
 from __future__ import annotations

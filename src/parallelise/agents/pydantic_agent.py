@@ -1,15 +1,11 @@
-"""The Pydantic AI agent: the framework drives the loop, a validator guards the exit.
+"""The Pydantic AI agent: the framework drives the loop, and a validator guards the exit.
 
-The tools are the shared ones, built from their schemas. An output validator runs the shared
-check whenever the model gives a final answer, and refuses the answer until the check passes,
-so the model cannot finish by describing a fix. It may refuse as many times as the step budget
-allows, so that this design has the same budget as the others.
-
-The framework's graph is driven one node at a time, so that the time limit can be checked
-before each call to the model. The model is reached through an ``httpx2`` client, the HTTP
-library that Pydantic AI uses, with a transport defined here that counts and times each answer
-in the run's meter and waits out refusals, as the plain client's transport does; the OpenAI
-library's own retries are off, so that they do not repeat that waiting.
+An output validator runs the shared check whenever the model gives a final answer, and refuses
+the answer until the check passes, as often as the step budget allows, so that the model cannot
+finish by describing a fix. The graph is driven one node at a time, so that the time limit can be
+checked before each call to the model. The model is reached through a client of ``httpx2``, the
+HTTP library that Pydantic AI uses, with a transport defined here that reports to the run's
+meter; the OpenAI library's own retries are off, so that they do not repeat the meter's waiting.
 """
 
 from __future__ import annotations

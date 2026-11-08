@@ -1,16 +1,10 @@
 """The rule on what a routine may contain, checked before any routine is judged.
 
-A routine is refused unless five things hold. It reads no file but the system's headers and its
-generated header; this is checked before the routine is compiled, so that no message of the
-compiler can show the agent another file's text. Its own code, with its macros expanded, holds
-no assembly language, through which a file could be read without the compiler listing it. It
-defines no name but its own, so it cannot replace a function that the driver or the libraries
-rely on. It calls only functions on a short list: the C library's mathematics, memory and
-printing functions, and the calls of its backend, apart from their clocks and anything that
-starts a process. And it contains no system call and no code that runs before the program's main
-function. The rule is the same for every cheat, and for every backend but in two respects: each
-backend has its own list of calls, and a CUDA routine may hold the C++ names and the start-up
-code that the CUDA compiler adds itself.
+A routine may read no file but its own header and the system's headers, hold no assembly, define
+no name but its own, call only the functions on a short list, make no system call and hold no
+code that runs before the program starts; the section "The rule" of docs/DESIGN.md gives the
+reasons. Each backend has its own list of calls, and a CUDA routine may hold the C++ names and
+start-up code that the CUDA compiler adds itself.
 """
 
 from __future__ import annotations

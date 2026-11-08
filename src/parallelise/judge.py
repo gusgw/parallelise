@@ -1,31 +1,13 @@
-"""The judgement of a routine: whether it is correct, and how much faster than the serial routine.
+"""The judgement of a routine: whether it is correct, and how much faster it is than the serial
+routine.
 
-The judgement is made by fixed rules, after the agent has stopped, in a fresh folder that the
-agent never saw. The routine must first pass the rule on what it may contain (see ``rules``).
-Then:
-
-- Correctness at the test sizes. Fresh seeds and sizes are drawn: the declared test sizes and
-  two more at random between the smallest and the largest. Each input runs in a fresh process
-  at one worker and at all of them (once for CUDA), and only afterwards are the trusted answers
-  computed from the notebook's Python function.
-- Correctness and speed at the benchmark size. Six new inputs are drawn, one at a time. The
-  routine and the serial routine each run in a process of their own, and the harness
-  alternates between them: one untimed call each, then five timed calls each, on the same
-  inputs. Every answer of the routine is compared with the serial routine's, and each input
-  is deleted with its results once they have been compared.
-- Speed. The routine and the serial routine run on the same five inputs, so they are
-  compared input by input, and inputs that differ in their amount of work cannot hide a gain.
-  The speed-up is the median over the inputs of the serial routine's time divided by the
-  routine's, and the routine counts as faster when it beats the serial routine on all five,
-  which chance alone would give once in 32 trials. Its scaling is the median ratio of its own
-  time at one worker to its time at all of them, and it is called parallel when all its workers
-  beat one on all five inputs. A CUDA routine has no worker count; it is called parallel when
-  it launches a kernel.
-
-Each call is timed from outside the routine's process (see ``generate``). The verdict's stage
-is "none" for a correct routine and otherwise the first that failed: "rule", "build", "test",
-"benchmark" or "timeout". The stage "notebook" says that the notebook's own Python failed
-during the judgement, so that nothing was learnt about the routine.
+The judgement is made by fixed rules, in a fresh folder that the agent never saw, once the
+routine has passed the rule of ``rules``. It tests the routine on fresh inputs at the test sizes
+and at the benchmark size, and times it against the serial routine on the same inputs; the
+section "The judgement" of docs/DESIGN.md gives the steps and their reasons. The verdict's
+stage is "none" for a correct routine and otherwise the first that failed: "rule", "build",
+"test", "benchmark" or "timeout"; "notebook" says that the notebook's own Python failed, so that
+nothing was learnt about the routine.
 """
 
 from __future__ import annotations

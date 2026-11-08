@@ -1,30 +1,6 @@
-"""The declaration of a routine, and what follows from it.
-
-A notebook declares its routine in a dictionary named ROUTINE, beside an ordinary Python
-function that computes the answer and a function that builds inputs of any size:
-
-    def prefix_sum(x):
-        return np.cumsum(x)
-
-    def make_inputs(size, rng):
-        return {"x": rng.uniform(-0.5, 0.5, size)}
-
-    ROUTINE = {"function": prefix_sum, "make_inputs": make_inputs,
-               "arguments": {"x": "float64[n]"}, "results": {"out": "float64[n]"},
-               "test_sizes": [1, 1000, 200_000], "benchmark_size": 20_000_000,
-               "tolerance": 1e-9}
-
-Every argument and result has a type (float64, float32, int64 or int32) and, if it is an
-array, a shape made of size names and whole numbers, such as float64[n, 3]. A size name is an
-integer argument or is read from the shape of an array argument. A result written int64[<=n]
-is an array of at most n elements whose length the routine decides. A result with the same
-name as an argument is that argument, updated in place. The tolerance is relative to the
-largest magnitude of the trusted result; a result may instead be given an absolute tolerance,
-as ("absolute", 0.01). An optional "c_order" lists the parameter names in the order the C
-routine takes them.
-
-From the declaration follow the C prototype, the binary files in which the harness hands a
-routine its inputs and gets back its results, and the comparison of two sets of results.
+"""The declaration of a routine, and what follows from it: the C prototype, the binary files in
+which the harness hands a routine its inputs and gets back its results, and the comparison of two
+sets of results. The section "Writing a notebook" of the README describes the declaration.
 """
 
 from __future__ import annotations

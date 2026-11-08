@@ -1,14 +1,9 @@
-"""Tables, and a chart, that summarise the runs in a results file.
+"""Tables and a chart that summarise the runs in a results file.
 
-Every run counts, repeats included. A pass means that the routine was correct; its speed is
-reported apart, for the correct runs only. There are three tables:
-
-- correct runs for each model on each backend, with a 95 per cent Wilson interval (a range
-  for the true pass rate that stays sound for small counts);
-- the speed of the correct runs for each problem, backend and model: how many were faster
-  than the serial routine, and their median speed-up and scaling;
-- the use of each model: requests, the median latency of a call, the median rate of
-  completion tokens, the tokens used, the agent's time and, with a price table, the cost.
+The tables give the correct runs for each model on each backend, with a 95 per cent Wilson
+interval, a range for the true pass rate that stays sound for small counts; the speed of the
+correct runs; and the use of each model, with its cost when a price table is given. Every run
+counts, repeats included.
 """
 
 from __future__ import annotations

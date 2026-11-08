@@ -1,16 +1,9 @@
 """Step 1: an independent agent translates a notebook's Python function into plain C.
 
-The agent knows nothing of the rest of the work. It is told only to translate the function
-faithfully into C that gives the same results. It sees the function as the notebook defines it
-and the header that gives the C prototype; it may read those files and write one, its
-translation. Its check builds the translation with the serial driver and compares it with the
-Python on fresh inputs at every test size. The run ends when the check passes, when the step
-budget is spent, or when the time limit passes.
-
-A translation is accepted only after one more comparison, on new inputs at every test size and
-at the benchmark size. The author then reads it, and it becomes the problem's serial routine
-(``serial.c`` beside the notebook): the referee of correctness at the benchmark size and the
-baseline of every speed-up.
+The agent sees only the function and the header, and its check compares its C with the Python at
+every test size. A translation is accepted only after one more comparison, on new inputs at every
+test size and at the benchmark size, and then becomes the problem's ``serial.c``: the referee of
+correctness at the benchmark size and the baseline of every speed-up.
 """
 
 from __future__ import annotations
