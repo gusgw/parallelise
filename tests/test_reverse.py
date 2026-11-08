@@ -117,7 +117,7 @@ def test_work_that_depends_on_the_number_of_workers_is_flagged():
 def test_state_kept_between_calls_a_clock_and_a_wait_are_flagged():
     flags = " ".join(reverse.read_translation(STORED, DECL)[0])
     for words in ("keeps state between calls in last_n, last_r, last_t",
-                  "it calls omp_get_wtime, which it does not define, and which reads a clock",
+                  "it calls omp_get_wtime, which it does not define",
                   "it waits in a loop that does nothing"):  # fmt: skip
         assert words in flags
 
@@ -148,7 +148,7 @@ def routine(x, out, n, workers, cache={}):
 """
     flags = " ".join(reverse.read_translation(text, decl)[0])
     for words in ("it imports os", "it imports time", "it imports from its own folder",
-                  "it writes to copy", "it writes to x", "it opens a file",
+                  "it writes to copy", "it writes to x", "it calls open, which",
                   "it calls clock, which it does not define", "the number of workers",
                   "a default argument"):  # fmt: skip
         assert words in flags, words

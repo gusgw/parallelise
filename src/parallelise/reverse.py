@@ -103,29 +103,9 @@ OPINION = (
 )
 
 _MODULES = {"math", "numpy"}
-_WHY_MODULE = {
-    "time": "which reads a clock or waits",
-    "datetime": "which reads a clock",
-    "os": "which reaches files, processes or the environment",
-    "sys": "which reaches the interpreter and its streams",
-    "pathlib": "which reaches files",
-    "io": "which reaches files",
-    "shutil": "which reaches files",
-    "subprocess": "which starts processes",
-    "threading": "which starts threads",
-    "multiprocessing": "which starts processes",
-    "random": "which draws numbers that the routine was not given",
-}
-_REFUSED_CALLS = {
-    "open": "it opens a file",
-    "input": "it reads its input stream",
-    "exec": "it runs code that it builds",
-    "eval": "it runs code that it builds",
-    "compile": "it builds code to run",
-    "__import__": "it imports a module by name",
-    "globals": "it reads the module's own state",
-    "breakpoint": "it stops for a debugger",
-}
+#: Python's own functions that a numerical routine has no need for.
+_REFUSED_CALLS = {"open", "input", "exec", "eval", "compile", "__import__", "globals",
+                  "breakpoint"}  # fmt: skip
 _MUTATING = {"append", "extend", "insert", "update", "setdefault", "pop", "popitem", "clear",
              "add", "remove", "discard", "fill", "sort", "put", "resize", "itemset"}  # fmt: skip
 _WRITING_FUNCTIONS = {"copyto", "put", "place", "putmask", "fill_diagonal"}
@@ -363,8 +343,7 @@ def read_translation(text: str, decl: Declaration) -> tuple[list[str], list[int]
             modules = ([a.name for a in node.names] if isinstance(node, ast.Import)
                        else [str(node.module)])  # fmt: skip
             for top in {m.split(".")[0] for m in modules} - _MODULES:
-                why = _WHY_MODULE.get(top, "which a numerical routine has no need for")
-                flag(f"it imports {top}, {why}", node)
+                flag(f"it imports {top}, which a numerical routine has no need for", node)
         elif isinstance(node, (ast.Global, ast.Nonlocal)):
             flag(f"it keeps state between calls in {', '.join(node.names)}", node)
         elif isinstance(node, ast.Call):
@@ -468,11 +447,9 @@ def _call_flags(node: ast.Call, defined: set[str], read_only: set[str], kept: se
     func = node.func
     if isinstance(func, ast.Name):
         if func.id in _REFUSED_CALLS:
-            flag(_REFUSED_CALLS[func.id], node)
+            flag(f"it calls {func.id}, which a numerical routine has no need for", node)
         elif func.id not in defined:
-            clock = re.search(r"time|clock", func.id, re.IGNORECASE)
-            flag(f"it calls {func.id}, which it does not define"
-                 + (", and which reads a clock" if clock else ""), node)  # fmt: skip
+            flag(f"it calls {func.id}, which it does not define", node)
     elif isinstance(func, ast.Attribute):
         owner = _base(func.value)
         if func.attr in _MUTATING and owner in read_only:
