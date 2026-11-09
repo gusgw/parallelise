@@ -18,11 +18,12 @@ an expected answer or the code that judges it, and the verdict comes from fixed 
 [docs/DESIGN.md](docs/DESIGN.md) sets out the design of the experiment, and
 [docs/RESULTS.md](docs/RESULTS.md) reports the measurements so far.
 
-A further check is built but not yet tried with a real model: an independent agent translates a
-parallel routine back into plain Python, in which a trick hidden in the C stands out, and a fixed
-rule flags whatever an honest numerical routine has no need for. The larger goal
-is an agent that also chooses the backend, deciding from the notebook alone whether threads,
-processes, a graphics card or plain serial code suit the algorithm.
+A further check has an independent agent translate a parallel routine back into plain Python, in
+which a trick hidden in the C stands out, and a fixed rule flags whatever an honest numerical
+routine has no need for. In a trial on 9 November, with Kimi K2.5 as the translator, the rule
+flagged all three of the cheating routines kept for testing and none of the 39 routines kept as
+known to be good. The larger goal is an agent that also chooses the backend, deciding from the
+notebook alone whether threads, processes, a graphics card or plain serial code suit the algorithm.
 
 This repository is a public version of my own work, with proprietary material removed.
 
