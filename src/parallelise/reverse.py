@@ -249,7 +249,9 @@ def _read(nb: Path, decl: Declaration, folder: Path, source: str, backend: str,
         return Reading("not compared", flags=["the translator wrote no translation"])
     compared = "not compared"
     if runs:
-        compared = "agrees" if compare_with_c(nb, decl, folder, source, backend)[0] else "differs"
+        passed, said = compare_with_c(nb, decl, folder, source, backend)
+        compared = ("agrees" if said.startswith("check passed") else
+                    "differs" if not passed else "not compared")  # fmt: skip
     flags, changes = read_translation(path.read_text(encoding="utf-8"), decl)
     sizes = [s for s in changes if 1 <= s <= decl.benchmark_size and s not in decl.test_sizes]
     if runs and sizes:

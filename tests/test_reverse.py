@@ -242,6 +242,21 @@ def test_a_routine_wrong_above_a_size_is_flagged_where_its_code_changes(tmp_path
 
 
 @pytest.mark.slow
+def test_a_routine_that_stops_when_it_is_run_is_not_compared(tmp_path):
+    routine = tmp_path / "midpoint.c"
+    routine.write_text('#include <stdlib.h>\n#include "midpoint.h"\n\n'
+                       "double midpoint(double a, double b, long n)\n{\n    (void)a;\n"
+                       "    (void)b;\n    (void)n;\n    abort();\n}\n")
+    steps = [tool_call_step("write_file", {"path": "translation.py", "content": HONEST}, 100, 50),
+             finish_step("finished", 120, 5)]
+    with FakeModelServer(steps) as fake:
+        settings = Settings(gateway_url=fake.url, model="fixed", temperature=0.0)
+        reading = reverse.translate_back(MIDPOINT, DECL, routine, "openmp", settings,
+                                         tmp_path / "out")  # fmt: skip
+    assert reading.compared == "not compared" and not reading.flags
+
+
+@pytest.mark.slow
 def test_a_routine_the_rule_refuses_is_translated_without_being_run(tmp_path):
     reading = step(tmp_path, "midpoint_stored_answer.c", STORED, "No.")
     assert reading.compared == "not compared"
