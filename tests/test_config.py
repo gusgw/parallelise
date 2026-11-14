@@ -1,6 +1,5 @@
 """Tests for the settings, the environment given to compiled code, and the logging set-up."""
 
-import json
 import logging
 
 import pytest
@@ -36,11 +35,11 @@ def test_compiled_code_gets_no_secret_and_none_of_the_program_s_own_settings():
     assert without_secrets(env) == {"PATH": "/bin", "HOME": "/home/u"}
 
 
-def test_logging_can_be_set_up_twice_and_written_as_json(capsys):
+def test_logging_can_be_set_up_twice(capsys):
     configure_logging("INFO")
-    configure_logging("INFO", json_lines=True)
+    configure_logging("INFO")
     logging.getLogger("parallelise.test").info("hello")
     (line,) = capsys.readouterr().err.splitlines()
-    assert json.loads(line)["message"] == "hello"
+    assert line.endswith("parallelise.test: hello")
     with pytest.raises(ParalleliseError, match="not known"):
         configure_logging("LOUD")

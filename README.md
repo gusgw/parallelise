@@ -116,17 +116,17 @@ change, translate it again with `--force`, so that its serial routine is checked
 
 `run` makes a new work folder under `work/`, has the model under study write the parallel routine
 there, judges the routine, and appends a record to `results/local-runs.jsonl`. Its last line gives
-the verdict, such as `PASS: correct; faster than the serial routine (speed-up 3.21)`. `check`
-judges a finished work folder again, and `report` prints tables of correctness, speed and the use
-of each model. `reverse` has the fixed model of `serial` translate a parallel routine back into
-plain Python, and reads the translation by a fixed rule; it prints what the rule flags and, when
-something is flagged, the model's opinion of whether the translation and the notebook's function
-compute the same results, which is never a verdict. Every command explains itself with `--help` and takes `--log-level` (WARNING by
-default) and `--log-json`, which writes each log line as JSON (JavaScript Object Notation). Every
-new record names the model's provider and the numeric precision of its weights, from `--serving`
-and `--quantisation`, which say "not recorded" and "not disclosed" unless they are given. The
-largest problems need a few gigabytes of temporary space, so where `/tmp` is held in memory, point
-`TMPDIR` at a folder on disk.
+the verdict, such as `PASS: correct; faster than the serial routine (speed-up 3.21)`. `check` judges
+a finished work folder again, and `report` prints tables of correctness, speed and the use of each
+model. `reverse` has the fixed model of `serial` translate a parallel routine back into plain
+Python, and reads the translation by a fixed rule; it prints what the rule flags and, when something
+is flagged, the model's opinion of whether the translation and the notebook's function compute the
+same results, which is never a verdict. Every command explains itself with `--help` and takes
+`--log-level` (WARNING by default), which sets how much it logs to standard error. Every new record
+names the model's provider and the numeric precision of its weights, from `--serving` and
+`--quantisation`, which say "not recorded" and "not disclosed" unless they are given. The largest
+problems need a few gigabytes of temporary space, so where `/tmp` is held in memory, point `TMPDIR`
+at a folder on disk.
 
 ## How a routine is judged
 

@@ -302,7 +302,6 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--version", action="version", version=f"parallelise {__version__}")
     common = argparse.ArgumentParser(add_help=False)
     common.add_argument("--log-level", default="WARNING", help="DEBUG, INFO, WARNING or ERROR")
-    common.add_argument("--log-json", action="store_true", help="write log lines as JSON")
     endpoint = argparse.ArgumentParser(add_help=False)
     endpoint.add_argument("--gateway-url", help="the model endpoint (PARALLELISE_GATEWAY_URL)")
     endpoint.add_argument("--model", help="the model's name (PARALLELISE_MODEL)")
@@ -395,7 +394,7 @@ def main(argv: list[str] | None = None) -> int:
     except SystemExit as exc:  # argparse exits itself; turn that into a return value
         return exc.code if isinstance(exc.code, int) else (0 if exc.code is None else 2)
     try:
-        configure_logging(args.log_level, args.log_json)
+        configure_logging(args.log_level)
         return int(args.func(args))
     except ParalleliseError as exc:
         print(f"parallelise: {exc}", file=sys.stderr)
