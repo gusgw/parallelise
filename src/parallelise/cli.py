@@ -321,15 +321,6 @@ def main(argv: list[str] | None = None) -> int:
     except ParalleliseError as exc:
         print(f"parallelise: {exc}", file=sys.stderr)
         return 1
-    except OSError as exc:  # a path that cannot be read or written, not caught closer to it
-        log.debug("operating-system error", exc_info=True)
-        where = f": {exc.filename}" if exc.filename else ""
-        print(f"parallelise: {exc.strerror or exc}{where}. Check the path and its permissions.",
-              file=sys.stderr)
-        return 1
-    except KeyboardInterrupt:
-        print("parallelise: interrupted.", file=sys.stderr)
-        return 130
 
 
 if __name__ == "__main__":

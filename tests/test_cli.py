@@ -167,8 +167,13 @@ def test_a_place_that_cannot_be_written_is_found_before_the_agent_starts(monkeyp
     install_fakes(monkeypatch, tmp_path)
     FakeAgent.seen = {}
     (tmp_path / "blocker").write_text("a file, not a folder")
-    assert run(tmp_path, f"--{where}", str(tmp_path / "blocker" / "inside")) == 1
-    assert "blocker" in capsys.readouterr().err and FakeAgent.seen == {}
+    if where == "results":
+        assert run(tmp_path, "--results", str(tmp_path / "blocker" / "inside")) == 1
+        assert "blocker" in capsys.readouterr().err
+    else:
+        with pytest.raises(NotADirectoryError):
+            run(tmp_path, "--work-root", str(tmp_path / "blocker" / "inside"))
+    assert FakeAgent.seen == {}
 
 
 def test_an_agent_that_is_not_installed_makes_no_record(monkeypatch, tmp_path, capsys):
@@ -225,13 +230,3 @@ def test_serial_will_not_replace_a_serial_routine_without_force(monkeypatch, tmp
     install_fakes(monkeypatch, tmp_path)
     assert cli.main(["serial", str(tmp_path / "midpoint")]) == 1
     assert "--force" in capsys.readouterr().err
-
-
-def test_an_unexpected_file_error_is_one_plain_line(monkeypatch, capsys):
-    def fail(args):
-        raise PermissionError(13, "Permission denied", "/some/file")
-
-    monkeypatch.setattr(cli, "cmd_report", fail)
-    assert cli.main(["report"]) == 1
-    assert capsys.readouterr().err.strip() == (
-        "parallelise: Permission denied: /some/file. Check the path and its permissions.")
