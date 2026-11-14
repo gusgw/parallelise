@@ -73,7 +73,7 @@ class ResultsStore:
         except OSError as exc:
             raise ParalleliseError(
                 f"Runs cannot be recorded in {self.path} ({exc.strerror or exc}). Give --results "
-                "(or PARALLELISE_RESULTS) a file that can be written."
+                "a file that can be written."
             ) from exc
 
     def append(self, record: RunRecord) -> None:

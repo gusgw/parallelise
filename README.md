@@ -94,23 +94,23 @@ the notebook.
 
 ## Running it
 
-    export PARALLELISE_GATEWAY_URL=http://localhost:4000/v1   # or give --gateway-url
-    export PARALLELISE_MODEL=gpt-oss-120b                     # name the model under study
-    export PARALLELISE_API_KEY=...                            # if the service needs a key
+    export PARALLELISE_API_KEY=...        # only if the model service needs a key
     parallelise serial path/to/new_problem --model kimi-k2.5
-    parallelise run problems/integrate --backend openmp --agent basic
+    parallelise run problems/integrate --backend openmp --agent basic --model gpt-oss-120b
     parallelise check work/integrate/openmp/gpt-oss-120b/basic/2026-11-07T09-30-00Z \
         --problem problems/integrate --backend openmp
     parallelise reverse work/integrate/openmp/gpt-oss-120b/basic/2026-11-07T09-30-00Z/integrate.c \
         --problem problems/integrate --backend openmp --model kimi-k2.5
     parallelise report --chart correct.svg
 
-`serial` has a model translate the function into plain C once, before any run, and writes
-`serial.c` only if the translation agrees with the Python on fresh inputs at every test size and at
-the benchmark size. Use one model for every problem, and not one of those under study; all thirteen
-shipped routines were translated by `kimi-k2.5`. Read the translation before relying on it, because
-it referees every later run and sets the baseline of every speed-up. When a notebook's sizes
-change, translate it again with `--force`, so that its serial routine is checked at the new ones.
+Each command that calls a model takes `--model`, and `--gateway-url` when the model service is not
+at `http://localhost:4000/v1`. `serial` has a model translate the function into plain C once, before
+any run, and writes `serial.c` only if the translation agrees with the Python on fresh inputs at
+every test size and at the benchmark size. Use one model for every problem, and not one of those
+under study; all thirteen shipped routines were translated by `kimi-k2.5`. Read the translation
+before relying on it, because it referees every later run and sets the baseline of every speed-up.
+When a notebook's sizes change, translate it again with `--force`, so that its serial routine is
+checked at the new ones.
 
 `run` makes a new work folder under `work/`, has the model under study write the parallel routine
 there, judges the routine, and appends a record to `results/local-runs.jsonl`. Its last line gives

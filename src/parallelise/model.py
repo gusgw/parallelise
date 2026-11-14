@@ -139,7 +139,7 @@ class ModelClient:
         except httpx.InvalidURL as exc:
             raise ParalleliseError(
                 f"The gateway URL {settings.gateway_url!r} is not a usable web address ({exc}). "
-                "Set PARALLELISE_GATEWAY_URL, for example to http://localhost:4000/v1."
+                "Give --gateway-url, for example http://localhost:4000/v1."
             ) from exc
 
     def close(self) -> None:

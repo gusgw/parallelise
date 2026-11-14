@@ -49,7 +49,7 @@ def verdict_line(verdict: judge.Verdict) -> str:
 
 
 def _settings(args: argparse.Namespace) -> Settings:
-    """The settings from the environment, overridden by any options that were given."""
+    """The settings from the options that were given and from the environment variables."""
     return Settings.from_env({
         "gateway_url": getattr(args, "gateway_url", None), "model": getattr(args, "model", None),
         "work_root": getattr(args, "work_root", None),
@@ -280,8 +280,8 @@ def build_parser() -> argparse.ArgumentParser:
     common = argparse.ArgumentParser(add_help=False)
     common.add_argument("--log-level", default="WARNING", help="DEBUG, INFO, WARNING or ERROR")
     endpoint = argparse.ArgumentParser(add_help=False)
-    endpoint.add_argument("--gateway-url", help="the model endpoint (PARALLELISE_GATEWAY_URL)")
-    endpoint.add_argument("--model", help="the model's name (PARALLELISE_MODEL)")
+    endpoint.add_argument("--gateway-url", help="the model endpoint (default: http://localhost:4000/v1)")
+    endpoint.add_argument("--model", help="the model's name (default: local)")
     sub = parser.add_subparsers(dest="command", required=True, metavar="command")
 
     def command(name: str, parents: list, words: str, example: str,
@@ -314,13 +314,13 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--step-budget", type=_positive(int), default=80,
                    help="the most requests the agent may make to the model (default: 80)")
     p.add_argument("--time-limit", type=_positive(float), metavar="SECONDS",
-                   help="the agent's time limit (PARALLELISE_TIME_LIMIT; default: 1800)")
+                   help="the agent's time limit (default: 1800)")
     p.add_argument("--check-timeout", type=_positive(float), default=900.0,
                    help="the seconds allowed for the judgement (default: 900)")
     p.add_argument("--repeat", type=_positive(int), default=1,
                    help="the number of this run, when it is repeated (default: 1)")
-    p.add_argument("--work-root", help="the folder for work folders (PARALLELISE_WORK_ROOT)")
-    p.add_argument("--results", help="the results file (PARALLELISE_RESULTS)")
+    p.add_argument("--work-root", help="the folder for work folders (default: work)")
+    p.add_argument("--results", help="the results file (default: results/local-runs.jsonl)")
     p.add_argument("--serving", default="not recorded",
                    help="who served the model, such as its provider")
     p.add_argument("--quantisation", default="not disclosed",
@@ -354,7 +354,7 @@ def build_parser() -> argparse.ArgumentParser:
     p = command("report", [common], "print the tables of correct runs, speed and model use, "
                 "and draw a chart if asked", "parallelise report --results runs.jsonl "
                 "--chart correct.svg", cmd_report)
-    p.add_argument("--results", help="the results file (PARALLELISE_RESULTS)")
+    p.add_argument("--results", help="the results file (default: results/local-runs.jsonl)")
     p.add_argument("--prices", help="a JSON table of US dollars per million tokens, for costs")
     p.add_argument("--chart", help="write the chart of correct runs to this SVG file")
     return parser
