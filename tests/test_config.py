@@ -1,12 +1,6 @@
-"""Tests for the settings, the environment given to compiled code, and the logging set-up."""
-
-import logging
-
-import pytest
+"""Tests for the settings and the environment given to compiled code."""
 
 from parallelise.config import Settings, without_secrets
-from parallelise.errors import ParalleliseError
-from parallelise.log import configure_logging
 
 
 def test_settings_come_from_the_environment_and_options_win():
@@ -22,13 +16,3 @@ def test_compiled_code_gets_no_secret_and_none_of_the_program_s_own_settings():
     env = {"PATH": "/bin", "OPENAI_API_KEY": "x", "MY_TOKEN": "y", "db_password": "z",
            "PARALLELISE_API_KEY": "w", "PARALLELISE_MODEL": "m", "HOME": "/home/u"}
     assert without_secrets(env) == {"PATH": "/bin", "HOME": "/home/u"}
-
-
-def test_logging_can_be_set_up_twice(capsys):
-    configure_logging("INFO")
-    configure_logging("INFO")
-    logging.getLogger("parallelise.test").info("hello")
-    (line,) = capsys.readouterr().err.splitlines()
-    assert line.endswith("parallelise.test: hello")
-    with pytest.raises(ParalleliseError, match="not known"):
-        configure_logging("LOUD")

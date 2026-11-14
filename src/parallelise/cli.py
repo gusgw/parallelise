@@ -18,7 +18,6 @@ from . import __version__, convert, generate, judge, notebook, provenance, rever
 from .agents import AGENT_NAMES, AgentResult, get_agent
 from .config import Settings
 from .errors import AgentUnavailable, ParalleliseError
-from .log import configure_logging
 from .model import ModelClient
 from .results import ResultsStore, RunRecord
 from .study import report
@@ -367,7 +366,8 @@ def main(argv: list[str] | None = None) -> int:
     except SystemExit as exc:  # argparse exits itself; turn that into a return value
         return exc.code if isinstance(exc.code, int) else (0 if exc.code is None else 2)
     try:
-        configure_logging(args.log_level)
+        logging.basicConfig(format="%(asctime)s %(levelname)s %(name)s: %(message)s")
+        logging.getLogger("parallelise").setLevel(args.log_level.upper())
         return int(args.func(args))
     except ParalleliseError as exc:
         print(f"parallelise: {exc}", file=sys.stderr)
