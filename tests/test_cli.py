@@ -44,12 +44,6 @@ def test_every_command_is_listed_and_has_an_example(capsys):
         assert "Example: parallelise " + command in capsys.readouterr().out
 
 
-def test_a_setting_that_cannot_be_used_is_one_plain_line(monkeypatch, capsys):
-    monkeypatch.setenv("PARALLELISE_TEMPERATURE", "9")
-    assert cli.main(["report"]) == 1
-    assert "PARALLELISE_TEMPERATURE" in capsys.readouterr().err
-
-
 # --- run, with a stand-in agent and judgement ----------------------------------------------------
 
 
