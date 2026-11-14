@@ -35,13 +35,10 @@ def test_wrong_arguments_exit_2_and_help_and_version_exit_0(capsys):
     assert cli.main(["--help"]) == 0 and cli.main(["--version"]) == 0
 
 
-def test_every_command_is_listed_and_has_an_example(capsys):
+def test_every_command_is_listed(capsys):
     cli.main(["--help"])
     listing = capsys.readouterr().out
-    for command in ("serial", "run", "check", "reverse", "report"):
-        assert command in listing
-        cli.main([command, "--help"])
-        assert "Example: parallelise " + command in capsys.readouterr().out
+    assert all(command in listing for command in ("serial", "run", "check", "reverse", "report"))
 
 
 # --- run, with a stand-in agent and judgement ----------------------------------------------------

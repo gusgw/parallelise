@@ -271,91 +271,60 @@ def cmd_report(args: argparse.Namespace) -> int:
 
 
 def build_parser() -> argparse.ArgumentParser:
-    """Create the argument parser with all its commands."""
-    parser = argparse.ArgumentParser(
-        prog="parallelise", description="Turn a serial Python notebook into a parallel C routine "
-                                        "with a language-model agent, and judge the result.")
+    """Create the argument parser with all its commands, which the README describes."""
+    parser = argparse.ArgumentParser(prog="parallelise")
     parser.add_argument("--version", action="version", version=f"parallelise {__version__}")
     common = argparse.ArgumentParser(add_help=False)
-    common.add_argument("--log-level", default="WARNING", help="DEBUG, INFO, WARNING or ERROR")
-    endpoint = argparse.ArgumentParser(add_help=False)
-    endpoint.add_argument("--gateway-url", help="the model endpoint (default: http://localhost:4000/v1)")
-    endpoint.add_argument("--model", help="the model's name (default: local)")
-    sub = parser.add_subparsers(dest="command", required=True, metavar="command")
+    common.add_argument("--log-level", default="WARNING")
+    endpoint = argparse.ArgumentParser(add_help=False, parents=[common])
+    endpoint.add_argument("--gateway-url")
+    endpoint.add_argument("--model")
+    sub = parser.add_subparsers(dest="command", required=True)
 
-    def command(name: str, parents: list, words: str, example: str,
-                func: object) -> argparse.ArgumentParser:
-        p = sub.add_parser(name, parents=parents, help=words,
-                           description=words[0].upper() + words[1:] + ".",
-                           epilog=f"Example: {example}")  # fmt: skip
+    def command(name: str, parent: argparse.ArgumentParser,
+                func: object) -> argparse.ArgumentParser:  # fmt: skip
+        p = sub.add_parser(name, parents=[parent])
         p.set_defaults(func=func)
         return p
 
-    p = command("serial", [common, endpoint], "have a model, at temperature zero, translate a "
-                "problem's notebook into its serial routine, serial.c, which names that model and "
-                "is accepted only if it agrees with the Python at every test size and at the "
-                "benchmark size", "parallelise serial problems/integrate --model kimi-k2.5",
-                cmd_serial)
-    p.add_argument("problem", help="a folder holding a notebook of the same name")
-    p.add_argument("--step-budget", type=_positive(int), default=40,
-                   help="the most requests the agent may make to the model (default: 40)")
-    p.add_argument("--force", action="store_true", help="replace a serial routine that exists")
+    p = command("serial", endpoint, cmd_serial)
+    p.add_argument("problem")
+    p.add_argument("--step-budget", type=_positive(int), default=40)
+    p.add_argument("--force", action="store_true")
 
-    p = command("run", [common, endpoint], "have an agent write a problem's parallel routine "
-                "in a new work folder, judge it, and record the run",
-                "parallelise run problems/integrate --backend openmp --model local", cmd_run)
-    p.add_argument("problem", help="a folder holding the notebook and its serial.c")
+    p = command("run", endpoint, cmd_run)
+    p.add_argument("problem")
     p.add_argument("--backend", required=True, choices=generate.BACKENDS)
-    p.add_argument("--agent", choices=AGENT_NAMES, default="basic",
-                   help="the design of agent that drives the model (default: basic)")
-    p.add_argument("--masked", metavar="ALIAS",
-                   help="hide the routine's name and every telling name behind this alias")
-    p.add_argument("--step-budget", type=_positive(int), default=80,
-                   help="the most requests the agent may make to the model (default: 80)")
-    p.add_argument("--time-limit", type=_positive(float), metavar="SECONDS",
-                   help="the agent's time limit (default: 1800)")
-    p.add_argument("--check-timeout", type=_positive(float), default=900.0,
-                   help="the seconds allowed for the judgement (default: 900)")
-    p.add_argument("--repeat", type=_positive(int), default=1,
-                   help="the number of this run, when it is repeated (default: 1)")
-    p.add_argument("--work-root", help="the folder for work folders (default: work)")
-    p.add_argument("--results", help="the results file (default: results/local-runs.jsonl)")
-    p.add_argument("--serving", default="not recorded",
-                   help="who served the model, such as its provider")
-    p.add_argument("--quantisation", default="not disclosed",
-                   help="the numeric precision of the model's weights, if known")
-    p.add_argument("--notes", default="", help="free text kept with the record")
+    p.add_argument("--agent", choices=AGENT_NAMES, default="basic")
+    p.add_argument("--masked", metavar="ALIAS")
+    p.add_argument("--step-budget", type=_positive(int), default=80)
+    p.add_argument("--time-limit", type=_positive(float))
+    p.add_argument("--check-timeout", type=_positive(float), default=900.0)
+    p.add_argument("--repeat", type=_positive(int), default=1)
+    p.add_argument("--work-root")
+    p.add_argument("--results")
+    p.add_argument("--serving", default="not recorded")
+    p.add_argument("--quantisation", default="not disclosed")
+    p.add_argument("--notes", default="")
 
-    p = command("check", [common], "judge the routine in a finished work folder again, without "
-                "the agent or the model", "parallelise check work/integrate/openmp/local/basic/"
-                "2026-11-07T09-30-00Z --problem problems/integrate --backend openmp", cmd_check)
-    p.add_argument("work_dir", help="a work folder made by 'parallelise run'")
-    p.add_argument("--problem", required=True, help="the problem folder it was made for")
+    p = command("check", common, cmd_check)
+    p.add_argument("work_dir")
+    p.add_argument("--problem", required=True)
     p.add_argument("--backend", required=True, choices=generate.BACKENDS)
-    p.add_argument("--timeout", type=_positive(float), default=900.0,
-                   help="the seconds allowed for the judgement (default: 900)")
+    p.add_argument("--timeout", type=_positive(float), default=900.0)
 
-    p = command("reverse", [common, endpoint], "have a model translate a parallel routine back "
-                "into plain Python, and flag what a faithful numerical routine has no need for",
-                "parallelise reverse work/integrate/openmp/local/basic/2026-11-08T09-30-00Z/"
-                "integrate.c --problem problems/integrate --backend openmp --model kimi-k2.5",
-                cmd_reverse)
-    p.add_argument("routine", help="the routine's source file")
-    p.add_argument("--problem", required=True, help="the problem folder it was written for")
+    p = command("reverse", endpoint, cmd_reverse)
+    p.add_argument("routine")
+    p.add_argument("--problem", required=True)
     p.add_argument("--backend", required=True, choices=generate.BACKENDS)
-    p.add_argument("--name", help="the routine's own name, if it is not the declared one, as "
-                   "in a masked run")
-    p.add_argument("--step-budget", type=_positive(int), default=40,
-                   help="the most requests the agent may make to the model (default: 40)")
-    p.add_argument("--out", help="the folder for the translation and the reading (default: a "
-                   "new folder under work/reverse)")
+    p.add_argument("--name")
+    p.add_argument("--step-budget", type=_positive(int), default=40)
+    p.add_argument("--out")
 
-    p = command("report", [common], "print the tables of correct runs, speed and model use, "
-                "and draw a chart if asked", "parallelise report --results runs.jsonl "
-                "--chart correct.svg", cmd_report)
-    p.add_argument("--results", help="the results file (default: results/local-runs.jsonl)")
-    p.add_argument("--prices", help="a JSON table of US dollars per million tokens, for costs")
-    p.add_argument("--chart", help="write the chart of correct runs to this SVG file")
+    p = command("report", common, cmd_report)
+    p.add_argument("--results")
+    p.add_argument("--prices")
+    p.add_argument("--chart")
     return parser
 
 

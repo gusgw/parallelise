@@ -119,7 +119,7 @@ a finished work folder again, and `report` prints tables of correctness, speed a
 model. `reverse` has the fixed model of `serial` translate a parallel routine back into plain
 Python, and reads the translation by a fixed rule; it prints what the rule flags and, when something
 is flagged, the model's opinion of whether the translation and the notebook's function compute the
-same results, which is never a verdict. Every command explains itself with `--help` and takes
+same results, which is never a verdict. Every command lists its options with `--help` and takes
 `--log-level` (WARNING by default), which sets how much it logs to standard error. Every new record
 names the model's provider and the numeric precision of its weights, from `--serving` and
 `--quantisation`, which say "not recorded" and "not disclosed" unless they are given. The largest
