@@ -142,9 +142,10 @@ results; its answer goes to the reader beside the flags, never into a verdict. I
 November, with Kimi K2.5 as the translator, the rule flagged the three cheats above, each for the
 trick it hides, and none of the 39 known-good routines, whose translations all agreed with their C.
 A first trial, of an earlier version, had wrongly flagged one known-good routine, through a fault in
-the rule since mended and a loop that the translator wrote and the C does not have. Whether the rule
-spares honest routines in general is for a larger run to show. A race has no serial form, and
-remains a matter for testing.
+the rule since mended and a loop that the translator wrote and the C does not have. Of the 297
+stored routines from July and October that the judgement finds correct, it flagged 12, as RESULTS.md
+reports, 11 of them for comparing the number of workers with 0 or 1, or testing whether a size
+divides by it. A race has no serial form, and remains a matter for testing.
 
 ## Agent designs, the meter and masking
 

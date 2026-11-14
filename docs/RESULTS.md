@@ -2,8 +2,9 @@
 
 This document reports how many of the routines that agents wrote in July and October 2026 are
 correct, by the checks then in use and by the judgement that [DESIGN.md](DESIGN.md) describes,
-applied again on 7 November 2026, and how fast the known-good routines are. Each table names the
-files it comes from, all under `results/`. Each combination was judged from a single run, so a
+applied again on 7 November 2026, what the reverse conversion found when it read them back into
+plain Python, and how fast the known-good routines are. Each table names the files it comes from,
+all under `results/`. Each combination was judged from a single run, so a
 difference of a few runs may be chance.
 
 ## The studies
@@ -129,6 +130,36 @@ old failures now correct, nine (seven in October, two in July) had failed at the
 stage or at the agent's own test; one October routine had failed because its agent changed a
 trusted file, and one July routine had failed its own test with several workers.
 
+## The reverse conversion of the stored routines
+
+In November the reverse conversion that DESIGN.md describes was applied to the stored routines, in
+the form that the re-judgement had given them to fit today's headers. Kimi K2.5, at temperature
+zero and with at most 20 requests for each routine, translated each back into plain Python on the
+same workstation and in the same containers as the re-judgement, and the fixed rule read every
+translation. It read every routine that is correct now and 60 of those that fail. The other failures
+were left out, because their translations cost the most and their flags would mostly repeat what
+the judgement had found, and two of them never build and cannot be translated.
+
+| Study | Correct now | Of them flagged | Failing now, read | Of them flagged |
+| --- | ---: | ---: | ---: | ---: |
+| October | 127 | 4 | 45 | 7 |
+| July | 170 | 8 | 15 | 3 |
+| All | 297 | 12 | 60 | 10 |
+
+Sources: `rejudge-2026-11.jsonl` and `reverse-2026-11.jsonl`.
+
+Every translation of a routine that is correct now agreed with its C on fresh inputs. Of the 12
+correct routines that were flagged, 11 compare the number of workers with 0 or 1, or test whether
+a size divides by it, as in `nthreads > 1` before a serial path or `num_threads < 1` as a guard;
+the twelfth, a CUDA routine for nbody, is flagged for an empty loop that its translator wrote and
+its C does not have. None of the correct routines is wrong at a size where its code changes, so
+none hides a shortcut above some size. Of the 60 failing routines that were read, six are wrong
+where their code changes, which the judgement had already found; two compare the number of workers
+with a fixed number, one writes to an argument that it may only read, and the translation of one
+defines no function `routine`. The fixed model, asked for its opinion of each flagged routine,
+answered "No" for all 22, so its opinion says nothing about them. The readings took 2,114
+requests, about 7 US dollars at the October list prices.
+
 ## Speed of the known-good routines
 
 No speed-up measured before 7 November is reported, and none should be relied on. The earlier
@@ -172,7 +203,10 @@ Source: `known-good-2026-11.json`.
 
 The stored routines are under `results/runs/` (July) and `results/campaign-2026-10/runs/`
 (October), beside the agents' own tests. The October records also hold each run's requests and
-tokens, and `prices.json` beside them gives the list prices per million tokens. The older evidence
+tokens, and `prices.json` beside them gives the list prices per million tokens.
+`reverse-2026-11.jsonl` holds the reverse conversion's reading of each routine that it read: how
+its translation compared with its C, the rule's flags, the sizes at which it was checked again,
+the model's use and, where something was flagged, the fixed model's opinion. The older evidence
 that no kept document uses (the July manifest and token counts, the October run logs, the reference
 measurements of October and early November, the old charts and the old design documents) remains in
 commit 629768d.
