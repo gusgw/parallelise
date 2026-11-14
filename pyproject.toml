@@ -22,17 +22,17 @@ dependencies = [
 # together, run the whole test suite, and record the change. httpx2 is the HTTP library that
 # Pydantic AI and the OpenAI library use, and that the Pydantic AI agent uses directly.
 agents = [
-    "pydantic-ai==2.55.0",
-    "openai==3.29.0",
-    "httpx2==2.13.1",
-    "langgraph==1.2.14",
-    "langchain==1.4.4",
-    "langchain-openai==1.7.1",
-    "langchain-core==1.6.10",
+    "pydantic-ai==2.67.0",
+    "openai==3.49.0",
+    "httpx2==2.16.0",
+    "langgraph==1.2.20",
+    "langchain==1.4.10",
+    "langchain-openai==1.7.4",
+    "langchain-core==1.7.7",
 ]
 # the report generator's chart
 report = ["matplotlib>=3.8"]
-dev = ["pytest>=8", "ruff==0.17.3", "matplotlib>=3.8", "mypy==2.4.1"]
+dev = ["pytest>=8", "ruff==0.17.4", "matplotlib>=3.8", "mypy==2.4.1"]
 
 [project.scripts]
 parallelise = "parallelise.cli:main"
