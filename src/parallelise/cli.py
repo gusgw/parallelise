@@ -77,16 +77,9 @@ def _require_tools(backend: str) -> None:
 
 def _new_work_folder(parent: Path) -> Path:
     """Make a new folder under ``parent``, named by the time, so that no run meets another's."""
-    parent.mkdir(parents=True, exist_ok=True)
-    stamp = time.strftime("%Y-%m-%dT%H-%M-%SZ", time.gmtime())
-    for n in range(1, 100):
-        folder = parent / (stamp if n == 1 else f"{stamp}-{n}")
-        try:
-            folder.mkdir()
-            return folder
-        except FileExistsError:
-            continue
-    raise ParalleliseError(f"No new work folder could be made under {parent}. Try again.")
+    folder = parent / time.strftime("%Y-%m-%dT%H-%M-%SZ", time.gmtime())
+    folder.mkdir(parents=True)
+    return folder
 
 
 def _safe(text: str) -> str:
