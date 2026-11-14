@@ -11,7 +11,6 @@ import hashlib
 import logging
 import sys
 import time
-from collections.abc import Callable
 from pathlib import Path
 
 from . import __version__, convert, generate, judge, notebook, provenance, reverse, serial
@@ -88,18 +87,6 @@ def _new_work_folder(parent: Path) -> Path:
         except FileExistsError:
             continue
     raise ParalleliseError(f"No new work folder could be made under {parent}. Try again.")
-
-
-def _positive(kind: type) -> Callable[[str], float]:
-    """An argparse type for a number that must be above zero."""
-
-    def convert(text: str) -> float:
-        value = kind(text)
-        if value <= 0:
-            raise argparse.ArgumentTypeError(f"{text} is not above zero")
-        return value
-
-    return convert
 
 
 def _safe(text: str) -> str:
@@ -289,7 +276,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     p = command("serial", endpoint, cmd_serial)
     p.add_argument("problem")
-    p.add_argument("--step-budget", type=_positive(int), default=40)
+    p.add_argument("--step-budget", type=int, default=40)
     p.add_argument("--force", action="store_true")
 
     p = command("run", endpoint, cmd_run)
@@ -297,10 +284,10 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--backend", required=True, choices=generate.BACKENDS)
     p.add_argument("--agent", choices=AGENT_NAMES, default="basic")
     p.add_argument("--masked", metavar="ALIAS")
-    p.add_argument("--step-budget", type=_positive(int), default=80)
-    p.add_argument("--time-limit", type=_positive(float))
-    p.add_argument("--check-timeout", type=_positive(float), default=900.0)
-    p.add_argument("--repeat", type=_positive(int), default=1)
+    p.add_argument("--step-budget", type=int, default=80)
+    p.add_argument("--time-limit", type=float)
+    p.add_argument("--check-timeout", type=float, default=900.0)
+    p.add_argument("--repeat", type=int, default=1)
     p.add_argument("--work-root")
     p.add_argument("--results")
     p.add_argument("--serving", default="not recorded")
@@ -311,14 +298,14 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("work_dir")
     p.add_argument("--problem", required=True)
     p.add_argument("--backend", required=True, choices=generate.BACKENDS)
-    p.add_argument("--timeout", type=_positive(float), default=900.0)
+    p.add_argument("--timeout", type=float, default=900.0)
 
     p = command("reverse", endpoint, cmd_reverse)
     p.add_argument("routine")
     p.add_argument("--problem", required=True)
     p.add_argument("--backend", required=True, choices=generate.BACKENDS)
     p.add_argument("--name")
-    p.add_argument("--step-budget", type=_positive(int), default=40)
+    p.add_argument("--step-budget", type=int, default=40)
     p.add_argument("--out")
 
     p = command("report", common, cmd_report)

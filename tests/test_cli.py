@@ -31,7 +31,6 @@ def clean_env(monkeypatch):
 def test_wrong_arguments_exit_2_and_help_and_version_exit_0(capsys):
     assert cli.main([]) == 2
     assert cli.main(["run", "midpoint", "--backend", "fortran"]) == 2
-    assert cli.main(["run", "midpoint", "--backend", "openmp", "--step-budget", "0"]) == 2
     assert cli.main(["--help"]) == 0 and cli.main(["--version"]) == 0
 
 
