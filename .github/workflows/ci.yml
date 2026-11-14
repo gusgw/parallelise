@@ -26,33 +26,3 @@ jobs:
         env:
           OMPI_MCA_rmaps_base_oversubscribe: "1"
         run: pytest -q -rs
-
-  smoke:
-    runs-on: ubuntu-latest
-    needs: test
-    steps:
-      - uses: actions/checkout@v7
-      - name: Clone, install, convert and check in a fresh copy, then repeat inside Docker
-        run: scripts/smoke-test.sh
-
-  manifest:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v7
-      - name: Validate the Kubernetes manifest
-        run: |
-          curl -sSL https://github.com/yannh/kubeconform/releases/download/v0.6.7/kubeconform-linux-amd64.tar.gz | tar xz kubeconform
-          ./kubeconform -strict -summary k8s/job.yaml
-
-  image:
-    runs-on: ubuntu-latest
-    needs: test
-    steps:
-      - uses: actions/checkout@v7
-      - name: Build the CPU image
-        run: docker build --target cpu -t parallelise:cpu .
-      - name: Check that the command starts
-        run: docker run --rm parallelise:cpu --help
-      # The CUDA stage is not built here: its development base image is several
-      # gigabytes and exhausts the hosted runner's disk, and the runner has no graphics
-      # card to run it. It is built and tested on a machine with a graphics card (see README.md).

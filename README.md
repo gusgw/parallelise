@@ -126,6 +126,9 @@ names the model's provider and the numeric precision of its weights, from `--ser
 problems need a few gigabytes of temporary space, so where `/tmp` is held in memory, point `TMPDIR`
 at a folder on disk.
 
+Code written by a model is untrusted, and the rule on what a routine may contain is no sandbox, so
+run conversions on a machine, or in a container, where a misbehaving routine can do no harm.
+
 ## How a routine is judged
 
 The program judges the routine that the agent leaves, by fixed rules, in a fresh folder that the
@@ -152,25 +155,6 @@ routine to the alias and every other name that the agent's files define to a neu
 `v7`, and removes the comments and docstrings, except the header's statement of the rules; the
 numbers and the logic are unchanged, and the agent's check uses the same names in its messages.
 
-## Containers and Kubernetes
-
-Code written by a model is untrusted, and the rule on what a routine may contain is no sandbox, so
-run conversions in a container. `make image` builds the image `parallelise:cpu`, which holds gcc,
-Open MPI and the package, runs as an ordinary user and keeps its work in `/work`; the Dockerfile's
-`cuda` stage is for machines with a graphics card. On Linux, with the model service at
-`http://localhost:4000/v1` on the same machine, run the container with a memory limit and as
-yourself, so that the files it writes are yours:
-
-    mkdir -p out
-    docker run --rm --memory=8g --memory-swap=8g --network host --user "$(id -u):$(id -g)" \
-        -v "$PWD/out:/work" -e PARALLELISE_MODEL=gpt-oss-120b \
-        parallelise:cpu run problems/integrate --backend openmp
-
-`k8s/job.yaml` describes one conversion as a Kubernetes Job, a task that runs once to completion,
-and its comments explain each setting. The Job checks the model service first, runs without
-privileges on a read-only file system within limits of processor, memory and time, and asks the
-cluster to let it reach only the model service and the cluster's name service.
-
 ## Tests
 
     make test-fast          # run the tests that compile no C code
@@ -178,10 +162,8 @@ cluster to let it reach only the model service and the cluster's name service.
     make lint               # check the style with ruff and the types with mypy
     make check-known-good   # judge the known-good routine of every problem and backend
 
-Both `make test` and `make lint` must pass before a change is offered. On every push and pull
-request, GitHub runs the same checks and then `scripts/smoke-test.sh`, which installs a fresh copy
-of the repository and converts integrate against a scripted stand-in for the model, both directly
-and in Docker. GitHub also validates the Kubernetes file and builds the image.
+Both `make test` and `make lint` must pass before a change is offered, and GitHub runs the same
+checks on every push and pull request.
 
 ## Use of AI tools
 

@@ -18,8 +18,7 @@ dependencies = [
 [project.optional-dependencies]
 # The two framework-based agent designs; the plain httpx agent needs nothing extra. These are
 # pinned to exact versions, the ones the tests were run with, because a new release of a
-# framework can change how an agent behaves and so what a run measures. The container image
-# installs from this file, so the pins apply there too. To upgrade, change the versions
+# framework can change how an agent behaves and so what a run measures. To upgrade, change the versions
 # together, run the whole test suite, and record the change. httpx2 is the HTTP library that
 # Pydantic AI and the OpenAI library use, and that the Pydantic AI agent uses directly.
 agents = [

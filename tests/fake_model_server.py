@@ -7,12 +7,10 @@ tests can check that the agents add up the token counts correctly.
 
 from __future__ import annotations
 
-import argparse
 import json
 import threading
 import time
 from http.server import BaseHTTPRequestHandler, HTTPServer
-from pathlib import Path
 from typing import Any
 
 
@@ -168,54 +166,3 @@ class FakeModelServer:
                 "total_tokens": step["prompt_tokens"] + step["completion_tokens"],
             },
         }
-
-
-def conversion_script(routine: Path, name: str, backend: str = "openmp") -> list[dict]:
-    """Return a script in which the model reads the Python, writes ``routine`` as its own,
-    calls the check and says it has finished."""
-    target = f"{name}.cu" if backend == "cuda" else f"{name}.c"
-    return [
-        tool_call_step("read_file", {"path": "function.py"}, 80, 10),
-        tool_call_step("write_file", {"path": target, "content": routine.read_text()}, 100, 20),
-        tool_call_step("check", {}, 150, 10),
-        finish_step("The check passes, so I have finished.", 200, 5),
-    ]
-
-
-def main(argv: list[str] | None = None) -> int:
-    """Serve a script until interrupted, for trying the command line without a real model.
-
-    ``--script health`` answers every chat request with one plain sentence, which is all
-    that ``parallelise health`` needs. ``--script convert`` answers a conversion by writing
-    the routine in ``--routine`` as its own. The base URL to use as the gateway is printed on
-    the first line of standard output, and also written to ``--url-file`` if given.
-    """
-    parser = argparse.ArgumentParser(description=main.__doc__)
-    parser.add_argument("--script", choices=("health", "convert"), default="health")
-    parser.add_argument("--routine", type=Path, help="the routine the model writes as its own")
-    parser.add_argument("--name", default="integrate", help="the problem's name")
-    parser.add_argument("--backend", default="openmp", choices=("openmp", "mpi", "cuda"))
-    parser.add_argument("--host", default="127.0.0.1", help="address to listen on")
-    parser.add_argument("--port", type=int, default=0, help="port to listen on (0: any free one)")
-    parser.add_argument("--url-file", type=Path, help="write the base URL to this file")
-    args = parser.parse_args(argv)
-    if args.script == "convert":
-        if args.routine is None:
-            parser.error("--script convert needs --routine")
-        script = conversion_script(args.routine, args.name, args.backend)
-    else:
-        script = [finish_step("ready", 5, 1)]
-    with FakeModelServer(script, host=args.host, port=args.port) as server:
-        url = server.url
-        print(url, flush=True)
-        if args.url_file:
-            args.url_file.write_text(url + "\n", encoding="utf-8")
-        try:
-            threading.Event().wait()
-        except KeyboardInterrupt:
-            pass
-    return 0
-
-
-if __name__ == "__main__":
-    raise SystemExit(main())
