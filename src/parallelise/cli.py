@@ -1,4 +1,4 @@
-"""The command line: parallelise health, serial, run, check, reverse and report.
+"""The command line: parallelise serial, run, check, reverse and report.
 
 An error that a person can cause is printed as one line that says what went wrong and what to
 do next, and the exit status is then 1.
@@ -17,7 +17,7 @@ from pathlib import Path
 from . import __version__, convert, generate, judge, notebook, provenance, reverse, serial
 from .agents import AGENT_NAMES, AgentResult, get_agent
 from .config import Settings
-from .errors import AgentUnavailable, ModelError, ParalleliseError
+from .errors import AgentUnavailable, ParalleliseError
 from .log import configure_logging
 from .model import ModelClient
 from .results import ResultsStore, RunRecord
@@ -109,29 +109,6 @@ def _safe(text: str) -> str:
 
 
 # --- the commands ----------------------------------------------------------------------------
-
-
-def cmd_health(args: argparse.Namespace) -> int:
-    """Check that the model endpoint answers, lists the chosen model and completes one request."""
-    settings = _settings(args)
-    print(f"Endpoint: {settings.gateway_url}")
-    with ModelClient(settings) as client:
-        try:
-            models = client.models()
-        except ModelError as exc:
-            print(f"Reachable: no. {exc}")
-            return 1
-        print("Reachable: yes")
-        listed = settings.model in models
-        offered = ", ".join(models) or "none"
-        print(f"Model {settings.model} listed: " + ("yes" if listed else f"no; offered: {offered}"))
-        try:
-            client.chat([{"role": "user", "content": "Reply with the single word: ready."}])
-        except ModelError as exc:
-            print(f"Test chat call succeeded: no. {exc}")
-            return 1
-    print("Test chat call succeeded: yes")
-    return 0 if listed else 1
 
 
 def cmd_serial(args: argparse.Namespace) -> int:
@@ -314,10 +291,6 @@ def build_parser() -> argparse.ArgumentParser:
                            epilog=f"Example: {example}")  # fmt: skip
         p.set_defaults(func=func)
         return p
-
-    command("health", [common, endpoint], "check that the model endpoint answers and serves the "
-            "chosen model", "parallelise health --gateway-url http://localhost:4000/v1 "
-            "--model local", cmd_health)
 
     p = command("serial", [common, endpoint], "have a model, at temperature zero, translate a "
                 "problem's notebook into its serial routine, serial.c, which names that model and "

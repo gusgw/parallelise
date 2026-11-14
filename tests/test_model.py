@@ -85,10 +85,3 @@ def test_the_asynchronous_client_of_pydantic_ai_waits_and_is_counted_by_the_same
             asyncio.run(ask())
             assert client.meter.summary()["completion_tokens"] == 2
     assert waits == [10.0]
-
-
-def test_the_endpoint_lists_its_models_or_says_it_cannot_be_reached():
-    with FakeModelServer([finish_step("ok", 1, 1)]) as server, client_for(server, []) as client:
-        assert client.models() == ["local"]
-    with client_for(None, []) as client, pytest.raises(ModelError, match="Could not reach"):
-        client.models()

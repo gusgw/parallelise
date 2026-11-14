@@ -97,7 +97,6 @@ the notebook.
     export PARALLELISE_GATEWAY_URL=http://localhost:4000/v1   # or give --gateway-url
     export PARALLELISE_MODEL=gpt-oss-120b                     # name the model under study
     export PARALLELISE_API_KEY=...                            # if the service needs a key
-    parallelise health
     parallelise serial path/to/new_problem --model kimi-k2.5
     parallelise run problems/integrate --backend openmp --agent basic
     parallelise check work/integrate/openmp/gpt-oss-120b/basic/2026-11-07T09-30-00Z \
@@ -106,7 +105,6 @@ the notebook.
         --problem problems/integrate --backend openmp --model kimi-k2.5
     parallelise report --chart correct.svg
 
-`health` checks that the service answers, offers the model and completes one small request.
 `serial` has a model translate the function into plain C once, before any run, and writes
 `serial.c` only if the translation agrees with the Python on fresh inputs at every test size and at
 the benchmark size. Use one model for every problem, and not one of those under study; all thirteen

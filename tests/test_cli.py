@@ -38,7 +38,7 @@ def test_wrong_arguments_exit_2_and_help_and_version_exit_0(capsys):
 def test_every_command_is_listed_and_has_an_example(capsys):
     cli.main(["--help"])
     listing = capsys.readouterr().out
-    for command in ("health", "serial", "run", "check", "report"):
+    for command in ("serial", "run", "check", "reverse", "report"):
         assert command in listing
         cli.main([command, "--help"])
         assert "Example: parallelise " + command in capsys.readouterr().out
@@ -46,13 +46,8 @@ def test_every_command_is_listed_and_has_an_example(capsys):
 
 def test_a_setting_that_cannot_be_used_is_one_plain_line(monkeypatch, capsys):
     monkeypatch.setenv("PARALLELISE_TEMPERATURE", "9")
-    assert cli.main(["health"]) == 1
+    assert cli.main(["report"]) == 1
     assert "PARALLELISE_TEMPERATURE" in capsys.readouterr().err
-
-
-def test_health_says_when_the_endpoint_cannot_be_reached(capsys):
-    assert cli.main(["health", "--gateway-url", "http://127.0.0.1:9/v1"]) == 1
-    assert "Reachable: no" in capsys.readouterr().out
 
 
 # --- run, with a stand-in agent and judgement ----------------------------------------------------
@@ -246,7 +241,7 @@ def test_an_unexpected_file_error_is_one_plain_line(monkeypatch, capsys):
     def fail(args):
         raise PermissionError(13, "Permission denied", "/some/file")
 
-    monkeypatch.setattr(cli, "cmd_health", fail)
-    assert cli.main(["health"]) == 1
+    monkeypatch.setattr(cli, "cmd_report", fail)
+    assert cli.main(["report"]) == 1
     assert capsys.readouterr().err.strip() == (
         "parallelise: Permission denied: /some/file. Check the path and its permissions.")

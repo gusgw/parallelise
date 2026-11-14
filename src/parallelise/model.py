@@ -192,22 +192,8 @@ class ModelClient:
                 self.sleep(self.retry_delay_s * attempt)
         raise ModelError(
             f"The model call failed after {MAX_ATTEMPTS} attempts: {problem}. "
-            "Check that the gateway is running (parallelise health)."
+            "Check that the gateway is running."
         )
-
-    def models(self) -> list[str]:
-        """Return the models that the endpoint offers; raise ModelError if it cannot say."""
-        try:
-            response = self._http.get("models", timeout=min(30.0, self.settings.request_timeout_s))
-            response.raise_for_status()
-            return [str(m["id"]) for m in response.json()["data"]]
-        except httpx.TransportError as exc:
-            raise ModelError(f"Could not reach {self.settings.gateway_url} ({exc}). Start the "
-                             "gateway or set PARALLELISE_GATEWAY_URL.") from exc
-        except (httpx.HTTPStatusError, ValueError, KeyError, TypeError) as exc:
-            raise ModelError(f"The endpoint gave no list of models ({exc}). Check the API key "
-                             "and that the URL ends in /v1.") from exc
-
 
 def _message(response: httpx.Response) -> dict[str, Any]:
     """The assistant's message in a chat completion, with empty content rather than none."""
